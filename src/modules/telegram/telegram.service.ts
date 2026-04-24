@@ -9,7 +9,7 @@ import { buildConfirmationMessage, isConfidenceAcceptable } from '@/domain/finan
 import { DashboardService } from '@/modules/dashboard/dashboard.service';
 import { TransactionRepository } from '@/modules/transactions/repositories/transaction.repository';
 import { GeminiFinancialOutput, GeminiService } from '@/services/ai/gemini.service';
-import { createMainKeyboard, TelegramInlineKeyboardMarkup } from './keyboards/main.keyboard';
+import { createMainKeyboard } from './keyboards/main.keyboard';
 import { createPeriodKeyboard, ReportPeriod } from './keyboards/period.keyboard';
 import { TelegramNotificationService } from './telegram-notification.service';
 
@@ -958,7 +958,7 @@ export class TelegramService {
     await this.replyChannelsOverview(userId, responder);
   }
 
-  private buildChannelKeyboard(channels: SalesChannel[]): TelegramInlineKeyboardMarkup {
+  private buildChannelKeyboard(channels: SalesChannel[]): any {
     return {
       inline_keyboard: channels.flatMap((channel) => [
         [

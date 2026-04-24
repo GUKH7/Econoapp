@@ -1,174 +1,134 @@
-# EconoApp Backend
+# 🚀 EconoApp
 
-API backend do EconoApp para gestao financeira de microempreendedores, com suporte a:
-- autenticacao JWT
-- transacoes, categorias e canais de venda
-- dashboard financeiro
-- integracao com WhatsApp Cloud API
-- bot Telegram
-- IA com Google Gemini
+![NestJS](https://img.shields.io/badge/nestjs-%23E0234E.svg?style=for-the-badge&logo=nestjs&logoColor=white)
+![Prisma](https://img.shields.io/badge/Prisma-3982CE?style=for-the-badge&logo=Prisma&logoColor=white)
+![TypeScript](https://img.shields.io/badge/typescript-%23007ACC.svg?style=for-the-badge&logo=typescript&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-316192?style=for-the-badge&logo=postgresql&logoColor=white)
+![Google Gemini](https://img.shields.io/badge/Google%20Gemini-8E75B2?style=for-the-badge&logo=google&logoColor=white)
 
-## Stack
+O **EconoApp** é uma solução inteligente de gestão financeira pessoal e empresarial, permitindo que usuários registrem e acompanhem suas finanças diretamente através do **Telegram** e **WhatsApp**.
 
-- Node.js + TypeScript
-- NestJS
-- Prisma ORM
-- PostgreSQL
-- Vitest
-- Docker Compose
+Utilizando Inteligência Artificial avançada (Google Gemini), o sistema é capaz de entender mensagens de voz e texto em linguagem natural para extrair dados financeiros automaticamente.
 
-## Requisitos
+---
 
-- Node.js 20+
-- npm 10+
-- Docker e Docker Compose (opcional, recomendado)
-- Banco PostgreSQL (se rodar sem Docker)
+## ✨ Funcionalidades Principais
 
-## Estrutura principal
+-   🤖 **IA com Google Gemini:** Extração automática de valor, descrição, produto e canal de vendas a partir de mensagens naturais.
+-   📱 **Multi-Plataforma:** Integração completa com bots de Telegram e WhatsApp.
+-   💹 **Gestão de Canais de Venda:** Configuração de taxas de comissão por canal (ex: Shopee, Mercado Livre) com cálculo automático de valor líquido.
+-   📊 **Relatórios Visuais:** Geração de gráficos de pizza e resumos detalhados de entradas, saídas e categorias.
+-   📂 **Categorização Dinâmica:** Criação automática de categorias com cores persistentes para melhor visualização.
+-   ⚙️ **Configurações via Bot:** Edição de perfil, gestão de canais e taxas diretamente pelo chat.
 
-- `src/modules/auth`: login, registro, refresh, perfil
-- `src/modules/transactions`: CRUD de transacoes
-- `src/modules/categories`: CRUD de categorias
-- `src/modules/channels`: CRUD de canais de venda
-- `src/modules/dashboard`: resumo financeiro
-- `src/modules/whatsapp`: webhook e processamento de mensagens
-- `src/modules/telegram`: bot Telegram (polling)
-- `prisma`: schema, migrations e seed
+---
 
-## Configuracao de ambiente
+## 🛠️ Tecnologias Utilizadas
 
-1. Copie o arquivo de exemplo:
+-   **Framework:** [NestJS](https://nestjs.com/)
+-   **ORM:** [Prisma](https://www.prisma.io/)
+-   **IA:** [Google Generative AI (Gemini)](https://ai.google.dev/)
+-   **Bots:** [Telegraf](https://telegraf.js.org/) & [NestJS Telegraf](https://github.com/telegraf/nestjs-telegraf)
+-   **Banco de Dados:** PostgreSQL (Dockerizado)
+-   **Gráficos:** Chart.js (via `chartjs-node-canvas`)
+-   **Documentação da API:** [Swagger](https://swagger.io/) & [Scalar](https://scalar.com/)
+-   **Segurança:** JWT, Bcrypt & Helmet
+-   **Logs:** [Pino](https://getpino.io/)
+-   **Testes:** [Vitest](https://vitest.dev/)
+-   **Validação:** [Zod](https://zod.dev/) & [Class-validator](https://github.com/typestack/class-validator)
+-   **Linguagem:** TypeScript
 
-```bash
-cp .env.example .env
+---
+
+## 📁 Estrutura do Projeto
+
+```text
+src/
+├── common/         # Filtros, Pipes e Decorators compartilhados
+├── config/         # Configurações de variáveis de ambiente e App
+├── domain/         # Regras de negócio e lógica de domínio (finance)
+├── modules/        # Módulos do NestJS (Telegram, WhatsApp, Auth, etc.)
+│   ├── auth/       # Autenticação e Gestão de Usuários
+│   ├── categories/ # Gestão de Categorias e Cores
+│   ├── channels/   # Gestão de Canais de Venda e Taxas
+│   ├── dashboard/  # Lógica de relatórios e gráficos
+│   ├── health/     # Monitoramento e integridade do sistema
+│   ├── telegram/   # Bot Telegram: Scenes, Keyboards e Handlers
+│   └── transactions/# Registro e gestão de movimentações financeiras
+│   ├── whatsapp/   # Integração com WhatsApp Cloud API
+├── services/       # Integrações externas (AI/Gemini)
+├── utils/          # Funções utilitárias e ajudantes
+└── main.ts         # Inicialização do servidor NestJS
 ```
 
-No Windows PowerShell:
+---
 
-```powershell
-Copy-Item .env.example .env
-```
+## 🚀 Como Executar
 
-2. Preencha todas as variaveis no `.env`.
+### Pré-requisitos
+- Node.js (v18 ou superior)
+- Docker (opcional para o banco de dados)
+- Uma chave de API do Google Gemini
+- Token de Bot do Telegram (via BotFather)
+- Token de Acesso da API do WhatsApp Cloud (Meta)
 
-Variaveis obrigatorias:
-- DATABASE_URL
-- JWT_SECRET (minimo 32 caracteres)
-- JWT_EXPIRES_IN
-- JWT_REFRESH_EXPIRES_IN
-- WHATSAPP_TOKEN
-- WHATSAPP_VERIFY_TOKEN
-- WHATSAPP_APP_SECRET
-- WHATSAPP_PHONE_ID
-- TELEGRAM_BOT_TOKEN
-- GEMINI_API_KEY
-- PORT (padrao 3001)
-- NODE_ENV (development, production, test)
+### Instalação
 
-## Rodando com Docker (recomendado)
+1.  Clone o repositório:
+    ```bash
+    git clone https://github.com/devhenrico/econoapp.git
+    cd econoapp
+    ```
 
-Sobe PostgreSQL + backend em modo dev:
+2.  Instale as dependências:
+    ```bash
+    npm install
+    ```
 
-```bash
-docker compose -f docker-compose.dev.yml up --build
-```
+3.  Configure as variáveis de ambiente:
+    Crie um arquivo `.env` na raiz baseado no `.env.example`.
 
-A API ficara disponivel em:
-- http://localhost:3001
+4.  Configure o banco de dados:
+    ```bash
+    npx prisma migrate dev
+    npx prisma generate
+    ```
 
-## Rodando local (sem Docker)
+5.  Inicie o servidor de desenvolvimento:
+    ```bash
+    npm run dev
+    ```
 
-1. Instale dependencias:
+---
 
-```bash
-npm install
-```
+## 📋 Comandos do Bot (Telegram)
 
-2. Gere o client do Prisma:
+-   `/start` - Inicia o bot e apresenta o menu principal.
+-   `/saldo` - Exibe o saldo líquido acumulado no mês.
+-   `/resumo` - Gera um relatório visual com gráfico de categorias.
+-   `/canais` - Gerencia canais de venda e suas respectivas taxas.
+-   `/configuracoes` - Atalho para edição de perfil e preferências.
+-   `/ajuda` - Lista todos os comandos disponíveis.
 
-```bash
-npm run prisma:generate
-```
+---
 
-3. Rode as migrations:
+## 🧪 Testes
 
-```bash
-npm run prisma:migrate
-```
-
-4. (Opcional) Popule dados iniciais:
-
-```bash
-npm run prisma:seed
-```
-
-5. Inicie em desenvolvimento:
+O projeto utiliza **Vitest** para testes unitários e de integração.
 
 ```bash
-npm run dev
-```
-
-## Scripts uteis
-
-```bash
-npm run dev
-npm run build
-npm run start
-npm run lint
-npm run format
+# Rodar todos os testes
 npm run test
+
+# Modo watch
 npm run test:watch
-npm run test:coverage
-npm run prisma:generate
-npm run prisma:migrate
-npm run prisma:seed
-```
 
-## Endpoints e documentacao
-
-Prefixo global da API:
-- /api/v1
-
-Documentacao:
-- UI (Scalar): http://localhost:3001/docs
-- OpenAPI JSON: http://localhost:3001/openapi.json
-
-Health check:
-- GET http://localhost:3001/api/v1/health
-
-Webhook WhatsApp:
-- GET http://localhost:3001/api/v1/webhook
-- POST http://localhost:3001/api/v1/webhook
-
-## Fluxo basico de desenvolvimento
-
-1. Subir banco (Docker) ou garantir Postgres local
-2. Configurar `.env`
-3. Rodar `npm run prisma:generate`
-4. Rodar `npm run prisma:migrate`
-5. Rodar `npm run dev`
-6. Validar em `/docs`
-
-## Testes
-
-Rodar todos os testes:
-
-```bash
-npm run test
-```
-
-Com cobertura:
-
-```bash
+# Cobertura
 npm run test:coverage
 ```
 
-## Observacoes
+---
 
-- O projeto usa guard global de autenticacao. Rotas publicas usam decorator Public.
-- O modulo de Telegram remove webhook e roda em polling no startup.
-- O webhook do WhatsApp valida assinatura e token de verificacao.
+## 📄 Licença
 
-## Licenca
-
-Uso privado (private). Ajuste conforme necessidade do repositorio.
+Este projeto está sob a licença MIT. Consulte o arquivo [LICENSE](LICENSE) para mais detalhes.
