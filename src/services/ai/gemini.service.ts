@@ -32,7 +32,7 @@ export class GeminiService {
     const contextLines = this.buildContextLines(context);
 
     const prompt = [
-      'Você é um extrator de dados financeiros para microempreendedores brasileiros.',
+      'Você é um extrator de dados financeiros para vendedores de marketplace brasileiros.',
       ...contextLines,
       'Responda SOMENTE JSON válido, sem markdown e sem texto adicional.',
       'Formato obrigatório:',
@@ -103,7 +103,7 @@ export class GeminiService {
     const contextLines = this.buildContextLines(context);
 
     const prompt = [
-      'Você é um extrator de dados financeiros para microempreendedores brasileiros.',
+      'Você é um extrator de dados financeiros para vendedores de marketplace brasileiros.',
       'Ouça o áudio, transcreva e extraia os dados financeiros.',
       ...contextLines,
       'Responda SOMENTE JSON válido, sem markdown e sem texto adicional.',

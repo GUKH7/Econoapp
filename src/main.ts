@@ -58,7 +58,7 @@ async function bootstrap(): Promise<void> {
 
   const swaggerConfig = new DocumentBuilder()
     .setTitle('EconoApp API')
-    .setDescription('API de registro financeiro para microempreendedores via WhatsApp e Telegram')
+    .setDescription('API de gestão financeira para vendedores de marketplace via Telegram e WhatsApp')
     .setVersion('1.0')
     .addBearerAuth(
       {

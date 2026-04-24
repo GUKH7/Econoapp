@@ -1,10 +1,11 @@
 # 🚀 EconoApp
 
 ![NestJS](https://img.shields.io/badge/nestjs-%23E0234E.svg?style=for-the-badge&logo=nestjs&logoColor=white)
-![Prisma](https://img.shields.io/badge/Prisma-3982CE?style=for-the-badge&logo=Prisma&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/typescript-%23007ACC.svg?style=for-the-badge&logo=typescript&logoColor=white)
-![PostgreSQL](https://img.shields.io/badge/PostgreSQL-316192?style=for-the-badge&logo=postgresql&logoColor=white)
 ![Google Gemini](https://img.shields.io/badge/Google%20Gemini-8E75B2?style=for-the-badge&logo=google&logoColor=white)
+![Prisma](https://img.shields.io/badge/Prisma-3982CE?style=for-the-badge&logo=Prisma&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-316192?style=for-the-badge&logo=postgresql&logoColor=white)
+![Docker](https://img.shields.io/badge/docker-%232496ED.svg?style=for-the-badge&logo=docker&logoColor=white)
 
 O **EconoApp** é uma solução inteligente de gestão financeira pessoal e empresarial, permitindo que usuários registrem e acompanhem suas finanças diretamente através do **Telegram** e **WhatsApp**.
 
@@ -26,17 +27,16 @@ Utilizando Inteligência Artificial avançada (Google Gemini), o sistema é capa
 ## 🛠️ Tecnologias Utilizadas
 
 -   **Framework:** [NestJS](https://nestjs.com/)
+-   **Linguagem:** TypeScript
 -   **ORM:** [Prisma](https://www.prisma.io/)
--   **IA:** [Google Generative AI (Gemini)](https://ai.google.dev/)
--   **Bots:** [Telegraf](https://telegraf.js.org/) & [NestJS Telegraf](https://github.com/telegraf/nestjs-telegraf)
--   **Banco de Dados:** PostgreSQL (Dockerizado)
+-   **IA:** [Google Gemini (AI)](https://ai.google.dev/)
+-   **Banco de Dados:** [PostgreSQL](https://www.postgresql.org/)
 -   **Gráficos:** Chart.js (via `chartjs-node-canvas`)
 -   **Documentação da API:** [Swagger](https://swagger.io/) & [Scalar](https://scalar.com/)
 -   **Segurança:** JWT, Bcrypt & Helmet
 -   **Logs:** [Pino](https://getpino.io/)
 -   **Testes:** [Vitest](https://vitest.dev/)
 -   **Validação:** [Zod](https://zod.dev/) & [Class-validator](https://github.com/typestack/class-validator)
--   **Linguagem:** TypeScript
 
 ---
 
@@ -98,6 +98,20 @@ src/
     ```bash
     npm run dev
     ```
+
+### Docker
+
+Para subir o ambiente completo (PostgreSQL + backend) com Docker:
+
+```bash
+docker compose up -d
+```
+
+Para rodar as migrations dentro do container:
+
+```bash
+docker exec econoapp-backend npx prisma migrate dev
+```
 
 ---
 
