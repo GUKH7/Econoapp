@@ -5,7 +5,7 @@ import { env } from '@/config/env';
 import { BadRequestException } from '@/common/errors/app.exception';
 
 export const geminiOutputSchema = z.object({
-  amount: z.number().nonnegative(),
+  amount: z.number().positive(),
   type: z.enum(['INCOME', 'EXPENSE']),
   categoryHint: z.string().min(1),
   channelHint: z.string().nullable().optional(),
