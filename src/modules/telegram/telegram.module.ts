@@ -45,7 +45,7 @@ export class TelegramModule implements OnModuleInit {
     );
     const data = (await res.json()) as { ok: boolean };
     if (data.ok) {
-      this.logger.log('Webhook removido. Bot Telegram rodando em modo polling.');
+      this.logger.log('Telegram: webhook removido, iniciando polling.');
     }
   }
 }

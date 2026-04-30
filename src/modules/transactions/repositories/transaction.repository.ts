@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { Prisma, Transaction } from '@prisma/client';
+import { Prisma, Transaction, TransactionSource } from '@prisma/client';
 import { PrismaService } from '@/config/database';
 import { PaginatedResult } from '@/common/types';
 import { FilterTransactionDto } from '../dto/filter-transaction.dto';
@@ -9,12 +9,11 @@ interface CreateTransactionInput {
   amount: number;
   netAmount: number;
   type: 'INCOME' | 'EXPENSE';
-  source: 'MANUAL' | 'WHATSAPP' | 'AUDIO';
+  source: TransactionSource;
   categoryId: string;
   channelId?: string;
   date?: Date;
   userId: string;
-  whatsappMessageId?: string;
 }
 
 @Injectable()
@@ -28,7 +27,6 @@ export class TransactionRepository {
           ...input,
           channelId: input.channelId ?? null,
           date: input.date ?? new Date(),
-          whatsappMessageId: input.whatsappMessageId ?? null,
         },
       }),
     );
@@ -38,9 +36,6 @@ export class TransactionRepository {
     return this.prisma.transaction.findUnique({ where: { id } });
   }
 
-  async findByWhatsappMessageId(messageId: string): Promise<Transaction | null> {
-    return this.prisma.transaction.findUnique({ where: { whatsappMessageId: messageId } });
-  }
 
   async findAllByUser(
     userId: string,

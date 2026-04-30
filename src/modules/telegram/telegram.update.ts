@@ -8,7 +8,6 @@ import {
   TelegramTextInput,
   TelegramVoiceInput,
 } from './telegram.service';
-import { TelegramInlineKeyboardMarkup } from './keyboards/main.keyboard';
 
 interface OnboardingSceneState extends Scenes.WizardSessionData {
   name?: string;
@@ -19,6 +18,10 @@ type BotContext = Context &
     message?: { text?: string; voice?: { file_id: string; mime_type?: string } };
     callbackQuery?: { data?: string };
   };
+
+type ReplyOptions = Parameters<Context['reply']>[1];
+type ReplyWithPhotoOptions = Parameters<Context['replyWithPhoto']>[1];
+type EditMessageOptions = Parameters<Context['editMessageText']>[1];
 
 @Update()
 @Injectable()
@@ -110,7 +113,7 @@ export class TelegramUpdate {
   private createResponder(ctx: BotContext): TelegramResponder {
     return {
       reply: async (text, options) => {
-        const replyOptions: any = {};
+        const replyOptions: ReplyOptions = {};
         if (options?.replyMarkup) {
           replyOptions.reply_markup = options.replyMarkup;
         }
@@ -120,7 +123,7 @@ export class TelegramUpdate {
         await ctx.reply(text, replyOptions);
       },
       replyWithPhoto: async (photo, options) => {
-        const replyOptions: { caption?: string; reply_markup?: any } = {};
+        const replyOptions: ReplyWithPhotoOptions = {};
         if (options?.caption) {
           replyOptions.caption = options.caption;
         }
@@ -130,8 +133,8 @@ export class TelegramUpdate {
         await ctx.replyWithPhoto({ source: photo }, replyOptions);
       },
       editMessage: async (text, options) => {
-        const replyOptions: any = {};
-        if (options?.replyMarkup) {
+        const replyOptions: EditMessageOptions = {};
+        if (options?.replyMarkup && 'inline_keyboard' in options.replyMarkup) {
           replyOptions.reply_markup = options.replyMarkup;
         }
         if (options?.parseMode) {

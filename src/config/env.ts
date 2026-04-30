@@ -6,10 +6,6 @@ const envSchema = z.object({
   JWT_SECRET: z.string().min(32, 'JWT_SECRET precisa ter no mínimo 32 caracteres'),
   JWT_EXPIRES_IN: z.string().min(1),
   JWT_REFRESH_EXPIRES_IN: z.string().min(1),
-  WHATSAPP_TOKEN: z.string().min(1),
-  WHATSAPP_VERIFY_TOKEN: z.string().min(1),
-  WHATSAPP_APP_SECRET: z.string().min(1),
-  WHATSAPP_PHONE_ID: z.string().min(1),
   TELEGRAM_BOT_TOKEN: z.string().min(1),
   GEMINI_API_KEY: z.string().min(1),
   PORT: z

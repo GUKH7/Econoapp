@@ -15,7 +15,7 @@ enum TransactionType {
 
 enum TransactionSource {
   MANUAL
-  WHATSAPP
+  TELEGRAM
   AUDIO
 }
 
@@ -74,19 +74,19 @@ model Category {
 model Transaction {
   id          String            @id @default(uuid()) @db.Uuid
   description String
-  amount      Decimal         @db.Decimal(15, 4)
-  netAmount   Decimal         @db.Decimal(15, 4)
+  amount      Decimal           @db.Decimal(15, 4)
+  netAmount   Decimal           @db.Decimal(15, 4)
   type        TransactionType
-  source      TransactionSource @default(MANUAL)
+  source      TransactionSource @default(TELEGRAM)
   categoryId  String            @db.Uuid
   channelId   String?           @db.Uuid
   date        DateTime          @default(now()) @db.Timestamptz(6)
   userId      String            @db.Uuid
   createdAt   DateTime          @default(now()) @db.Timestamptz(6)
-  whatsappMessageId String?     @unique
 
-  user     User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  category Category     @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category Category      @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   channel  SalesChannel? @relation(fields: [channelId], references: [id], onDelete: SetNull)
 
   @@index([userId, date])

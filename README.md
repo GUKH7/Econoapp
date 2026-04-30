@@ -7,7 +7,7 @@
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-316192?style=for-the-badge&logo=postgresql&logoColor=white)
 ![Docker](https://img.shields.io/badge/docker-%232496ED.svg?style=for-the-badge&logo=docker&logoColor=white)
 
-O **EconoApp** é uma solução inteligente de gestão financeira pessoal e empresarial, permitindo que usuários registrem e acompanhem suas finanças diretamente através do **Telegram** e **WhatsApp**.
+O **EconoApp** é uma solução inteligente de gestão financeira pessoal e empresarial, permitindo que usuários registrem e acompanhem suas finanças diretamente através do **Telegram**.
 
 Utilizando Inteligência Artificial avançada (Google Gemini), o sistema é capaz de entender mensagens de voz e texto em linguagem natural para extrair dados financeiros automaticamente.
 
@@ -16,7 +16,7 @@ Utilizando Inteligência Artificial avançada (Google Gemini), o sistema é capa
 ## ✨ Funcionalidades Principais
 
 -   🤖 **IA com Google Gemini:** Extração automática de valor, descrição, produto e canal de vendas a partir de mensagens naturais.
--   📱 **Multi-Plataforma:** Integração completa com bots de Telegram e WhatsApp.
+-   📱 **Exclusivo Telegram:** Integração completa e otimizada com bot do Telegram.
 -   💹 **Gestão de Canais de Venda:** Configuração de taxas de comissão por canal (ex: Shopee, Mercado Livre) com cálculo automático de valor líquido.
 -   📊 **Relatórios Visuais:** Geração de gráficos de pizza e resumos detalhados de entradas, saídas e categorias.
 -   📂 **Categorização Dinâmica:** Criação automática de categorias com cores persistentes para melhor visualização.
@@ -47,7 +47,7 @@ src/
 ├── common/         # Filtros, Pipes e Decorators compartilhados
 ├── config/         # Configurações de variáveis de ambiente e App
 ├── domain/         # Regras de negócio e lógica de domínio (finance)
-├── modules/        # Módulos do NestJS (Telegram, WhatsApp, Auth, etc.)
+├── modules/        # Módulos do NestJS (Telegram, Auth, etc.)
 │   ├── auth/       # Autenticação e Gestão de Usuários
 │   ├── categories/ # Gestão de Categorias e Cores
 │   ├── channels/   # Gestão de Canais de Venda e Taxas
@@ -55,7 +55,6 @@ src/
 │   ├── health/     # Monitoramento e integridade do sistema
 │   ├── telegram/   # Bot Telegram: Scenes, Keyboards e Handlers
 │   └── transactions/# Registro e gestão de movimentações financeiras
-│   ├── whatsapp/   # Integração com WhatsApp Cloud API
 ├── services/       # Integrações externas (AI/Gemini)
 ├── utils/          # Funções utilitárias e ajudantes
 └── main.ts         # Inicialização do servidor NestJS
@@ -70,7 +69,6 @@ src/
 - Docker (opcional para o banco de dados)
 - Uma chave de API do Google Gemini
 - Token de Bot do Telegram (via BotFather)
-- Token de Acesso da API do WhatsApp Cloud (Meta)
 
 ### Instalação
 
@@ -115,7 +113,7 @@ docker exec econoapp-backend npx prisma migrate dev
 
 ---
 
-## 📋 Comandos do Bot (Telegram)
+## 📋 Comandos do Bot
 
 -   `/start` - Inicia o bot e apresenta o menu principal.
 -   `/saldo` - Exibe o saldo líquido acumulado no mês.

@@ -2,13 +2,26 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-RUN apk add --no-cache openssl
+# Dependencias nativas para compilar o Prisma Client e outras dependências nativas do projeto
+RUN apk add --no-cache \
+	openssl \
+	python3 \
+	make \
+	g++ \
+	cairo-dev \
+	pango-dev \
+	jpeg-dev \
+	giflib-dev \
+	pixman-dev
 
+# Instalar todas as dependências (incluindo devDependencies)
 COPY package*.json ./
 RUN npm install
 
+# Copiar o restante do projeto
 COPY . .
 
 EXPOSE 3001
 
+# Iniciar em modo desenvolvimento com hot reload
 CMD ["npm", "run", "dev"]

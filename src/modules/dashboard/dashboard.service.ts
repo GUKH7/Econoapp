@@ -41,13 +41,13 @@ export class DashboardService {
       // Soma das receitas
       this.prisma.transaction.aggregate({
         where: { userId, type: 'INCOME', ...dateWhere },
-        _sum: { amount: true },
+        _sum: { amount: true, netAmount: true },
       }),
 
       // Soma das despesas
       this.prisma.transaction.aggregate({
         where: { userId, type: 'EXPENSE', ...dateWhere },
-        _sum: { amount: true },
+        _sum: { amount: true, netAmount: true },
       }),
 
       // Agrupamento por categoria
@@ -85,7 +85,9 @@ export class DashboardService {
     // ── Totais ───────────────────────────────────────────────────────────────
     const totalIncome = Number(incomeAgg._sum.amount ?? 0);
     const totalExpense = Number(expenseAgg._sum.amount ?? 0);
-    const balance = totalIncome - totalExpense;
+    const netIncome = Number(incomeAgg._sum.netAmount ?? 0);
+    const netExpense = Number(expenseAgg._sum.netAmount ?? 0);
+    const balance = netIncome - netExpense;
 
     // ── Fase 2: buscar nomes de categorias e canais em paralelo ─────────────
     const categoryIds = categoryGroups.map((g) => g.categoryId);

@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { Transaction } from '@prisma/client';
 import { InjectBot } from 'nestjs-telegraf';
 import { Telegraf } from 'telegraf';

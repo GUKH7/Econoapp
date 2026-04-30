@@ -9,7 +9,7 @@ import { buildConfirmationMessage, isConfidenceAcceptable } from '@/domain/finan
 import { DashboardService } from '@/modules/dashboard/dashboard.service';
 import { TransactionRepository } from '@/modules/transactions/repositories/transaction.repository';
 import { GeminiFinancialOutput, GeminiService } from '@/services/ai/gemini.service';
-import { createMainKeyboard } from './keyboards/main.keyboard';
+import { createMainKeyboard, TelegramInlineKeyboardMarkup } from './keyboards/main.keyboard';
 import { createPeriodKeyboard, ReportPeriod } from './keyboards/period.keyboard';
 import { TelegramNotificationService } from './telegram-notification.service';
 
@@ -33,13 +33,26 @@ export interface TelegramCallbackInput extends TelegramActor {
 }
 
 export interface TelegramReplyOptions {
-  replyMarkup?: any;
+  replyMarkup?: TelegramReplyMarkup;
   parseMode?: 'Markdown' | 'HTML';
 }
 
 export interface TelegramPhotoOptions extends TelegramReplyOptions {
   caption?: string;
 }
+
+export interface TelegramKeyboardButton {
+  text: string;
+}
+
+export interface TelegramReplyKeyboardMarkup {
+  keyboard: TelegramKeyboardButton[][];
+  resize_keyboard?: boolean;
+  is_persistent?: boolean;
+  one_time_keyboard?: boolean;
+}
+
+export type TelegramReplyMarkup = TelegramInlineKeyboardMarkup | TelegramReplyKeyboardMarkup;
 
 export interface TelegramResponder {
   reply(text: string, options?: TelegramReplyOptions): Promise<void>;
@@ -49,8 +62,17 @@ export interface TelegramResponder {
   enterScene?(sceneId: string): Promise<void>;
 }
 
+type DashboardSummaryData = Awaited<ReturnType<DashboardService['getSummary']>>;
+
 interface PendingTransaction {
   userId: string;
+  description: string;
+  extracted: GeminiFinancialOutput;
+  source: TransactionSource;
+}
+
+interface PendingChannelFeeContext {
+  user: User;
   description: string;
   extracted: GeminiFinancialOutput;
   source: TransactionSource;
@@ -65,8 +87,10 @@ export class TelegramService {
   });
   private readonly pendingByTelegramId = new Map<string, PendingTransaction>();
   private readonly editingCategoryByTelegramId = new Map<string, string>();
-  private readonly pendingNewChannelByTelegramId = new Map<string, any>();
+  private readonly pendingNewChannelByTelegramId = new Map<string, PendingChannelFeeContext>();
   private readonly waitingForFeeByTelegramId = new Map<string, boolean>();
+  private readonly waitingForCustomCategoryByTelegramId = new Map<string, string>();
+  private readonly waitingForCustomPeriodByTelegramId = new Map<string, boolean>();
 
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
@@ -176,6 +200,24 @@ export class TelegramService {
     if (text === '❓ Ajuda') return this.handleHelp(input, responder);
     if (text === '⚙️ Configurações') return this.handleSettings(input, responder);
 
+    const pendingCatTransactionId = this.waitingForCustomCategoryByTelegramId.get(input.telegramId);
+    if (pendingCatTransactionId) {
+      const categoryName = input.text.trim();
+      this.waitingForCustomCategoryByTelegramId.delete(input.telegramId);
+      this.editingCategoryByTelegramId.delete(input.telegramId);
+      
+      const category = await this.resolveCategory(user.id, categoryName);
+      
+      const tx = await this.transactionRepository.findById(pendingCatTransactionId);
+      if (tx && tx.userId === user.id) {
+        await this.transactionRepository.update(pendingCatTransactionId, { categoryId: category.id });
+        await responder.reply(`✏️ Categoria atualizada com sucesso para *${category.name}*.`, { parseMode: 'Markdown' });
+      } else {
+        await responder.reply('⚠️ Transação não encontrada para atualização.');
+      }
+      return;
+    }
+
     if (this.waitingForFeeByTelegramId.get(input.telegramId)) {
       const feeText = input.text.replace(',', '.').replace('%', '').trim();
       const fee = parseFloat(feeText);
@@ -188,10 +230,33 @@ export class TelegramService {
       return;
     }
 
+    if (this.waitingForCustomPeriodByTelegramId.get(input.telegramId)) {
+      const range = this.parseCustomPeriod(input.text);
+      if (!range) {
+        await responder.reply(
+          [
+            '⚠️ Formato de período inválido.',
+            'Use: 01/04/2026 a 30/04/2026 (dia/mês/ano obrigatórios).',
+          ].join('\n'),
+        );
+        return;
+      }
+
+      this.waitingForCustomPeriodByTelegramId.delete(input.telegramId);
+      const summary = await this.dashboardService.getSummary(user.id, range.startDate, range.endDate);
+      const resumo = this.buildResumoText(summary, range.label);
+
+      await responder.reply(resumo, { replyMarkup: createPeriodKeyboard(), parseMode: 'Markdown' });
+
+      const chart = await this.generateChartForRange(user.id, 'category', range.startDate, range.endDate);
+      await responder.replyWithPhoto(chart, { caption: `📈 Distribuição por categoria (${range.label})` });
+      return;
+    }
+
     await this.processFinancialMessage({
       user,
       description: input.text,
-      source: 'MANUAL',
+      source: 'TELEGRAM',
       telegramId: input.telegramId,
       responder,
     });
@@ -220,7 +285,7 @@ export class TelegramService {
 
     await this.processExtractedMessage({
       user,
-      description: extracted.transcription,
+      description: `Áudio: ${extracted.transcription}`,
       source: 'AUDIO',
       extracted,
       telegramId: input.telegramId,
@@ -229,6 +294,12 @@ export class TelegramService {
   }
 
   async handleCallbackQuery(input: TelegramCallbackInput, responder: TelegramResponder): Promise<void> {
+    if (input.action === 'auth:start') {
+      await responder.answerCallback();
+      await this.handleStart(input, responder);
+      return;
+    }
+
     const user = await this.requireUser(input.telegramId, responder);
     if (!user) return;
 
@@ -280,7 +351,7 @@ export class TelegramService {
           '',
           `🪪 Nome: ${user.name}`,
           `📱 Telefone: ${this.formatPhoneDisplay(user.phone)}`,
-          `📧 Email: ${!user.email || user.email.startsWith('tg_') || user.email.startsWith('wa_') ? 'não informado' : user.email}`,
+          `📧 Email: ${!user.email || user.email.startsWith('tg_') ? 'não informado' : user.email}`,
           '',
           `🏪 Canais cadastrados: ${channelCount}`,
           `📋 Total de transações: ${txCount}`,
@@ -333,8 +404,12 @@ export class TelegramService {
       await responder.answerCallback('Atualizando período...');
       const period = action.replace('period:', '') as ReportPeriod;
       if (period === 'custom') {
-        await responder.editMessage(
-          '🗓️ Período personalizado será liberado em breve.\nUse os atalhos por enquanto.',
+        this.waitingForCustomPeriodByTelegramId.set(input.telegramId, true);
+        await responder.reply(
+          [
+            '🗓️ Envie o período desejado:',
+            'Exemplo: 01/04/2026 a 30/04/2026',
+          ].join('\n'),
           { replyMarkup: createPeriodKeyboard() },
         );
         return;
@@ -413,6 +488,13 @@ export class TelegramService {
         return;
       }
 
+      if (categoryId === 'custom') {
+        this.waitingForCustomCategoryByTelegramId.set(input.telegramId, transactionId);
+        await responder.answerCallback('');
+        await responder.reply('✍️ Por favor, digite o nome da nova categoria:');
+        return;
+      }
+
       await responder.answerCallback('Atualizando categoria...');
       const tx = await this.transactionRepository.findById(transactionId);
       if (!tx || tx.userId !== user.id) {
@@ -454,6 +536,10 @@ export class TelegramService {
     const { startDate, endDate, periodLabel } = this.getDateRange(period);
     const summary = await this.dashboardService.getSummary(userId, startDate, endDate);
 
+    return this.buildResumoText(summary, periodLabel);
+  }
+
+  private buildResumoText(summary: DashboardSummaryData, periodLabel: string): string {
     const topCategories = [...summary.byCategory]
       .sort((a, b) => b.total - a.total)
       .slice(0, 3)
@@ -478,6 +564,21 @@ export class TelegramService {
     const { startDate, endDate } = this.getDateRange(period);
     const summary = await this.dashboardService.getSummary(userId, startDate, endDate);
 
+    return this.renderChart(type, summary);
+  }
+
+  private async generateChartForRange(
+    userId: string,
+    type: 'category' | 'channel',
+    startDate: string,
+    endDate: string,
+  ): Promise<Buffer> {
+    const summary = await this.dashboardService.getSummary(userId, startDate, endDate);
+
+    return this.renderChart(type, summary);
+  }
+
+  private async renderChart(type: 'category' | 'channel', summary: DashboardSummaryData): Promise<Buffer> {
     if (type === 'channel') {
       const labels = summary.byChannel.map((item) => item.channelName);
       const values = summary.byChannel.map((item) => item.total);
@@ -540,7 +641,6 @@ export class TelegramService {
     telegramId: string;
     responder: TelegramResponder;
   }): Promise<void> {
-    // Busca canais e categorias do usuário para dar contexto ao Gemini
     const [channels, categories] = await Promise.all([
       this.prisma.salesChannel.findMany({ where: { userId: params.user.id }, select: { name: true } }),
       this.prisma.category.findMany({ where: { userId: params.user.id }, select: { name: true } }),
@@ -702,7 +802,12 @@ export class TelegramService {
 
     this.pendingNewChannelByTelegramId.delete(telegramId);
 
-    const transaction = await this.persistTransaction(pendingParams);
+    const transaction = await this.persistTransaction({
+      userId: pendingParams.user.id,
+      description: pendingParams.description,
+      extracted: pendingParams.extracted,
+      source: pendingParams.source,
+    });
     await this.sendTransactionSuccess(transaction, responder, true, channelName);
   }
 
@@ -823,24 +928,24 @@ export class TelegramService {
     const shorter = a.length > b.length ? b : a;
     if (longer.length === 0) return 1;
 
-    const costs: number[] = [];
+    const costs = new Array(shorter.length + 1);
     for (let i = 0; i <= longer.length; i++) {
       let lastValue = i;
       for (let j = 0; j <= shorter.length; j++) {
         if (i === 0) {
           costs[j] = j;
         } else if (j > 0) {
-          let newValue = costs[j - 1]!;
+          let newValue = costs[j - 1] as number;
           if (longer[i - 1] !== shorter[j - 1]) {
-            newValue = Math.min(Math.min(newValue, lastValue), costs[j]!) + 1;
+            newValue = Math.min(Math.min(newValue, lastValue), (costs[j] as number)) + 1;
           }
           costs[j - 1] = lastValue;
           lastValue = newValue;
         }
       }
-      if (i > 0) costs[shorter.length]! = lastValue;
+      if (i > 0) costs[shorter.length] = lastValue;
     }
-    return (longer.length - costs[shorter.length]!) / longer.length;
+    return (longer.length - (costs[shorter.length] as number)) / longer.length;
   }
 
   private async resolveCategory(userId: string, hint: string) {
@@ -883,19 +988,18 @@ export class TelegramService {
       take: 10,
     });
 
-    if (!categories.length) {
-      await responder.reply('⚠️ Você ainda não tem categorias para seleção.');
-      return;
-    }
+    const keyboard = categories.map((category) => [
+      {
+        text: category.name,
+        callback_data: `cat:${category.id}`,
+      },
+    ]);
+
+    keyboard.push([{ text: '➕ Digitar outra categoria', callback_data: 'cat:custom' }]);
 
     await responder.reply('Escolha a nova categoria:', {
       replyMarkup: {
-        inline_keyboard: categories.map((category) => [
-          {
-            text: category.name,
-            callback_data: `cat:${category.id}`,
-          },
-        ]),
+        inline_keyboard: keyboard,
       },
     });
   }
@@ -958,7 +1062,7 @@ export class TelegramService {
     await this.replyChannelsOverview(userId, responder);
   }
 
-  private buildChannelKeyboard(channels: SalesChannel[]): any {
+  private buildChannelKeyboard(channels: SalesChannel[]): TelegramInlineKeyboardMarkup {
     return {
       inline_keyboard: channels.flatMap((channel) => [
         [
@@ -999,7 +1103,11 @@ export class TelegramService {
       return user;
     }
 
-    await responder.reply('👋 Você ainda não está vinculado. Use /start para iniciar seu cadastro.');
+    await responder.reply('👋 Você ainda não está vinculado. Clique no botão abaixo para iniciar seu cadastro:', {
+      replyMarkup: {
+        inline_keyboard: [[{ text: '🚀 Iniciar Cadastro', callback_data: 'auth:start' }]],
+      },
+    });
     return null;
   }
 
@@ -1038,6 +1146,68 @@ export class TelegramService {
       endDate: this.toDateOnly(end),
       periodLabel: this.monthLabel(start),
     };
+  }
+
+  private parseCustomPeriod(text: string): { startDate: string; endDate: string; label: string } | null {
+    const matches = text.match(/\d{1,2}\/\d{1,2}\/\d{4}/g);
+    if (!matches || matches.length < 2) {
+      return null;
+    }
+
+    const [first, second] = matches;
+    if (!first || !second) {
+      return null;
+    }
+
+    const start = this.parseDateToken(first);
+    const end = this.parseDateToken(second);
+    if (!start || !end) {
+      return null;
+    }
+
+    const [startDate, endDate] = start <= end ? [start, end] : [end, start];
+    const label = `${this.formatDateDisplay(startDate)} a ${this.formatDateDisplay(endDate)}`;
+
+    return { startDate, endDate, label };
+  }
+
+  private parseDateToken(token: string): string | null {
+    const parts = token.split('/');
+    if (parts.length !== 3) return null;
+
+    const [dayStr, monthStr, yearStr] = parts;
+    if (!dayStr || !monthStr || !yearStr) return null;
+    const year = Number(yearStr);
+
+    return this.normalizeDateParts(year, Number(monthStr), Number(dayStr));
+  }
+
+  private normalizeDateParts(year: number, month: number, day: number): string | null {
+    if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
+      return null;
+    }
+
+    if (month < 1 || month > 12 || day < 1 || day > 31) {
+      return null;
+    }
+
+    const date = new Date(Date.UTC(year, month - 1, day));
+    if (
+      date.getUTCFullYear() !== year ||
+      date.getUTCMonth() !== month - 1 ||
+      date.getUTCDate() !== day
+    ) {
+      return null;
+    }
+
+    const mm = String(month).padStart(2, '0');
+    const dd = String(day).padStart(2, '0');
+    return `${year}-${mm}-${dd}`;
+  }
+
+  private formatDateDisplay(isoDate: string): string {
+    const [year, month, day] = isoDate.split('-');
+    return `${day}/${month}/${year}`;
   }
 
   private async downloadTelegramAudio(fileId: string): Promise<string> {
@@ -1083,7 +1253,7 @@ export class TelegramService {
   }
 
   private formatPhoneDisplay(phone?: string | null): string {
-    if (!phone || phone.startsWith('tg_') || phone.startsWith('wa_')) {
+    if (!phone || phone.startsWith('tg_')) {
       return 'não informado';
     }
     

@@ -29,7 +29,6 @@ export interface TransactionResponse {
   date: Date;
   userId: string;
   createdAt: Date;
-  whatsappMessageId: string | null;
 }
 
 export interface PaginationMeta {

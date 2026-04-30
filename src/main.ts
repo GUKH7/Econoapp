@@ -1,9 +1,8 @@
 import 'reflect-metadata';
-import { ValidationPipe } from '@nestjs/common';
+import { ValidationPipe, RequestMethod } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
-import { json, Request } from 'express';
 import { Logger } from 'nestjs-pino';
 import { apiReference } from '@scalar/nestjs-api-reference';
 import { AppModule } from '@/app.module';
@@ -18,13 +17,7 @@ async function bootstrap(): Promise<void> {
     allowedHeaders: ['Content-Type', 'Authorization'],
   });
 
-  app.use(
-    json({
-      verify: (req, _, buffer) => {
-        (req as Request).rawBody = Buffer.from(buffer);
-      },
-    }),
-  );
+
 
   app.useLogger(app.get(Logger));
   app.use(
@@ -47,7 +40,9 @@ async function bootstrap(): Promise<void> {
       },
     }),
   );
-  app.setGlobalPrefix('api/v1');
+  app.setGlobalPrefix('api/v1', {
+    exclude: [{ path: 'health', method: RequestMethod.GET }],
+  });
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -58,7 +53,7 @@ async function bootstrap(): Promise<void> {
 
   const swaggerConfig = new DocumentBuilder()
     .setTitle('EconoApp API')
-    .setDescription('API de gestão financeira para vendedores de marketplace via Telegram e WhatsApp')
+    .setDescription('API de gestão financeira para vendedores de marketplace via Telegram')
     .setVersion('1.0')
     .addBearerAuth(
       {

@@ -14,12 +14,10 @@ export interface PaginatedResult<T> {
 
 export type AuthenticatedRequest = Request & {
   user?: JwtPayload;
-  rawBody?: Buffer;
 };
 
 declare module 'express-serve-static-core' {
   interface Request {
     user?: JwtPayload;
-    rawBody?: Buffer;
   }
 }

@@ -5,7 +5,7 @@ import { env } from '@/config/env';
 import { BadRequestException } from '@/common/errors/app.exception';
 
 export const geminiOutputSchema = z.object({
-  amount: z.number().positive(),
+  amount: z.number().nonnegative(),
   type: z.enum(['INCOME', 'EXPENSE']),
   categoryHint: z.string().min(1),
   channelHint: z.string().nullable().optional(),
@@ -35,60 +35,41 @@ export class GeminiService {
       'Você é um extrator de dados financeiros para vendedores de marketplace brasileiros.',
       ...contextLines,
       'Responda SOMENTE JSON válido, sem markdown e sem texto adicional.',
+      'Se a mensagem NÃO for uma transação financeira (ex: "oi", "bom dia"), retorne amount: 0 e confidence: 0.',
       'Formato obrigatório:',
       '{"amount": number, "type": "INCOME"|"EXPENSE", "categoryHint": string, "channelHint": string|null, "confidence": number}',
       `Mensagem: ${message}`,
     ].join('\n');
 
-    const result = await model.generateContent(prompt);
-    const rawText = result.response.text().trim();
-    const cleaned = rawText
-      .replace(/^```json\s*/i, '')
-      .replace(/^```\s*/i, '')
-      .replace(/```$/i, '')
-      .trim();
-
-    let parsedJson: unknown;
     try {
-      parsedJson = JSON.parse(cleaned);
-    } catch {
-      throw new BadRequestException('Gemini retornou JSON inválido');
+      const result = await model.generateContent(prompt);
+      const rawText = result.response.text().trim();
+      const cleaned = rawText
+        .replace(/^```json\s*/i, '')
+        .replace(/^```\s*/i, '')
+        .replace(/```$/i, '')
+        .trim();
+
+      let parsedJson: unknown;
+      try {
+        parsedJson = JSON.parse(cleaned);
+      } catch {
+        throw new BadRequestException('Gemini retornou JSON inválido');
+      }
+
+      const parsed = geminiOutputSchema.safeParse(parsedJson);
+      if (!parsed.success) {
+        throw new BadRequestException(
+          'Resposta do Gemini fora do schema esperado',
+          parsed.error.flatten(),
+        );
+      }
+
+      return parsed.data;
+    } catch (error) {
+      if (error instanceof BadRequestException) throw error;
+      throw new BadRequestException('Não consegui processar sua mensagem agora. Por favor, tente novamente em instantes.');
     }
-
-    const parsed = geminiOutputSchema.safeParse(parsedJson);
-    if (!parsed.success) {
-      throw new BadRequestException(
-        'Resposta do Gemini fora do schema esperado',
-        parsed.error.flatten(),
-      );
-    }
-
-    return parsed.data;
-  }
-
-  async extractFinancialDataFromAudio(
-    audioId: string,
-    context?: { channelNames?: string[]; categoryNames?: string[] },
-  ): Promise<GeminiAudioOutput> {
-    // 1. Obter URL do áudio na Meta Graph API
-    const metaRes = await fetch(`https://graph.facebook.com/v20.0/${audioId}`, {
-      headers: { Authorization: `Bearer ${env.WHATSAPP_TOKEN}` },
-    });
-    if (!metaRes.ok) {
-      throw new BadRequestException(`Erro ao obter URL do áudio: ${await metaRes.text()}`);
-    }
-    const { url: audioUrl } = (await metaRes.json()) as { url: string };
-
-    // 2. Baixar o binário do áudio
-    const audioRes = await fetch(audioUrl, {
-      headers: { Authorization: `Bearer ${env.WHATSAPP_TOKEN}` },
-    });
-    if (!audioRes.ok) {
-      throw new BadRequestException('Erro ao baixar áudio do WhatsApp');
-    }
-    const audioBase64 = Buffer.from(await audioRes.arrayBuffer()).toString('base64');
-
-    return this.extractFinancialDataFromAudioBase64(audioBase64, 'audio/ogg', context);
   }
 
   async extractFinancialDataFromAudioBase64(
@@ -96,15 +77,13 @@ export class GeminiService {
     mimeType: string,
     context?: { channelNames?: string[]; categoryNames?: string[] },
   ): Promise<GeminiAudioOutput> {
-
-    // 3. Enviar ao Gemini multimodal (transcrição + extração em uma chamada)
     const model = this.client.getGenerativeModel({ model: 'gemini-2.5-flash' });
-
     const contextLines = this.buildContextLines(context);
 
     const prompt = [
       'Você é um extrator de dados financeiros para vendedores de marketplace brasileiros.',
       'Ouça o áudio, transcreva e extraia os dados financeiros.',
+      'REGRA DE TRANSCRIÇÃO: Na chave "transcription", escreva os valores monetários sempre com a palavra (exemplo: "20 reais") e NUNCA use o símbolo matemático "R$".',
       ...contextLines,
       'Responda SOMENTE JSON válido, sem markdown e sem texto adicional.',
       'Formato obrigatório:',
@@ -123,22 +102,16 @@ export class GeminiService {
       .replace(/```$/i, '')
       .trim();
 
-    let parsedJson: unknown;
     try {
-      parsedJson = JSON.parse(cleaned);
+      const parsedJson = JSON.parse(cleaned);
+      const parsed = geminiAudioOutputSchema.safeParse(parsedJson);
+      if (!parsed.success) {
+        throw new BadRequestException('Resposta do Gemini (áudio) fora do schema esperado');
+      }
+      return parsed.data;
     } catch {
-      throw new BadRequestException('Gemini retornou JSON inválido para áudio');
+      throw new BadRequestException('Não consegui processar seu áudio agora. Por favor, tente novamente em instantes.');
     }
-
-    const parsed = geminiAudioOutputSchema.safeParse(parsedJson);
-    if (!parsed.success) {
-      throw new BadRequestException(
-        'Resposta do Gemini (áudio) fora do schema esperado',
-        parsed.error.flatten(),
-      );
-    }
-
-    return parsed.data;
   }
 
   private buildContextLines(context?: { channelNames?: string[]; categoryNames?: string[] }): string[] {

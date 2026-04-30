@@ -52,7 +52,7 @@ export class EditProfileScene {
     const email = text !== '-' ? text : undefined;
     const phone = ctx.scene.session.phone;
 
-    const updateData: any = {};
+    const updateData: { phone?: string; email?: string } = {};
     if (phone) updateData.phone = phone;
     if (email) updateData.email = email;
 

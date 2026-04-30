@@ -1,4 +1,4 @@
-import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { JwtModule } from '@nestjs/jwt';
 import { ThrottlerModule } from '@nestjs/throttler';
@@ -8,13 +8,10 @@ import { env } from '@/config/env';
 import { DatabaseModule } from '@/config/database.module';
 import { HttpExceptionFilter } from '@/common/filters/http-exception.filter';
 import { AuthGuard } from '@/common/guards/auth.guard';
-import { WebhookVerifyMiddleware } from '@/common/middlewares/webhook-verify.middleware';
 import { AuthModule } from '@/modules/auth/auth.module';
 import { TransactionModule } from '@/modules/transactions/transaction.module';
 import { ChannelModule } from '@/modules/channels/channel.module';
 import { CategoryModule } from '@/modules/categories/category.module';
-import { WhatsAppModule } from '@/modules/whatsapp/whatsapp.module';
-import { WhatsAppController } from '@/modules/whatsapp/whatsapp.controller';
 import { DashboardModule } from '@/modules/dashboard/dashboard.module';
 import { HealthModule } from '@/modules/health/health.module';
 import { TelegramModule } from '@/modules/telegram/telegram.module';
@@ -51,7 +48,7 @@ import { TelegramModule } from '@/modules/telegram/telegram.module';
     TransactionModule,
     ChannelModule,
     CategoryModule,
-    WhatsAppModule,
+
     TelegramModule,
     DashboardModule,
     HealthModule,
@@ -71,8 +68,4 @@ import { TelegramModule } from '@/modules/telegram/telegram.module';
     },
   ],
 })
-export class AppModule implements NestModule {
-  configure(consumer: MiddlewareConsumer): void {
-    consumer.apply(WebhookVerifyMiddleware).forRoutes(WhatsAppController);
-  }
-}
+export class AppModule {}
