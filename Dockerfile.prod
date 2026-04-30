@@ -1,39 +1,45 @@
-# ── Stage 1: build ──────────────────────────────────────────
 FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-RUN apk add --no-cache openssl
+RUN apk add --no-cache \
+	openssl \
+	python3 \
+	make \
+	g++ \
+	cairo-dev \
+	pango-dev \
+	jpeg-dev \
+	giflib-dev \
+	pixman-dev
 
-# Instalar dependências (incluindo devDependencies para o build)
 COPY package*.json ./
 COPY prisma ./prisma
 RUN npm ci
-
-# Gerar Prisma Client para Linux Alpine
 RUN npx prisma generate
 
-# Compilar TypeScript
 COPY . .
 RUN npm run build
+RUN npm prune --omit=dev
 
-# ── Stage 2: runner ─────────────────────────────────────────
 FROM node:20-alpine AS runner
 
 WORKDIR /app
 
-RUN apk add --no-cache openssl
+RUN apk add --no-cache \
+	openssl \
+	cairo \
+	pango \
+	jpeg \
+	giflib \
+	pixman \
+	libstdc++
 
-# Apenas dependências de produção
 COPY package*.json ./
-RUN npm ci --omit=dev
-
-# Copiar artefatos do build
 COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder /app/node_modules ./node_modules
 COPY prisma ./prisma
 
 EXPOSE 3001
 
-# Rodar migrações pendentes e iniciar o servidor
 CMD ["sh", "-c", "npx prisma migrate deploy && node dist/main.js"]

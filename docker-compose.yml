@@ -1,7 +1,32 @@
 services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    container_name: econoapp-api
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      PORT: ${PORT:-3001}
+      DATABASE_URL: postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-econoapp}?schema=public
+    ports:
+      - '${PORT:-3001}:${PORT:-3001}'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://localhost:${PORT:-3001}/health || exit 1']
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
   postgres:
     image: postgres:15-alpine
     container_name: econoapp-postgres
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${DB_USER:-postgres}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
@@ -9,7 +34,7 @@ services:
       TZ: UTC
       PGTZ: UTC
     ports:
-      - '5432:5432'
+      - '127.0.0.1:5432:5432'
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-econoapp}']
       interval: 5s
