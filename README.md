@@ -66,7 +66,7 @@ src/
 
 ### Pré-requisitos
 - Node.js (v18 ou superior)
-- Docker (opcional para o banco de dados)
+- Docker e Docker Compose
 - Uma chave de API do Google Gemini
 - Token de Bot do Telegram (via BotFather)
 
@@ -86,29 +86,36 @@ src/
 3.  Configure as variáveis de ambiente:
     Crie um arquivo `.env` na raiz baseado no `.env.example`.
 
-4.  Configure o banco de dados:
+4.  Suba o PostgreSQL local:
+    ```bash
+    docker compose up -d postgres
+    ```
+
+5.  Configure o banco de dados:
     ```bash
     npx prisma migrate dev
     npx prisma generate
     ```
 
-5.  Inicie o servidor de desenvolvimento:
+6.  Inicie o servidor de desenvolvimento:
     ```bash
     npm run dev
     ```
 
 ### Docker
 
-Para subir o ambiente completo (PostgreSQL + backend) com Docker:
+Para subir o ambiente completo de produção (PostgreSQL + backend) com Docker:
 
 ```bash
-docker compose up -d
+docker compose up -d --build
 ```
 
-Para rodar as migrations dentro do container:
+O serviço `api` aguarda o PostgreSQL ficar saudável, executa `prisma migrate deploy` e inicia com `node dist/main.js`.
+
+Para acompanhar os logs:
 
 ```bash
-docker exec econoapp-backend npx prisma migrate dev
+docker compose logs -f api
 ```
 
 ---
