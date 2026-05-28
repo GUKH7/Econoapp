@@ -12,15 +12,22 @@ import { TelegramNotificationService } from './telegram-notification.service';
 import { TelegramService } from './telegram.service';
 import { TelegramUpdate } from './telegram.update';
 
+const isTelegramEnabled =
+  env.TELEGRAM_BOT_TOKEN.length > 0 && env.TELEGRAM_BOT_TOKEN !== 'dev-placeholder';
+
 @Module({
   imports: [
-    TelegrafModule.forRoot({
-      token: env.TELEGRAM_BOT_TOKEN,
-      middlewares: [session()],
-      launchOptions: {
-        dropPendingUpdates: true,
-      },
-    }),
+    ...(isTelegramEnabled
+      ? [
+          TelegrafModule.forRoot({
+            token: env.TELEGRAM_BOT_TOKEN,
+            middlewares: [session()],
+            launchOptions: {
+              dropPendingUpdates: true,
+            },
+          }),
+        ]
+      : []),
     TransactionModule,
     DashboardModule,
     ChannelModule,
@@ -39,6 +46,11 @@ export class TelegramModule implements OnModuleInit {
   private readonly logger = new Logger(TelegramModule.name);
 
   async onModuleInit(): Promise<void> {
+    if (!isTelegramEnabled) {
+      this.logger.warn('Telegram desativado: TELEGRAM_BOT_TOKEN nao configurado.');
+      return;
+    }
+
     // Remove qualquer webhook anterior para garantir que o polling funcione
     const res = await fetch(
       `https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/deleteWebhook?drop_pending_updates=true`,

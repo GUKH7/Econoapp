@@ -1,0 +1,10 @@
+{
+  "name": "EconoApp",
+  "short_name": "EconoApp",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#F1EFEA",
+  "theme_color": "#007338",
+  "orientation": "portrait",
+  "icons": []
+}

@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { Transaction } from '@prisma/client';
 import { InjectBot } from 'nestjs-telegraf';
 import { Telegraf } from 'telegraf';
@@ -7,7 +7,7 @@ import { Telegraf } from 'telegraf';
 export class TelegramNotificationService {
   private readonly logger = new Logger(TelegramNotificationService.name);
 
-  constructor(@InjectBot() private readonly bot: Telegraf) {}
+  constructor(@Optional() @InjectBot() private readonly bot?: Telegraf) {}
 
   async sendTransactionConfirmation(telegramId: string, transaction: Transaction): Promise<void> {
     const amount = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
@@ -43,6 +43,11 @@ export class TelegramNotificationService {
   }
 
   private async safeSend(telegramId: string, text: string): Promise<void> {
+    if (!this.bot) {
+      this.logger.warn('Telegram desativado: notificacao ignorada.');
+      return;
+    }
+
     const chatId = Number(telegramId);
     if (Number.isNaN(chatId)) {
       this.logger.warn(`telegramId inválido para envio: ${telegramId}`);
