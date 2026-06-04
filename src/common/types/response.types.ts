@@ -1,4 +1,9 @@
-import { TransactionType, TransactionSource } from '@prisma/client';
+import {
+  FinancialAccountType,
+  FinancialScope,
+  TransactionType,
+  TransactionSource,
+} from '@prisma/client';
 
 export interface CategoryResponse {
   id: string;
@@ -17,6 +22,31 @@ export interface ChannelResponse {
   createdAt: Date;
 }
 
+export interface FinancialAccountResponse {
+  id: string;
+  name: string;
+  type: FinancialAccountType;
+  balance: number;
+  scope: FinancialScope;
+  isActive: boolean;
+  userId: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface CreditCardResponse {
+  id: string;
+  name: string;
+  limit: number;
+  closingDay: number | null;
+  dueDay: number | null;
+  scope: FinancialScope;
+  isActive: boolean;
+  userId: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface TransactionResponse {
   id: string;
   description: string;
@@ -24,8 +54,11 @@ export interface TransactionResponse {
   netAmount: number;
   type: TransactionType;
   source: TransactionSource;
+  scope: FinancialScope;
   categoryId: string;
   channelId: string | null;
+  accountId: string | null;
+  creditCardId: string | null;
   date: Date;
   userId: string;
   createdAt: Date;

@@ -1,4 +1,4 @@
-import { TransactionSource, TransactionType } from '@prisma/client';
+import { FinancialScope, TransactionSource, TransactionType } from '@prisma/client';
 import { Type } from 'class-transformer';
 import { IsDateString, IsEnum, IsNumber, IsOptional, IsString, IsUUID, Min } from 'class-validator';
 
@@ -18,12 +18,24 @@ export class CreateTransactionDto {
   @IsEnum(TransactionSource)
   source?: TransactionSource;
 
+  @IsOptional()
+  @IsEnum(FinancialScope)
+  scope?: FinancialScope;
+
   @IsUUID()
   categoryId!: string;
 
   @IsOptional()
   @IsUUID()
   channelId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  accountId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  creditCardId?: string;
 
   @IsOptional()
   @IsDateString()

@@ -2,8 +2,9 @@ import { Inject, Injectable } from '@nestjs/common';
 import { Transaction, TransactionSource, TransactionType } from '@prisma/client';
 import { PrismaService } from '@/config/database';
 import { calculateNetAmount } from '@/domain/finance/calculate-fees';
-import { NotFoundException, ForbiddenException } from '@/common/errors/app.exception';
+import { BadRequestException, NotFoundException, ForbiddenException } from '@/common/errors/app.exception';
 import { PaginatedResult } from '@/common/types';
+import { AccountService } from '@/modules/accounts/account.service';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
 import { FilterTransactionDto } from './dto/filter-transaction.dto';
 import { UpdateTransactionDto } from './dto/update-transaction.dto';
@@ -14,9 +15,22 @@ export class TransactionService {
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(TransactionRepository) private readonly transactionRepository: TransactionRepository,
+    @Inject(AccountService) private readonly accountService: AccountService,
   ) {}
 
   async create(userId: string, input: CreateTransactionDto): Promise<Transaction> {
+    if (input.type === TransactionType.INCOME && input.creditCardId) {
+      throw new BadRequestException('Receitas devem ser recebidas em uma conta ou carteira');
+    }
+
+    if (input.accountId) {
+      await this.accountService.ensureAccountBelongsToUser(userId, input.accountId);
+    }
+
+    if (input.creditCardId) {
+      await this.accountService.ensureCardBelongsToUser(userId, input.creditCardId);
+    }
+
     const channel = input.channelId
       ? await this.prisma.salesChannel.findFirst({ where: { id: input.channelId, userId } })
       : null;
@@ -32,8 +46,11 @@ export class TransactionService {
       netAmount,
       type: input.type,
       source: input.source ?? TransactionSource.MANUAL,
+      scope: input.scope ?? 'PERSONAL',
       categoryId: input.categoryId,
       ...(input.channelId ? { channelId: input.channelId } : {}),
+      ...(input.accountId ? { accountId: input.accountId } : {}),
+      ...(input.creditCardId ? { creditCardId: input.creditCardId } : {}),
       ...(input.date ? { date: new Date(input.date) } : {}),
       userId,
     });
@@ -58,6 +75,20 @@ export class TransactionService {
     const newAmount = input.amount !== undefined ? input.amount : Number(current.amount);
     const newChannelId = input.channelId !== undefined ? input.channelId : current.channelId;
     const newType = input.type !== undefined ? input.type : current.type;
+    const newCreditCardId =
+      input.creditCardId !== undefined ? input.creditCardId : current.creditCardId;
+
+    if (newType === TransactionType.INCOME && newCreditCardId) {
+      throw new BadRequestException('Receitas devem ser recebidas em uma conta ou carteira');
+    }
+
+    if (input.accountId) {
+      await this.accountService.ensureAccountBelongsToUser(userId, input.accountId);
+    }
+
+    if (input.creditCardId) {
+      await this.accountService.ensureCardBelongsToUser(userId, input.creditCardId);
+    }
 
     let newNetAmount: number = Number(current.netAmount);
     if (input.amount !== undefined || input.channelId !== undefined || input.type !== undefined) {
@@ -78,8 +109,11 @@ export class TransactionService {
       ...(input.amount !== undefined ? { amount: input.amount } : {}),
       ...(input.type !== undefined ? { type: input.type } : {}),
       ...(input.source !== undefined ? { source: input.source } : {}),
+      ...(input.scope !== undefined ? { scope: input.scope } : {}),
       ...(input.categoryId !== undefined ? { categoryId: input.categoryId } : {}),
       ...(input.channelId !== undefined ? { channelId: input.channelId } : {}),
+      ...(input.accountId !== undefined ? { accountId: input.accountId } : {}),
+      ...(input.creditCardId !== undefined ? { creditCardId: input.creditCardId } : {}),
       ...(input.date !== undefined ? { date: new Date(input.date) } : {}),
       netAmount: newNetAmount,
     });

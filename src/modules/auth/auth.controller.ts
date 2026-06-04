@@ -5,6 +5,7 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AuthGuard } from '@/common/guards/auth.guard';
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
 import { Public } from '@/common/decorators/public.decorator';
+import { env } from '@/config/env';
 import { JwtPayload } from '@/common/types';
 import { AuthTokensResponse, UserResponse } from '@/common/types/response.types';
 import { AuthService } from './auth.service';
@@ -32,7 +33,7 @@ export class AuthController {
 
   @ApiOperation({ summary: 'Autenticar usuário e obter tokens JWT' })
   @Public()
-  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @Throttle({ default: { limit: env.NODE_ENV === 'development' ? 60 : 5, ttl: 60000 } })
   @Post('login')
   async login(@Body() dto: LoginDto): Promise<{ data: AuthTokensResponse }> {
     const data = await this.authService.login(dto);

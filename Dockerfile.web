@@ -1,0 +1,10 @@
+FROM node:20-alpine
+
+WORKDIR /app
+
+COPY web ./web
+
+ENV WEB_PORT=5173
+EXPOSE 5173
+
+CMD ["node", "web/server.js"]

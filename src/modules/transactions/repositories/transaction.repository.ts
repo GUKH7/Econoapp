@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { Prisma, Transaction, TransactionSource } from '@prisma/client';
+import { FinancialScope, Prisma, Transaction, TransactionSource } from '@prisma/client';
 import { PrismaService } from '@/config/database';
 import { PaginatedResult } from '@/common/types';
 import { FilterTransactionDto } from '../dto/filter-transaction.dto';
@@ -10,8 +10,11 @@ interface CreateTransactionInput {
   netAmount: number;
   type: 'INCOME' | 'EXPENSE';
   source: TransactionSource;
+  scope?: FinancialScope;
   categoryId: string;
   channelId?: string;
+  accountId?: string;
+  creditCardId?: string;
   date?: Date;
   userId: string;
 }
@@ -25,7 +28,10 @@ export class TransactionRepository {
       trx.transaction.create({
         data: {
           ...input,
+          scope: input.scope ?? 'PERSONAL',
           channelId: input.channelId ?? null,
+          accountId: input.accountId ?? null,
+          creditCardId: input.creditCardId ?? null,
           date: input.date ?? new Date(),
         },
       }),
@@ -55,6 +61,7 @@ export class TransactionRepository {
     const where: Prisma.TransactionWhereInput = {
       userId,
       ...(filters.type ? { type: filters.type } : {}),
+      ...(filters.scope ? { scope: filters.scope } : {}),
       ...(filters.channelId ? { channelId: filters.channelId } : {}),
       ...(filters.categoryId ? { categoryId: filters.categoryId } : {}),
       ...(dateFilter ? { date: dateFilter } : {}),

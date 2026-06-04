@@ -4,6 +4,8 @@ const path = require('path');
 
 const root = __dirname;
 const port = Number(process.env.WEB_PORT || 5173);
+const apiTarget = new URL(process.env.API_TARGET || 'http://localhost:3001');
+const publicApiUrl = process.env.WEB_API_URL || '';
 
 const types = {
   '.html': 'text/html; charset=utf-8',
@@ -13,13 +15,59 @@ const types = {
   '.webmanifest': 'application/manifest+json; charset=utf-8',
 };
 
+function proxyApi(request, response) {
+  const proxyRequest = http.request(
+    {
+      hostname: apiTarget.hostname,
+      port: apiTarget.port || 80,
+      method: request.method,
+      path: request.url,
+      headers: {
+        ...request.headers,
+        host: apiTarget.host,
+      },
+    },
+    (proxyResponse) => {
+      response.writeHead(proxyResponse.statusCode || 502, proxyResponse.headers);
+      proxyResponse.pipe(response);
+    },
+  );
+
+  proxyRequest.on('error', () => {
+    response.writeHead(502, { 'Content-Type': 'application/json; charset=utf-8' });
+    response.end(JSON.stringify({ message: 'API local indisponivel' }));
+  });
+
+  request.pipe(proxyRequest);
+}
+
 const server = http.createServer((request, response) => {
+  if (request.url === '/health') {
+    response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+    response.end(JSON.stringify({ status: 'ok' }));
+    return;
+  }
+
+  if (request.url?.startsWith('/api/v1/')) {
+    proxyApi(request, response);
+    return;
+  }
+
   const requested = request.url === '/' ? '/index.html' : request.url.split('?')[0];
   const filePath = path.normalize(path.join(root, requested));
 
   if (!filePath.startsWith(root)) {
     response.writeHead(403);
     response.end('Forbidden');
+    return;
+  }
+
+  if (requested === '/config.js' && publicApiUrl) {
+    response.writeHead(200, {
+      'Content-Type': 'text/javascript; charset=utf-8',
+      'Cache-Control': 'no-store',
+    });
+    response.end(`window.ECONOAPP_CONFIG = ${JSON.stringify({ apiUrl: publicApiUrl })};`);
     return;
   }
 

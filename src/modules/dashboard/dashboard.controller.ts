@@ -1,4 +1,5 @@
 import { Controller, Get, Inject, Query, UseGuards } from '@nestjs/common';
+import { FinancialScope } from '@prisma/client';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
 import { AuthGuard } from '@/common/guards/auth.guard';
@@ -19,8 +20,9 @@ export class DashboardController {
     @CurrentUser() user: JwtPayload,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
+    @Query('scope') scope?: FinancialScope,
   ): Promise<{ data: DashboardSummaryResponse }> {
-    const data = await this.dashboardService.getSummary(user.sub, startDate, endDate);
+    const data = await this.dashboardService.getSummary(user.sub, startDate, endDate, scope);
     return { data };
   }
 }

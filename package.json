@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "tsx watch src/main.ts",
     "build": "tsc -p tsconfig.json",
-    "start": "node dist/main.js",
+    "start": "node -r ./register-paths.cjs dist/src/main.js",
     "lint": "eslint \"{src,tests}/**/*.ts\"",
     "format": "prettier --write \"{src,tests,prisma}/**/*.{ts,js,json,yml,yaml}\"",
     "test": "vitest run",

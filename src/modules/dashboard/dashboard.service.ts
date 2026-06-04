@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { FinancialScope, Prisma } from '@prisma/client';
 import { PrismaService } from '@/config/database';
 import { startOfDayUtc, endOfDayUtc, toUtcDate } from '@/utils/date';
 
@@ -25,6 +25,7 @@ export class DashboardService {
     userId: string,
     startDate?: string,
     endDate?: string,
+    scope?: FinancialScope,
   ): Promise<DashboardSummary> {
     const dateWhere =
       startDate || endDate
@@ -35,32 +36,33 @@ export class DashboardService {
             },
           }
         : {};
+    const scopeWhere = scope ? { scope } : {};
 
     // ── Fase 1: todas as queries independentes em paralelo ───────────────────
     const [incomeAgg, expenseAgg, categoryGroups, channelGroups, cashFlowRaw] = await Promise.all([
       // Soma das receitas
       this.prisma.transaction.aggregate({
-        where: { userId, type: 'INCOME', ...dateWhere },
+        where: { userId, type: 'INCOME', ...dateWhere, ...scopeWhere },
         _sum: { amount: true, netAmount: true },
       }),
 
       // Soma das despesas
       this.prisma.transaction.aggregate({
-        where: { userId, type: 'EXPENSE', ...dateWhere },
+        where: { userId, type: 'EXPENSE', ...dateWhere, ...scopeWhere },
         _sum: { amount: true, netAmount: true },
       }),
 
       // Agrupamento por categoria
       this.prisma.transaction.groupBy({
         by: ['categoryId'],
-        where: { userId, ...dateWhere },
+        where: { userId, ...dateWhere, ...scopeWhere },
         _sum: { amount: true },
       }),
 
       // Agrupamento por canal
       this.prisma.transaction.groupBy({
         by: ['channelId'],
-        where: { userId, ...dateWhere },
+        where: { userId, ...dateWhere, ...scopeWhere },
         _sum: { amount: true, netAmount: true },
         _count: { id: true },
       }),
@@ -76,6 +78,7 @@ export class DashboardService {
             WHERE "userId" = ${userId}::uuid
             ${startDate ? Prisma.sql`AND "date" >= ${startOfDayUtc(toUtcDate(startDate))}` : Prisma.empty}
             ${endDate ? Prisma.sql`AND "date" <= ${endOfDayUtc(toUtcDate(endDate))}` : Prisma.empty}
+            ${scope ? Prisma.sql`AND "scope" = ${scope}::"FinancialScope"` : Prisma.empty}
             GROUP BY DATE("date" AT TIME ZONE 'UTC')
             ORDER BY date ASC
           `,

@@ -22,6 +22,7 @@ import type { Transaction } from '@prisma/client';
 
 import { TransactionService } from '@/modules/transactions/transaction.service';
 import { PrismaService } from '@/config/database';
+import { AccountService } from '@/modules/accounts/account.service';
 import { TransactionRepository } from '@/modules/transactions/repositories/transaction.repository';
 import { ForbiddenException, NotFoundException } from '@/common/errors/app.exception';
 
@@ -43,6 +44,11 @@ const mockTransactionRepo = {
   findAllByUser: vi.fn(),
 };
 
+const mockAccountService = {
+  ensureAccountBelongsToUser: vi.fn(),
+  ensureCardBelongsToUser: vi.fn(),
+};
+
 // ---------------------------------------------------------------------------
 // Helper: constrói um objeto Transaction com defaults sensatos.
 // Usa "as unknown as Transaction" para evitar preencher todos os campos
@@ -58,8 +64,11 @@ function makeTransaction(overrides: Partial<Record<string, unknown>> = {}): Tran
     netAmount: 100,
     type: TransactionType.INCOME,
     source: TransactionSource.MANUAL,
+    scope: 'PERSONAL',
     categoryId: 'cat-001',
     channelId: null,
+    accountId: null,
+    creditCardId: null,
     date: new Date('2024-01-15T12:00:00Z'),
     createdAt: new Date('2024-01-15T12:00:00Z'),
     updatedAt: new Date('2024-01-15T12:00:00Z'),
@@ -87,6 +96,7 @@ describe('TransactionService › update', () => {
         TransactionService,
         { provide: PrismaService, useValue: mockPrisma },
         { provide: TransactionRepository, useValue: mockTransactionRepo },
+        { provide: AccountService, useValue: mockAccountService },
       ],
     }).compile();
 

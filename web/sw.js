@@ -1,6 +1,6 @@
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open('econoapp-v9').then((cache) =>
+    caches.open('econoapp-v12').then((cache) =>
       cache.addAll(['./index.html', './styles.css', './app.js', './manifest.webmanifest']),
     ),
   );
@@ -10,7 +10,7 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches
       .keys()
-      .then((keys) => Promise.all(keys.filter((key) => key !== 'econoapp-v9').map((key) => caches.delete(key)))),
+      .then((keys) => Promise.all(keys.filter((key) => key !== 'econoapp-v12').map((key) => caches.delete(key)))),
   );
 });
 

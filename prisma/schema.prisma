@@ -19,6 +19,16 @@ enum TransactionSource {
   AUDIO
 }
 
+enum FinancialScope {
+  PERSONAL
+  BUSINESS
+}
+
+enum FinancialAccountType {
+  BANK
+  WALLET
+}
+
 model User {
   id            String         @id @default(uuid()) @db.Uuid
   name          String
@@ -32,6 +42,8 @@ model User {
   channels      SalesChannel[]
   categories    Category[]
   transactions  Transaction[]
+  accounts      FinancialAccount[]
+  creditCards   CreditCard[]
 }
 
 model RefreshToken {
@@ -71,6 +83,39 @@ model Category {
   @@index([userId])
 }
 
+model FinancialAccount {
+  id           String               @id @default(uuid()) @db.Uuid
+  name         String
+  type         FinancialAccountType
+  balance      Decimal              @default(0) @db.Decimal(15, 4)
+  scope        FinancialScope       @default(PERSONAL)
+  isActive     Boolean              @default(true)
+  userId       String               @db.Uuid
+  createdAt    DateTime             @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime             @updatedAt @db.Timestamptz(6)
+  user         User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+
+  @@index([userId, scope])
+}
+
+model CreditCard {
+  id           String        @id @default(uuid()) @db.Uuid
+  name         String
+  limit        Decimal       @default(0) @db.Decimal(15, 4)
+  closingDay   Int?
+  dueDay       Int?
+  scope        FinancialScope @default(PERSONAL)
+  isActive     Boolean       @default(true)
+  userId       String        @db.Uuid
+  createdAt    DateTime      @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime      @updatedAt @db.Timestamptz(6)
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+
+  @@index([userId, scope])
+}
+
 model Transaction {
   id          String            @id @default(uuid()) @db.Uuid
   description String
@@ -78,8 +123,11 @@ model Transaction {
   netAmount   Decimal           @db.Decimal(15, 4)
   type        TransactionType
   source      TransactionSource @default(TELEGRAM)
+  scope       FinancialScope    @default(PERSONAL)
   categoryId  String            @db.Uuid
   channelId   String?           @db.Uuid
+  accountId   String?           @db.Uuid
+  creditCardId String?          @db.Uuid
   date        DateTime          @default(now()) @db.Timestamptz(6)
   userId      String            @db.Uuid
   createdAt   DateTime          @default(now()) @db.Timestamptz(6)
@@ -88,8 +136,13 @@ model Transaction {
   user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   category Category      @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   channel  SalesChannel? @relation(fields: [channelId], references: [id], onDelete: SetNull)
+  account  FinancialAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  creditCard CreditCard? @relation(fields: [creditCardId], references: [id], onDelete: SetNull)
 
   @@index([userId, date])
+  @@index([userId, scope])
   @@index([categoryId])
   @@index([channelId])
+  @@index([accountId])
+  @@index([creditCardId])
 }

@@ -1,4 +1,4 @@
-import { TransactionType } from '@prisma/client';
+import { FinancialScope, TransactionType } from '@prisma/client';
 import { Type } from 'class-transformer';
 import { IsDateString, IsEnum, IsInt, IsOptional, IsUUID, Max, Min } from 'class-validator';
 
@@ -14,6 +14,10 @@ export class FilterTransactionDto {
   @IsOptional()
   @IsEnum(TransactionType)
   type?: TransactionType;
+
+  @IsOptional()
+  @IsEnum(FinancialScope)
+  scope?: FinancialScope;
 
   @IsOptional()
   @IsUUID()

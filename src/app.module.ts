@@ -12,6 +12,7 @@ import { AuthModule } from '@/modules/auth/auth.module';
 import { TransactionModule } from '@/modules/transactions/transaction.module';
 import { ChannelModule } from '@/modules/channels/channel.module';
 import { CategoryModule } from '@/modules/categories/category.module';
+import { AccountModule } from '@/modules/accounts/account.module';
 import { DashboardModule } from '@/modules/dashboard/dashboard.module';
 import { HealthModule } from '@/modules/health/health.module';
 import { TelegramModule } from '@/modules/telegram/telegram.module';
@@ -48,6 +49,7 @@ import { TelegramModule } from '@/modules/telegram/telegram.module';
     TransactionModule,
     ChannelModule,
     CategoryModule,
+    AccountModule,
 
     TelegramModule,
     DashboardModule,

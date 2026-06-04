@@ -1,6 +1,8 @@
-const defaultApiUrl = `${location.protocol}//${location.hostname}:3001/api/v1`;
+const configuredApiUrl = window.ECONOAPP_CONFIG?.apiUrl;
+const defaultApiUrl = configuredApiUrl || `${location.origin}/api/v1`;
+const storedApiUrl = localStorage.getItem('econoapp.apiUrl');
 const state = {
-  apiUrl: localStorage.getItem('econoapp.apiUrl') || defaultApiUrl,
+  apiUrl: storedApiUrl && !storedApiUrl.includes(':3001') ? storedApiUrl : defaultApiUrl,
   accessToken: localStorage.getItem('econoapp.accessToken') || '',
   refreshToken: localStorage.getItem('econoapp.refreshToken') || '',
   user: null,
@@ -16,11 +18,8 @@ const state = {
   scopes: JSON.parse(localStorage.getItem('econoapp.transactionScopes') || '{}'),
   paymentMeta: JSON.parse(localStorage.getItem('econoapp.paymentMeta') || '{}'),
   categoryKinds: JSON.parse(localStorage.getItem('econoapp.categoryKinds') || '{}'),
-  wallets: JSON.parse(
-    localStorage.getItem('econoapp.wallets') ||
-      '[{"id":"wallet-main","name":"Carteira principal","type":"WALLET","balance":0}]',
-  ),
-  cards: JSON.parse(localStorage.getItem('econoapp.cards') || '[]'),
+  wallets: [],
+  cards: [],
   budgets: JSON.parse(localStorage.getItem('econoapp.budgets') || '{}'),
   categoryColor: '#007338',
 };
@@ -48,8 +47,6 @@ function saveBudgets() {
 
 function savePaymentData() {
   localStorage.setItem('econoapp.paymentMeta', JSON.stringify(state.paymentMeta));
-  localStorage.setItem('econoapp.wallets', JSON.stringify(state.wallets));
-  localStorage.setItem('econoapp.cards', JSON.stringify(state.cards));
 }
 
 function saveCategoryKinds() {
@@ -107,16 +104,22 @@ function api() {
     login: (payload) => request('/auth/login', { method: 'POST', body: JSON.stringify(payload) }),
     register: (payload) => request('/auth/register', { method: 'POST', body: JSON.stringify(payload) }),
     me: () => request('/auth/me'),
-    dashboard: () => request('/dashboard'),
-    transactions: () => request('/transactions?limit=100'),
+    dashboard: () => request(`/dashboard?scope=${state.scope}`),
+    transactions: () => request(`/transactions?limit=100&scope=${state.scope}`),
     categories: () => request('/categories'),
     channels: () => request('/channels'),
+    accounts: () => request('/accounts'),
+    cards: () => request('/accounts/cards'),
     createTransaction: (payload) =>
       request('/transactions', { method: 'POST', body: JSON.stringify(payload) }),
     createCategory: (payload) =>
       request('/categories', { method: 'POST', body: JSON.stringify(payload) }),
     createChannel: (payload) =>
       request('/channels', { method: 'POST', body: JSON.stringify(payload) }),
+    createAccount: (payload) =>
+      request('/accounts', { method: 'POST', body: JSON.stringify(payload) }),
+    createCard: (payload) =>
+      request('/accounts/cards', { method: 'POST', body: JSON.stringify(payload) }),
   };
 }
 
@@ -136,6 +139,7 @@ function parseAmount(value) {
 }
 
 function transactionScope(transaction) {
+  if (transaction.scope) return transaction.scope;
   if (state.scopes[transaction.id]) return state.scopes[transaction.id];
   if (transaction.channelId) return 'BUSINESS';
   return 'PERSONAL';
@@ -170,18 +174,22 @@ function setError(message) {
 
 async function loadData() {
   const client = api();
-  const [me, dashboard, transactions, categories, channels] = await Promise.all([
+  const [me, dashboard, transactions, categories, channels, accounts, cards] = await Promise.all([
     client.me(),
     client.dashboard(),
     client.transactions(),
     client.categories(),
     client.channels(),
+    client.accounts(),
+    client.cards(),
   ]);
   state.user = me.data;
   state.dashboard = dashboard.data;
   state.transactions = transactions.data;
   state.categories = categories.data;
   state.channels = channels.data;
+  state.wallets = accounts.data;
+  state.cards = cards.data;
 }
 
 async function bootstrap() {
@@ -457,15 +465,17 @@ function transactionFormHtml(type, context) {
     if (isExpense) return !kind || kind === 'EXPENSE';
     return kind === 'INCOME';
   });
-  const walletOptions = state.wallets
+  const scopedWallets = state.wallets.filter((wallet) => !wallet.scope || wallet.scope === state.scope);
+  const scopedCards = state.cards.filter((card) => !card.scope || card.scope === state.scope);
+  const walletOptions = scopedWallets
     .map(
       (wallet) =>
-        `<option value="wallet:${wallet.id}">${wallet.type === 'BANK' ? 'Banco' : 'Carteira'} - ${escapeHtml(wallet.name)}</option>`,
+        `<option value="${wallet.id}">${wallet.type === 'BANK' ? 'Banco' : 'Carteira'} - ${escapeHtml(wallet.name)}</option>`,
     )
     .join('');
   const expensePaymentOptions = [
-    walletOptions,
-    ...state.cards.map((card) => `<option value="card:${card.id}">Cartao - ${escapeHtml(card.name)}</option>`),
+    ...scopedWallets.map((wallet) => `<option value="account:${wallet.id}">${wallet.type === 'BANK' ? 'Banco' : 'Carteira'} - ${escapeHtml(wallet.name)}</option>`),
+    ...scopedCards.map((card) => `<option value="card:${card.id}">Cartao - ${escapeHtml(card.name)}</option>`),
   ].join('');
 
   return `
@@ -513,6 +523,8 @@ function transactionFormHtml(type, context) {
 }
 
 function manageView() {
+  const scopedWallets = state.wallets.filter((wallet) => !wallet.scope || wallet.scope === state.scope);
+  const scopedCards = state.cards.filter((card) => !card.scope || card.scope === state.scope);
   return `
     <div class="split">
       <article class="card">
@@ -529,7 +541,7 @@ function manageView() {
           <button class="button" type="submit">Criar conta</button>
         </form>
         <div style="margin-top:14px">
-          ${state.wallets.map((wallet) => `<div class="row"><div><div class="row-title">${escapeHtml(wallet.name)}</div><div class="row-meta">${wallet.type === 'BANK' ? 'Banco' : 'Carteira'} - ${money.format(Number(wallet.balance || 0))}</div></div></div>`).join('')}
+          ${scopedWallets.map((wallet) => `<div class="row"><div><div class="row-title">${escapeHtml(wallet.name)}</div><div class="row-meta">${wallet.type === 'BANK' ? 'Banco' : 'Carteira'} ${scopeLabel()} - ${money.format(Number(wallet.balance || 0))}</div></div></div>`).join('') || '<p class="empty">Cadastre bancos ou carteiras para este escopo.</p>'}
         </div>
       </article>
 
@@ -541,7 +553,7 @@ function manageView() {
           <button class="button" type="submit">Criar cartao</button>
         </form>
         <div style="margin-top:14px">
-          ${state.cards.map((card) => `<div class="row"><div><div class="row-title">${escapeHtml(card.name)}</div><div class="row-meta">Limite ${money.format(Number(card.limit || 0))}</div></div></div>`).join('') || '<p class="empty">Cadastre cartoes para registrar gastos no credito.</p>'}
+          ${scopedCards.map((card) => `<div class="row"><div><div class="row-title">${escapeHtml(card.name)}</div><div class="row-meta">Cartao ${scopeLabel()} - limite ${money.format(Number(card.limit || 0))}</div></div></div>`).join('') || '<p class="empty">Cadastre cartoes para registrar gastos no credito.</p>'}
         </div>
       </article>
 
@@ -693,7 +705,7 @@ function transactionRow(transaction) {
   const value = Number(transaction.netAmount || transaction.amount || 0);
   const typeClass = transaction.type === 'EXPENSE' ? 'expense' : 'income';
   const category = state.categories.find((item) => item.id === transaction.categoryId);
-  const payment = state.paymentMeta[transaction.id];
+  const payment = paymentMetaForTransaction(transaction);
   const iconText = transaction.type === 'EXPENSE' ? '↓' : '↑';
   const iconColor = transaction.type === 'EXPENSE' ? '#EF5350' : '#28B463';
   const paymentLabel = payment ? ` - ${escapeHtml(payment.label)}` : '';
@@ -711,6 +723,23 @@ function transactionRow(transaction) {
   `;
 }
 
+function paymentMetaForTransaction(transaction) {
+  if (transaction.creditCardId) {
+    const card = state.cards.find((item) => item.id === transaction.creditCardId);
+    return { label: card ? `Cartao ${card.name}` : 'Cartao' };
+  }
+
+  if (transaction.accountId) {
+    const wallet = state.wallets.find((item) => item.id === transaction.accountId);
+    if (!wallet) return { label: transaction.type === 'INCOME' ? 'Receber em conta' : 'Conta' };
+    const prefix =
+      transaction.type === 'INCOME' ? 'Receber em' : wallet.type === 'BANK' ? 'Banco' : 'Carteira';
+    return { label: `${prefix} ${wallet.name}` };
+  }
+
+  return state.paymentMeta[transaction.id];
+}
+
 function bindShellEvents() {
   document.querySelector('[data-scope]').addEventListener('click', (event) => {
     const button = event.target.closest('button[data-value]');
@@ -719,10 +748,11 @@ function bindShellEvents() {
     const switcher = event.currentTarget;
     switcher.classList.add('switching');
     setTimeout(() => {
-      transitionTo(() => {
-        state.scope = button.dataset.value;
-        saveScopes();
-      });
+      state.scope = button.dataset.value;
+      saveScopes();
+      loadData()
+        .then(() => transitionTo(() => {}))
+        .catch((error) => alert(error.message));
     }, 90);
   });
 
@@ -806,20 +836,25 @@ function bindViewEvents() {
         return;
       }
 
+      const paymentTarget =
+        data.type === 'EXPENSE' ? paymentTargetFromValue(data.paymentMethod) : { accountId: data.receiveAccount };
+
       const response = await api().createTransaction({
         description: data.description,
         amount: parseAmount(data.amount),
         type: data.type,
         source: 'MANUAL',
+        scope: state.scope,
         categoryId,
         channelId: data.channelId || undefined,
+        accountId: paymentTarget.accountId || undefined,
+        creditCardId: paymentTarget.creditCardId || undefined,
       });
-      state.scopes[response.data.id] = state.scope;
       if (data.type === 'EXPENSE' && data.paymentMethod) {
         state.paymentMeta[response.data.id] = paymentMetaFromValue(data.paymentMethod);
       }
       if (data.type === 'INCOME' && data.receiveAccount) {
-        state.paymentMeta[response.data.id] = paymentMetaFromValue(data.receiveAccount, 'RECEIVE');
+        state.paymentMeta[response.data.id] = paymentMetaFromValue(`account:${data.receiveAccount}`, 'RECEIVE');
       }
       saveScopes();
       savePaymentData();
@@ -878,26 +913,30 @@ function bindViewEvents() {
   document.querySelector('[data-wallet-form]')?.addEventListener('submit', (event) => {
     event.preventDefault();
     const data = Object.fromEntries(new FormData(event.currentTarget));
-    state.wallets.push({
-      id: `wallet-${Date.now()}`,
-      name: String(data.name).trim(),
-      type: data.type,
-      balance: parseAmount(data.balance || '0'),
-    });
-    savePaymentData();
-    renderApp();
+    api()
+      .createAccount({
+        name: String(data.name).trim(),
+        type: data.type,
+        balance: parseAmount(data.balance || '0'),
+        scope: state.scope,
+      })
+      .then(loadData)
+      .then(renderApp)
+      .catch((error) => alert(error.message));
   });
 
   document.querySelector('[data-card-form]')?.addEventListener('submit', (event) => {
     event.preventDefault();
     const data = Object.fromEntries(new FormData(event.currentTarget));
-    state.cards.push({
-      id: `card-${Date.now()}`,
-      name: String(data.name).trim(),
-      limit: parseAmount(data.limit || '0'),
-    });
-    savePaymentData();
-    renderApp();
+    api()
+      .createCard({
+        name: String(data.name).trim(),
+        limit: parseAmount(data.limit || '0'),
+        scope: state.scope,
+      })
+      .then(loadData)
+      .then(renderApp)
+      .catch((error) => alert(error.message));
   });
 
   document.querySelector('[data-budget-form]')?.addEventListener('submit', (event) => {
@@ -907,6 +946,12 @@ function bindViewEvents() {
     saveBudgets();
     renderApp();
   });
+}
+
+function paymentTargetFromValue(value) {
+  const [kind, id] = String(value).split(':');
+  if (kind === 'card') return { creditCardId: id };
+  return { accountId: id };
 }
 
 function paymentMetaFromValue(value, mode = 'PAYMENT') {
