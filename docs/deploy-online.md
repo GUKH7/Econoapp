@@ -18,6 +18,8 @@ O arquivo `render.yaml` na raiz do repositorio cria:
 - `econoapp-backend`: API usando `Dockerfile.prod`.
 - `econoapp-web`: PWA usando `Dockerfile.web`.
 
+Todos os recursos estao configurados com `plan: free` no `render.yaml`. Antes de confirmar o Blueprint, revise no painel do Render se backend, web e banco aparecem como Free.
+
 No painel do Render, crie um novo Blueprint apontando para o repo:
 
 ```text
@@ -80,10 +82,11 @@ Se o Render gerar outro dominio para o backend, ajuste `WEB_API_URL` e `API_TARG
 ## Ordem de publicacao
 
 1. Criar Blueprint no Render usando o repo `GUKH7/Econoapp`.
-2. Preencher os segredos solicitados.
-3. Aguardar o deploy do backend e confirmar `/health`.
-4. Ajustar `WEB_API_URL` se o dominio do backend for diferente.
-5. Abrir a URL publica do web app e testar cadastro/login.
+2. Confirmar que os tres recursos estao em `Free`.
+3. Preencher os segredos solicitados.
+4. Aguardar o deploy do backend e confirmar `/health`.
+5. Ajustar `WEB_API_URL` se o dominio do backend for diferente.
+6. Abrir a URL publica do web app e testar cadastro/login.
 
 ## Alternativa com Vercel
 
