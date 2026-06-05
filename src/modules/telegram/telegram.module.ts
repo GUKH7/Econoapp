@@ -12,8 +12,7 @@ import { TelegramNotificationService } from './telegram-notification.service';
 import { TelegramService } from './telegram.service';
 import { TelegramUpdate } from './telegram.update';
 
-const isTelegramEnabled =
-  env.TELEGRAM_BOT_TOKEN.length > 0 && env.TELEGRAM_BOT_TOKEN !== 'dev-placeholder';
+const isTelegramEnabled = /^\d+:[\w-]+$/.test(env.TELEGRAM_BOT_TOKEN);
 
 @Module({
   imports: [
@@ -51,14 +50,20 @@ export class TelegramModule implements OnModuleInit {
       return;
     }
 
-    // Remove qualquer webhook anterior para garantir que o polling funcione
-    const res = await fetch(
-      `https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/deleteWebhook?drop_pending_updates=true`,
-    );
-    const data = (await res.json()) as { ok: boolean };
-    if (data.ok) {
-      this.logger.log('Telegram: webhook removido, iniciando polling.');
+    try {
+      // Remove qualquer webhook anterior para garantir que o polling funcione
+      const res = await fetch(
+        `https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/deleteWebhook?drop_pending_updates=true`,
+      );
+      const data = (await res.json()) as { ok: boolean };
+      if (data.ok) {
+        this.logger.log('Telegram: webhook removido, iniciando polling.');
+      }
+    } catch (error) {
+      this.logger.warn(
+        { error },
+        'Telegram indisponivel no boot; a API continuara rodando sem remover webhook.',
+      );
     }
   }
 }
-
