@@ -1,0 +1,45 @@
+services:
+  - type: web
+    name: econoapp-backend
+    runtime: docker
+    dockerfilePath: ./Dockerfile.prod
+    dockerContext: .
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: econoapp-postgres
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 15m
+      - key: JWT_REFRESH_EXPIRES_IN
+        value: 7d
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: PORT
+        value: 3001
+      - key: NODE_ENV
+        value: production
+
+  - type: web
+    name: econoapp-web
+    runtime: docker
+    dockerfilePath: ./Dockerfile.web
+    dockerContext: .
+    healthCheckPath: /health
+    envVars:
+      - key: WEB_PORT
+        value: 5173
+      - key: WEB_API_URL
+        value: https://econoapp-backend.onrender.com/api/v1
+      - key: API_TARGET
+        value: https://econoapp-backend.onrender.com
+
+databases:
+  - name: econoapp-postgres
+    databaseName: econoapp
+    user: econoapp
