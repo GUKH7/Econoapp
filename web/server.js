@@ -1,4 +1,5 @@
 const http = require('http');
+const https = require('https');
 const fs = require('fs');
 const path = require('path');
 
@@ -16,10 +17,11 @@ const types = {
 };
 
 function proxyApi(request, response) {
-  const proxyRequest = http.request(
+  const proxyClient = apiTarget.protocol === 'https:' ? https : http;
+  const proxyRequest = proxyClient.request(
     {
       hostname: apiTarget.hostname,
-      port: apiTarget.port || 80,
+      port: apiTarget.port || (apiTarget.protocol === 'https:' ? 443 : 80),
       method: request.method,
       path: request.url,
       headers: {
