@@ -4,17 +4,33 @@ Objetivo: substituir o LocalTunnel por URLs fixas para backend, web app e banco.
 
 ## Arquitetura recomendada
 
-- PostgreSQL gerenciado: Render Postgres, Railway Postgres, Neon ou Supabase.
-- Backend NestJS: serviço Docker usando `Dockerfile.prod`.
-- Web/PWA: serviço Docker usando `Dockerfile.web`.
+- PostgreSQL gerenciado.
+- Backend NestJS em container Docker usando `Dockerfile.prod`.
+- Web/PWA em container Docker usando `Dockerfile.web`.
 
-Essa separação evita depender do PC local e permite testar pelo celular com URL fixa.
+Essa separacao evita depender do PC local e permite testar pelo celular com URL fixa.
+
+## Render Blueprint
+
+O arquivo `render.yaml` na raiz do repositorio cria:
+
+- `econoapp-postgres`: banco PostgreSQL.
+- `econoapp-backend`: API usando `Dockerfile.prod`.
+- `econoapp-web`: PWA usando `Dockerfile.web`.
+
+No painel do Render, crie um novo Blueprint apontando para o repo:
+
+```text
+https://github.com/GUKH7/Econoapp
+```
+
+O Render procura `render.yaml` na raiz do repositorio por padrao.
 
 ## Backend
 
 Use o `Dockerfile.prod`.
 
-Comandos executados pelo container:
+Comando executado pelo container:
 
 ```sh
 npx prisma migrate deploy && npm start
@@ -26,11 +42,11 @@ Healthcheck:
 /health
 ```
 
-Variáveis obrigatórias:
+Variaveis principais:
 
 ```env
 DATABASE_URL=postgresql://USER:PASSWORD@HOST:PORT/DATABASE?schema=public
-JWT_SECRET=troque_por_uma_chave_com_mais_de_32_caracteres
+JWT_SECRET=gerado-pelo-render
 JWT_EXPIRES_IN=15m
 JWT_REFRESH_EXPIRES_IN=7d
 GEMINI_API_KEY=dev-placeholder
@@ -39,7 +55,7 @@ PORT=3001
 NODE_ENV=production
 ```
 
-Observação: use valores reais para `GEMINI_API_KEY` e `TELEGRAM_BOT_TOKEN` quando essas integrações forem ativadas em produção.
+`DATABASE_URL` vem automaticamente do banco no Blueprint. `GEMINI_API_KEY` e `TELEGRAM_BOT_TOKEN` ficam marcadas como `sync: false`, entao o Render pede os valores no painel. Enquanto essas integracoes nao forem usadas, pode preencher com `dev-placeholder`.
 
 ## Web/PWA
 
@@ -51,34 +67,27 @@ Healthcheck:
 /health
 ```
 
-Variáveis:
+Variaveis:
 
 ```env
 WEB_PORT=5173
-WEB_API_URL=https://URL_PUBLICA_DO_BACKEND/api/v1
+WEB_API_URL=https://econoapp-backend.onrender.com/api/v1
+API_TARGET=https://econoapp-backend.onrender.com
 ```
 
-Se `WEB_API_URL` não for definida, o web app usa `/api/v1` no mesmo domínio e o `web/server.js` faz proxy para `API_TARGET`.
+Se o Render gerar outro dominio para o backend, ajuste `WEB_API_URL` e `API_TARGET` no servico `econoapp-web`.
 
-Proxy opcional:
+## Ordem de publicacao
 
-```env
-API_TARGET=https://URL_PUBLICA_DO_BACKEND
-```
-
-## Ordem de publicação
-
-1. Criar banco PostgreSQL online.
-2. Criar serviço backend usando `Dockerfile.prod`.
-3. Configurar `DATABASE_URL` e demais variáveis no backend.
-4. Confirmar que `https://URL_BACKEND/health` retorna `{"status":"ok"}`.
-5. Criar serviço web usando `Dockerfile.web`.
-6. Configurar `WEB_API_URL=https://URL_BACKEND/api/v1`.
-7. Abrir URL pública do web app e testar cadastro/login.
+1. Criar Blueprint no Render usando o repo `GUKH7/Econoapp`.
+2. Preencher os segredos solicitados.
+3. Aguardar o deploy do backend e confirmar `/health`.
+4. Ajustar `WEB_API_URL` se o dominio do backend for diferente.
+5. Abrir a URL publica do web app e testar cadastro/login.
 
 ## Alternativa com Vercel
 
-O web app pode ser servido como site estático na Vercel, mas ainda precisa de backend e banco fora da Vercel.
+O web app pode ser servido como site estatico na Vercel, mas ainda precisa de backend e banco fora da Vercel.
 
 Nesse caso, configure `web/config.js` antes do deploy:
 
@@ -88,4 +97,4 @@ window.ECONOAPP_CONFIG = {
 };
 ```
 
-Para evitar editar arquivo manualmente a cada ambiente, prefira o `Dockerfile.web` em Render/Railway, pois ele injeta `WEB_API_URL` por variável de ambiente.
+Para evitar editar arquivo manualmente a cada ambiente, o deploy Docker do `econoapp-web` permite injetar `WEB_API_URL` por variavel de ambiente.
