@@ -2,6 +2,7 @@ services:
   - type: web
     name: econoapp-backend
     runtime: docker
+    plan: free
     dockerfilePath: ./Dockerfile.prod
     dockerContext: .
     healthCheckPath: /health
@@ -28,6 +29,7 @@ services:
   - type: web
     name: econoapp-web
     runtime: docker
+    plan: free
     dockerfilePath: ./Dockerfile.web
     dockerContext: .
     healthCheckPath: /health
@@ -41,5 +43,6 @@ services:
 
 databases:
   - name: econoapp-postgres
+    plan: free
     databaseName: econoapp
     user: econoapp
