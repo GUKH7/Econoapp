@@ -27,6 +27,19 @@ import {
 
 const MAIN_TABS = ['dashboard', 'transactions', 'reports', 'budget', 'more'];
 
+function screenTitle() {
+  const titles = {
+    dashboard: 'Resumo',
+    transactions: 'Transacoes',
+    reports: 'Relatorios',
+    budget: 'Limites',
+    more: state.manageSection === 'accounts' ? 'Contas e carteiras' : 'Mais',
+    launch: 'Lancamentos',
+  };
+  if (state.scope === 'BUSINESS' && state.tab === 'dashboard') return 'Negocio';
+  return titles[state.tab] || 'Resumo';
+}
+
 function setError(message) {
   const target = document.querySelector('[data-error]');
   if (target) target.textContent = message || '';
@@ -77,9 +90,17 @@ async function bootstrap() {
 function renderAuth(initialError = '') {
   app.innerHTML = `
     <section class="auth-shell">
-      <div>
-        <h1 class="wordmark">Econo<span>App</span></h1>
-        <h2 class="auth-title">Financas simples, controle inteligente.</h2>
+      <div class="welcome-panel">
+        <div class="brand-row centered">
+          <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
+          <h1 class="wordmark">Econo<span>App</span></h1>
+        </div>
+        <h2 class="auth-title">Suas financas pessoais e do seu negocio em um so lugar</h2>
+        <div class="welcome-illustration" aria-hidden="true">
+          <span class="phone-shape"></span>
+          <span class="wallet-shape"></span>
+          <span class="bot-shape"><i></i></span>
+        </div>
         <p class="auth-subtitle">Separe pessoal e negocio, acompanhe entradas, gastos, canais e categorias em um painel claro.</p>
       </div>
 
@@ -172,26 +193,25 @@ function renderApp() {
   const totals = scopedTotals();
   app.innerHTML = `
     <section class="shell" data-swipe-shell>
-      <header class="topbar">
-        <div class="app-heading">
-          <div class="brand-row compact">
-            <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
-            <h1 class="wordmark">Econo<span>App</span></h1>
-          </div>
-          <p>${state.scope === 'BUSINESS' ? 'Meu negocio' : 'Visao geral'}</p>
-        </div>
-        <div class="scope-switch" data-scope>
-          <button class="${state.scope === 'PERSONAL' ? 'active' : ''}" type="button" data-value="PERSONAL">Pessoal</button>
-          <button class="${state.scope === 'BUSINESS' ? 'active' : ''}" type="button" data-value="BUSINESS">Negocio</button>
-        </div>
+      <header class="appbar">
+        <h1>${screenTitle()}</h1>
+        <button class="icon-button compact" type="button" aria-label="Notificacoes">!</button>
       </header>
 
       <main class="page-track" data-swipe-track>
-        <section class="grid dashboard-grid">
-          ${balanceCard(`Saldo ${scopeLabel()}`, totals.balance)}
-          ${metricCard('Receitas', totals.income, 'income')}
-          ${metricCard('Gastos', totals.expense, 'expense')}
-        </section>
+        ${
+          state.tab === 'dashboard'
+            ? `<div class="scope-switch" data-scope>
+                <button class="${state.scope === 'PERSONAL' ? 'active' : ''}" type="button" data-value="PERSONAL">Pessoal</button>
+                <button class="${state.scope === 'BUSINESS' ? 'active' : ''}" type="button" data-value="BUSINESS">Negocio</button>
+              </div>
+              <section class="grid dashboard-grid">
+                ${balanceCard(`Saldo total`, totals.balance)}
+                ${metricCard('Receitas', totals.income, 'income')}
+                ${metricCard('Gastos', totals.expense, 'expense')}
+              </section>`
+            : ''
+        }
 
         <section class="grid" id="view">${viewHtml()}</section>
       </main>
@@ -214,7 +234,7 @@ function renderApp() {
 }
 
 function bindShellEvents() {
-  document.querySelector('[data-scope]').addEventListener('click', (event) => {
+  document.querySelector('[data-scope]')?.addEventListener('click', (event) => {
     const button = event.target.closest('button[data-value]');
     if (!button) return;
     if (button.dataset.value === state.scope) return;

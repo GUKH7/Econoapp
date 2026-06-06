@@ -42,7 +42,7 @@ export function metricCard(label, value, className = '') {
 export function balanceCard(label, value) {
   return `
     <article class="balance-card">
-      <div class="metric-label">${label}<span class="balance-eye">●</span></div>
+      <div class="metric-label">${label}<span class="balance-eye">ver</span></div>
       <div class="metric-value">${money.format(value)}</div>
       <div class="sparkline" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span></div>
       <div class="month-title"><span>${currentMonth}</span><span>${scopedTransactions().length} lancamentos</span></div>
@@ -129,7 +129,13 @@ function dashboardView() {
 function transactionsView() {
   const rows = scopedTransactions().map(transactionRow).join('');
   return `
-    <h2 class="section-title">Fluxo de caixa</h2>
+    <label class="search-field"><input type="search" placeholder="Buscar transacoes" /></label>
+    <div class="filter-chips">
+      <button class="active" type="button">Todos</button>
+      <button type="button">Receitas</button>
+      <button type="button">Gastos</button>
+      <button type="button">Transferencias</button>
+    </div>
     <div class="period-switch">
       <button type="button">Abril</button>
       <button class="active" type="button">${currentMonth}</button>
@@ -270,6 +276,10 @@ function manageView() {
   const accountsPanel = `
     <article class="card manage-panel">
         <div class="panel-title"><h2>Bancos e carteiras</h2></div>
+        <div class="total-strip">
+          <span>Saldo total</span>
+          <strong>${money.format(scopedWallets.reduce((sum, wallet) => sum + Number(wallet.balance || 0), 0))}</strong>
+        </div>
         <form class="form" data-wallet-form>
           <label class="field">Nome<input name="name" required placeholder="Ex: Nubank, Inter, Dinheiro" /></label>
           <label class="field">Tipo
@@ -290,6 +300,11 @@ function manageView() {
   const cardsPanel = `
     <article class="card manage-panel">
         <div class="panel-title"><h2>Cartoes de credito</h2></div>
+        <div class="credit-preview">
+          <span>EconoApp</span>
+          <strong>**** 1234</strong>
+          <small>Credito</small>
+        </div>
         <form class="form" data-card-form>
           <label class="field">Nome<input name="name" required placeholder="Ex: Nubank credito, Inter Black" /></label>
           <label class="field">Limite<input name="limit" inputmode="decimal" placeholder="0,00" /></label>
@@ -356,8 +371,12 @@ function manageView() {
 function reportsView() {
   const incomeByCategory = totalsByCategory('INCOME');
   const expenseByCategory = totalsByCategory('EXPENSE');
+  const reportTotal = expenseByCategory.reduce((sum, item) => sum + item.total, 0);
   return `
-    <h2 class="section-title">Relatorios</h2>
+    <div class="report-tabs">
+      <button class="active" type="button">Gastos</button>
+      <button type="button">Receitas</button>
+    </div>
     <div class="period-switch">
       <button type="button">Abril</button>
       <button class="active" type="button">${currentMonth}</button>
@@ -365,7 +384,10 @@ function reportsView() {
     </div>
     <div class="split">
       <article class="card">
-        <div class="panel-title"><h2>Despesas</h2></div>
+        <div class="donut-wrap">
+          <div class="donut-chart"></div>
+          <div class="donut-center"><span>Total</span><strong>${money.format(reportTotal)}</strong></div>
+        </div>
         ${categoryRows(expenseByCategory) || '<p class="empty">Nao ha dados disponiveis no periodo.</p>'}
       </article>
       <article class="card">
@@ -382,7 +404,6 @@ function budgetView() {
   const totals = scopedTotals();
   const used = currentBudget > 0 ? Math.min(100, (totals.expense / currentBudget) * 100) : 0;
   return `
-    <h2 class="section-title">Limites de gastos</h2>
     <div class="period-switch">
       <button type="button">Abril</button>
       <button class="active" type="button">${currentMonth}</button>
