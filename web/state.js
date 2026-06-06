@@ -1,0 +1,66 @@
+const configuredApiUrl = window.ECONOAPP_CONFIG?.apiUrl;
+const defaultApiUrl = configuredApiUrl || `${location.origin}/api/v1`;
+const storedApiUrl = localStorage.getItem('econoapp.apiUrl');
+
+export const state = {
+  apiUrl: storedApiUrl && !storedApiUrl.includes(':3001') ? storedApiUrl : defaultApiUrl,
+  accessToken: localStorage.getItem('econoapp.accessToken') || '',
+  refreshToken: localStorage.getItem('econoapp.refreshToken') || '',
+  user: null,
+  dashboard: null,
+  transactions: [],
+  categories: [],
+  channels: [],
+  tab: 'dashboard',
+  scope: localStorage.getItem('econoapp.scope') || 'PERSONAL',
+  fabOpen: false,
+  sheetOpen: false,
+  quickType: 'EXPENSE',
+  scopes: JSON.parse(localStorage.getItem('econoapp.transactionScopes') || '{}'),
+  paymentMeta: JSON.parse(localStorage.getItem('econoapp.paymentMeta') || '{}'),
+  categoryKinds: JSON.parse(localStorage.getItem('econoapp.categoryKinds') || '{}'),
+  wallets: [],
+  cards: [],
+  budgets: JSON.parse(localStorage.getItem('econoapp.budgets') || '{}'),
+  categoryColor: '#007338',
+};
+
+export const app = document.querySelector('#app');
+export const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+export const dateFmt = new Intl.DateTimeFormat('pt-BR', {
+  day: '2-digit',
+  month: '2-digit',
+  year: '2-digit',
+});
+export const colors = ['#28B463', '#CBA64B', '#EF5350', '#7EA2FF', '#8F5CF7', '#E85D9E'];
+
+export function saveSession(tokens) {
+  state.accessToken = tokens.accessToken;
+  state.refreshToken = tokens.refreshToken;
+  localStorage.setItem('econoapp.accessToken', state.accessToken);
+  localStorage.setItem('econoapp.refreshToken', state.refreshToken);
+}
+
+export function saveScopes() {
+  localStorage.setItem('econoapp.transactionScopes', JSON.stringify(state.scopes));
+  localStorage.setItem('econoapp.scope', state.scope);
+}
+
+export function saveBudgets() {
+  localStorage.setItem('econoapp.budgets', JSON.stringify(state.budgets));
+}
+
+export function savePaymentData() {
+  localStorage.setItem('econoapp.paymentMeta', JSON.stringify(state.paymentMeta));
+}
+
+export function saveCategoryKinds() {
+  localStorage.setItem('econoapp.categoryKinds', JSON.stringify(state.categoryKinds));
+}
+
+export function clearSession() {
+  localStorage.removeItem('econoapp.accessToken');
+  localStorage.removeItem('econoapp.refreshToken');
+  state.accessToken = '';
+  state.refreshToken = '';
+}
