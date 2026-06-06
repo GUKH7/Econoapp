@@ -22,6 +22,7 @@ import {
   fabMenu,
   metricCard,
   tabButton,
+  transactionListHtml,
   transactionSheet,
   viewHtml,
 } from './views.js';
@@ -415,6 +416,26 @@ function bindViewEvents() {
       input.focus();
     });
   });
+
+  document.querySelector('[data-transaction-search]')?.addEventListener('input', (event) => {
+    state.transactionSearch = event.currentTarget.value;
+    renderTransactionList();
+  });
+
+  document.querySelectorAll('[data-transaction-filter]').forEach((button) => {
+    button.addEventListener('click', () => {
+      state.transactionFilter = button.dataset.transactionFilter;
+      document
+        .querySelectorAll('[data-transaction-filter]')
+        .forEach((item) => item.classList.toggle('active', item === button));
+      renderTransactionList();
+    });
+  });
+}
+
+function renderTransactionList() {
+  const list = document.querySelector('[data-transaction-list]');
+  if (list) list.innerHTML = transactionListHtml();
 }
 
 function bindSwipeNavigation() {

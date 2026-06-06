@@ -239,24 +239,54 @@ function onboardingCard() {
 }
 
 function transactionsView() {
-  const rows = scopedTransactions().map(transactionRow).join('');
   return `
-    <label class="search-field"><input type="search" placeholder="Buscar transacoes" /></label>
+    <label class="search-field"><input type="search" placeholder="Buscar transacoes" value="${escapeHtml(state.transactionSearch)}" data-transaction-search /></label>
     <div class="filter-chips">
-      <button class="active" type="button">Todos</button>
-      <button type="button">Receitas</button>
-      <button type="button">Gastos</button>
-      <button type="button">Transferencias</button>
+      ${transactionFilterButton('ALL', 'Todos')}
+      ${transactionFilterButton('INCOME', 'Receitas')}
+      ${transactionFilterButton('EXPENSE', 'Gastos')}
+      ${transactionFilterButton('TRANSFER', 'Transferencias')}
     </div>
     <div class="period-switch">
       <button type="button">Abril</button>
       <button class="active" type="button">${currentMonth}</button>
       <button type="button">Junho</button>
     </div>
-    <article class="card">
-      ${rows || emptyState('Nenhum lancamento no periodo', 'Toque no + para adicionar um lancamento.', '+')}
+    <article class="card" data-transaction-list>
+      ${transactionListHtml()}
     </article>
   `;
+}
+
+function transactionFilterButton(filter, label) {
+  return `<button class="${state.transactionFilter === filter ? 'active' : ''}" type="button" data-transaction-filter="${filter}">${label}</button>`;
+}
+
+function filteredTransactions() {
+  const query = state.transactionSearch.trim().toLowerCase();
+  return scopedTransactions().filter((transaction) => {
+    if (state.transactionFilter !== 'ALL' && transaction.type !== state.transactionFilter) return false;
+    if (!query) return true;
+
+    const category = state.categories.find((item) => item.id === transaction.categoryId);
+    const payment = paymentMetaForTransaction(transaction);
+    const haystack = [
+      transaction.description,
+      category?.name,
+      transaction.source,
+      payment?.label,
+      transactionScope(transaction) === 'BUSINESS' ? 'negocio' : 'pessoal',
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase();
+    return haystack.includes(query);
+  });
+}
+
+export function transactionListHtml() {
+  const rows = filteredTransactions().map(transactionRow).join('');
+  return rows || emptyState('Nenhum lancamento encontrado', 'Ajuste a busca ou toque no + para adicionar um lancamento.', '+');
 }
 
 function launchView() {

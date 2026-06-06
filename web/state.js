@@ -25,6 +25,8 @@ export const state = {
   budgets: JSON.parse(localStorage.getItem('econoapp.budgets') || '{}'),
   categoryColor: '#22C55E',
   onboardingDismissed: localStorage.getItem('econoapp.onboardingDismissed') === 'true',
+  transactionFilter: 'ALL',
+  transactionSearch: '',
 };
 
 export const app = document.querySelector('#app');
