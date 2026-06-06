@@ -122,9 +122,12 @@ function renderAuth(initialError = '') {
     const form = document.querySelector('[data-auth-form]');
     form.dataset.mode = button.dataset.mode;
     form.innerHTML = authFields(button.dataset.mode);
+    bindAuthPasswordToggle(form);
   });
 
-  document.querySelector('[data-auth-form]').addEventListener('submit', handleAuth);
+  const authForm = document.querySelector('[data-auth-form]');
+  authForm.addEventListener('submit', handleAuth);
+  bindAuthPasswordToggle(authForm);
 }
 
 function authFields(mode) {
@@ -133,7 +136,7 @@ function authFields(mode) {
       <label class="field">Nome<input name="name" autocomplete="name" required /></label>
       <label class="field">Telefone<input name="phone" inputmode="tel" required /></label>
       <label class="field">Email<input name="email" type="email" autocomplete="email" /></label>
-      <label class="field">Senha<input name="password" type="password" minlength="8" required /></label>
+      ${passwordField('Senha', 'new-password', 'password', 'Crie uma senha')}
       <details class="inline-create">
         <summary>Configuracao avancada</summary>
         <label class="field">API<input name="apiUrl" value="${escapeHtml(state.apiUrl)}" required /></label>
@@ -144,9 +147,34 @@ function authFields(mode) {
 
   return `
     <label class="field">Telefone ou email<input name="login" autocomplete="username" required /></label>
-    <label class="field">Senha<input name="password" type="password" autocomplete="current-password" required /></label>
+    ${passwordField('Senha', 'current-password', 'password', 'Digite sua senha')}
     <button class="button" type="submit">Entrar</button>
   `;
+}
+
+function passwordField(label, autocomplete, name, placeholder) {
+  const minLengthAttr = autocomplete === 'new-password' ? 'minlength="8"' : '';
+  return `
+    <label class="field">${label}
+      <span class="password-control">
+        <input name="${name}" type="password" autocomplete="${autocomplete}" placeholder="${placeholder}" ${minLengthAttr} required />
+        <button type="button" data-password-toggle aria-label="Mostrar senha">ver</button>
+      </span>
+    </label>
+  `;
+}
+
+function bindAuthPasswordToggle(form) {
+  form.querySelectorAll('[data-password-toggle]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const input = button.closest('.password-control')?.querySelector('input');
+      if (!input) return;
+      const isHidden = input.type === 'password';
+      input.type = isHidden ? 'text' : 'password';
+      button.textContent = isHidden ? 'ocultar' : 'ver';
+      button.setAttribute('aria-label', isHidden ? 'Ocultar senha' : 'Mostrar senha');
+    });
+  });
 }
 
 async function handleAuth(event) {
@@ -154,6 +182,12 @@ async function handleAuth(event) {
   setError('');
   const form = event.currentTarget;
   const data = Object.fromEntries(new FormData(form));
+  const submitButton = form.querySelector('button[type="submit"]');
+  const submitLabel = submitButton?.textContent || '';
+  if (submitButton) {
+    submitButton.disabled = true;
+    submitButton.textContent = form.dataset.mode === 'register' ? 'Criando...' : 'Entrando...';
+  }
   state.apiUrl = data.apiUrl || state.apiUrl;
   localStorage.setItem('econoapp.apiUrl', state.apiUrl);
 
@@ -179,6 +213,11 @@ async function handleAuth(event) {
     renderApp();
   } catch (error) {
     setError(error.message);
+  } finally {
+    if (submitButton) {
+      submitButton.disabled = false;
+      submitButton.textContent = submitLabel;
+    }
   }
 }
 
