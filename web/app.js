@@ -25,17 +25,34 @@ import {
   viewHtml,
 } from './views.js';
 
+const MAIN_TABS = ['dashboard', 'transactions', 'reports', 'budget', 'more'];
+
 function setError(message) {
   const target = document.querySelector('[data-error]');
   if (target) target.textContent = message || '';
   if (target) target.classList.toggle('hidden', !message);
 }
 
-function renderWithTransition(mutator) {
+function renderWithTransition(mutator, direction = 'forward') {
   transitionTo(() => {
     mutator();
     renderApp();
-  });
+  }, direction);
+}
+
+function transitionDirectionForTab(targetTab) {
+  const currentIndex = MAIN_TABS.indexOf(state.tab);
+  const targetIndex = MAIN_TABS.indexOf(targetTab);
+  if (currentIndex < 0 || targetIndex < 0) return 'forward';
+  return targetIndex >= currentIndex ? 'forward' : 'back';
+}
+
+function switchTab(targetTab) {
+  if (targetTab === state.tab) return;
+  renderWithTransition(() => {
+    state.tab = targetTab;
+    state.fabOpen = false;
+  }, transitionDirectionForTab(targetTab));
 }
 
 async function bootstrap() {
@@ -175,7 +192,7 @@ function renderApp() {
         ${metricCard('Gastos', totals.expense, 'expense')}
       </section>
 
-      <section class="grid" id="view">${viewHtml()}</section>
+      <section class="grid" id="view" data-swipe-area>${viewHtml()}</section>
 
       <nav class="tabs" data-tabs>
         ${tabButton('dashboard', 'Inicio')}
@@ -213,10 +230,7 @@ function bindShellEvents() {
   document.querySelector('[data-tabs]').addEventListener('click', (event) => {
     const button = event.target.closest('button[data-tab]');
     if (!button) return;
-    renderWithTransition(() => {
-      state.tab = button.dataset.tab;
-      state.fabOpen = false;
-    });
+    switchTab(button.dataset.tab);
   });
 
   document.querySelector('[data-fab]')?.addEventListener('click', () => {
@@ -248,6 +262,8 @@ function bindShellEvents() {
       });
     });
   });
+
+  bindSwipeNavigation();
 }
 
 function bindViewEvents() {
@@ -261,6 +277,10 @@ function bindViewEvents() {
       const target = button.dataset.tabJump;
       if (target === 'more-manage') {
         document.querySelector('[data-category-form]')?.scrollIntoView({ behavior: 'smooth' });
+        return;
+      }
+      if (MAIN_TABS.includes(target)) {
+        switchTab(target);
         return;
       }
       renderWithTransition(() => {
@@ -292,6 +312,78 @@ function bindViewEvents() {
         state.quickType = select.value;
       });
     });
+  });
+}
+
+function bindSwipeNavigation() {
+  const area = document.querySelector('[data-swipe-area]');
+  if (!area || !MAIN_TABS.includes(state.tab)) return;
+
+  let startX = 0;
+  let startY = 0;
+  let pointerId = null;
+  let isTracking = false;
+
+  const interactiveSelector = [
+    'button',
+    'input',
+    'select',
+    'textarea',
+    'a',
+    'summary',
+    '.bottom-sheet',
+    '.tabs',
+    '.fab',
+    '[data-fab-close]',
+    '[data-sheet-close]',
+  ].join(',');
+
+  area.addEventListener('pointerdown', (event) => {
+    if (state.sheetOpen || state.fabOpen) return;
+    if (event.target.closest(interactiveSelector)) return;
+    startX = event.clientX;
+    startY = event.clientY;
+    pointerId = event.pointerId;
+    isTracking = true;
+    area.setPointerCapture?.(pointerId);
+  });
+
+  area.addEventListener('pointermove', (event) => {
+    if (!isTracking || event.pointerId !== pointerId) return;
+    const deltaX = event.clientX - startX;
+    const deltaY = event.clientY - startY;
+    if (Math.abs(deltaY) > Math.abs(deltaX) * 1.25) {
+      isTracking = false;
+      area.releasePointerCapture?.(pointerId);
+      return;
+    }
+    if (Math.abs(deltaX) > 12) {
+      area.style.setProperty('--swipe-offset', `${Math.max(-34, Math.min(34, deltaX / 4))}px`);
+      area.classList.add('is-swiping');
+    }
+  });
+
+  area.addEventListener('pointerup', (event) => {
+    if (!isTracking || event.pointerId !== pointerId) return;
+    const deltaX = event.clientX - startX;
+    const deltaY = event.clientY - startY;
+    isTracking = false;
+    area.releasePointerCapture?.(pointerId);
+    area.classList.remove('is-swiping');
+    area.style.removeProperty('--swipe-offset');
+
+    if (Math.abs(deltaX) < 72 || Math.abs(deltaX) < Math.abs(deltaY) * 1.4) return;
+    const currentIndex = MAIN_TABS.indexOf(state.tab);
+    const targetIndex = deltaX < 0 ? currentIndex + 1 : currentIndex - 1;
+    const targetTab = MAIN_TABS[targetIndex];
+    if (!targetTab) return;
+    switchTab(targetTab);
+  });
+
+  area.addEventListener('pointercancel', () => {
+    isTracking = false;
+    area.classList.remove('is-swiping');
+    area.style.removeProperty('--swipe-offset');
   });
 }
 

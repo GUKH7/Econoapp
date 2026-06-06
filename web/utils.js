@@ -13,7 +13,10 @@ export function parseAmount(value) {
   return Number.isFinite(amount) ? amount : 0;
 }
 
-export function transitionTo(apply) {
+export function transitionTo(apply, direction = 'forward') {
+  const root = document.documentElement;
+  root.dataset.routeDirection = direction;
+
   if (document.startViewTransition) {
     document.startViewTransition(() => {
       apply();
@@ -21,7 +24,6 @@ export function transitionTo(apply) {
     return;
   }
 
-  const root = document.documentElement;
   root.classList.add('route-fallback-out');
   window.setTimeout(() => {
     apply();
