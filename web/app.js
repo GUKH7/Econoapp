@@ -308,10 +308,10 @@ function bindViewEvents() {
     });
   });
 
-  document.querySelectorAll('[data-transaction-type]').forEach((select) => {
-    select.addEventListener('change', () => {
+  document.querySelectorAll('[data-transaction-type]').forEach((control) => {
+    control.addEventListener('change', () => {
       renderWithTransition(() => {
-        state.quickType = select.value;
+        state.quickType = control.value;
       });
     });
   });

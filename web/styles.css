@@ -792,6 +792,93 @@ select:focus {
   padding: 0;
 }
 
+.transaction-form {
+  gap: 12px;
+}
+
+.entry-hero {
+  background: linear-gradient(145deg, white, var(--surface-2));
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  display: grid;
+  gap: 14px;
+  padding: 14px;
+}
+
+.entry-hero.income-mode {
+  box-shadow: inset 4px 0 0 var(--green);
+}
+
+.entry-hero.expense-mode {
+  box-shadow: inset 4px 0 0 var(--red);
+}
+
+.type-toggle {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  display: grid;
+  gap: 4px;
+  grid-template-columns: 1fr 1fr;
+  padding: 4px;
+}
+
+.type-toggle label {
+  align-items: center;
+  border-radius: 999px;
+  color: var(--muted);
+  cursor: pointer;
+  display: flex;
+  font-weight: 900;
+  justify-content: center;
+  min-height: 42px;
+}
+
+.type-toggle label.active {
+  background: var(--text);
+  color: white;
+  box-shadow: 0 10px 24px rgba(31, 41, 55, 0.14);
+}
+
+.type-toggle input {
+  appearance: none;
+  height: 0;
+  min-height: 0;
+  opacity: 0;
+  padding: 0;
+  position: absolute;
+  width: 0;
+}
+
+.amount-field {
+  display: grid;
+  gap: 4px;
+}
+
+.amount-field span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.select-row select {
+  background-color: white;
+  font-weight: 800;
+}
+
+.sheet-actions {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0), var(--surface) 28%);
+  bottom: 0;
+  margin: 0 -18px calc(-1 * max(22px, env(safe-area-inset-bottom)));
+  padding: 12px 18px max(22px, env(safe-area-inset-bottom));
+  position: sticky;
+  z-index: 2;
+}
+
+.sheet-actions .button {
+  width: 100%;
+}
+
 .button {
   align-items: center;
   background: var(--green);

@@ -184,51 +184,64 @@ function transactionFormHtml(type, context) {
   ].join('');
 
   return `
-    <form class="form" data-transaction-form data-context="${context}">
-      <div class="form-section">
-      <label class="field">Tipo
-        <select name="type" data-transaction-type>
-          <option value="EXPENSE" ${type === 'EXPENSE' ? 'selected' : ''}>Gasto</option>
-          <option value="INCOME" ${type === 'INCOME' ? 'selected' : ''}>Receita</option>
-        </select>
-      </label>
-      <label class="field">Valor<input class="amount-input" name="amount" inputmode="decimal" required placeholder="R$ 0,00" /></label>
-      </div>
-      <div class="form-section">
-      <label class="field">Descricao<input name="description" required placeholder="Ex: Mercado, venda Shopee, frete" /></label>
-      <label class="field">${categoryLabel}
-        <select name="categoryId" ${availableCategories.length ? 'required' : ''}>
-          ${availableCategories.length ? availableCategories.map((category) => `<option value="${category.id}">${escapeHtml(category.name)}</option>`).join('') : '<option value="">Crie uma nova abaixo</option>'}
-        </select>
-      </label>
-      <details class="inline-create" ${availableCategories.length ? '' : 'open'}>
-        <summary>${createCategoryLabel}</summary>
-        <label class="field">Nome<input name="newCategoryName" placeholder="${isExpense ? 'Ex: Alimentacao, Frete, Taxas' : 'Ex: Salario, Vendas, Rendimentos'}" /></label>
-        <div class="field">
-          <label>Cor</label>
-          <div class="swatches">${colors.map((color) => `<button class="swatch ${state.categoryColor === color ? 'active' : ''}" type="button" style="background:${color}" data-color="${color}"></button>`).join('')}</div>
+    <form class="form transaction-form" data-transaction-form data-context="${context}">
+      <div class="entry-hero ${isExpense ? 'expense-mode' : 'income-mode'}">
+        <div class="type-toggle" aria-label="Tipo do lancamento">
+          <label class="${isExpense ? 'active' : ''}">
+            <input type="radio" name="type" value="EXPENSE" data-transaction-type ${isExpense ? 'checked' : ''} />
+            <span>Gasto</span>
+          </label>
+          <label class="${isExpense ? '' : 'active'}">
+            <input type="radio" name="type" value="INCOME" data-transaction-type ${isExpense ? '' : 'checked'} />
+            <span>Receita</span>
+          </label>
         </div>
-      </details>
+        <label class="amount-field">
+          <span>Valor</span>
+          <input class="amount-input" name="amount" inputmode="decimal" required placeholder="R$ 0,00" />
+        </label>
       </div>
       <div class="form-section">
-      <label class="field ${isExpense ? '' : 'hidden'}">Forma de pagamento
-        <select name="paymentMethod" ${isExpense ? 'required' : ''}>
-          ${expensePaymentOptions || '<option value="">Cadastre uma carteira, banco ou cartao</option>'}
-        </select>
-      </label>
-      <label class="field ${isExpense ? 'hidden' : ''}">Receber em
-        <select name="receiveAccount" ${isExpense ? '' : 'required'}>
-          ${walletOptions || '<option value="">Cadastre um banco ou carteira</option>'}
-        </select>
-      </label>
-      <label class="field ${state.scope === 'BUSINESS' ? '' : 'hidden'}">Canal ou meio
-        <select name="channelId">
-          <option value="">Sem canal</option>
-          ${state.channels.map((channel) => `<option value="${channel.id}">${escapeHtml(channel.name)}</option>`).join('')}
-        </select>
-      </label>
+        <label class="field">Descricao<input name="description" required placeholder="Ex: Mercado, venda Shopee, frete" /></label>
+        <label class="field select-row">
+          <span>${categoryLabel}</span>
+          <select name="categoryId" ${availableCategories.length ? 'required' : ''}>
+            ${availableCategories.length ? availableCategories.map((category) => `<option value="${category.id}">${escapeHtml(category.name)}</option>`).join('') : '<option value="">Crie uma nova abaixo</option>'}
+          </select>
+        </label>
+        <details class="inline-create" ${availableCategories.length ? '' : 'open'}>
+          <summary>${createCategoryLabel}</summary>
+          <label class="field">Nome<input name="newCategoryName" placeholder="${isExpense ? 'Ex: Alimentacao, Frete, Taxas' : 'Ex: Salario, Vendas, Rendimentos'}" /></label>
+          <div class="field">
+            <label>Cor</label>
+            <div class="swatches">${colors.map((color) => `<button class="swatch ${state.categoryColor === color ? 'active' : ''}" type="button" style="background:${color}" data-color="${color}"></button>`).join('')}</div>
+          </div>
+        </details>
       </div>
-      <button class="button" type="submit">Salvar lancamento</button>
+      <div class="form-section">
+        <label class="field select-row ${isExpense ? '' : 'hidden'}">
+          <span>Forma de pagamento</span>
+          <select name="paymentMethod" ${isExpense ? 'required' : ''}>
+            ${expensePaymentOptions || '<option value="">Cadastre uma carteira, banco ou cartao</option>'}
+          </select>
+        </label>
+        <label class="field select-row ${isExpense ? 'hidden' : ''}">
+          <span>Receber em</span>
+          <select name="receiveAccount" ${isExpense ? '' : 'required'}>
+            ${walletOptions || '<option value="">Cadastre um banco ou carteira</option>'}
+          </select>
+        </label>
+        <label class="field select-row ${state.scope === 'BUSINESS' ? '' : 'hidden'}">
+          <span>Canal ou meio</span>
+          <select name="channelId">
+            <option value="">Sem canal</option>
+            ${state.channels.map((channel) => `<option value="${channel.id}">${escapeHtml(channel.name)}</option>`).join('')}
+          </select>
+        </label>
+      </div>
+      <div class="sheet-actions">
+        <button class="button" type="submit">Salvar lancamento</button>
+      </div>
     </form>
   `;
 }
