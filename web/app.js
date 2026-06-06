@@ -4,6 +4,7 @@ import {
   clearSession,
   saveBudgets,
   saveCategoryKinds,
+  saveOnboardingDismissed,
   savePaymentData,
   saveScopes,
   saveSession,
@@ -317,6 +318,38 @@ function bindViewEvents() {
     });
   });
 
+  document.querySelector('[data-onboarding-dismiss]')?.addEventListener('click', () => {
+    renderWithTransition(() => {
+      state.onboardingDismissed = true;
+      saveOnboardingDismissed();
+    });
+  });
+
+  document.querySelectorAll('[data-onboarding-action]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const action = button.dataset.onboardingAction;
+      if (action === 'seed-categories') {
+        handleSeedCategories();
+        return;
+      }
+      if (action === 'accounts') {
+        renderWithTransition(() => {
+          state.tab = 'more';
+          state.manageSection = 'accounts';
+          state.fabOpen = false;
+        });
+        return;
+      }
+      if (action === 'transaction') {
+        renderWithTransition(() => {
+          state.quickType = 'EXPENSE';
+          state.fabOpen = false;
+          state.sheetOpen = true;
+        });
+      }
+    });
+  });
+
   document.querySelectorAll('[data-transaction-form]').forEach((form) =>
     form.addEventListener('submit', handleTransactionSubmit),
   );
@@ -491,6 +524,33 @@ async function handleCategorySubmit(event) {
   try {
     const category = await api().createCategory({ name: data.name, color: state.categoryColor });
     state.categoryKinds[category.data.id] = data.kind || 'EXPENSE';
+    saveCategoryKinds();
+    await loadData();
+    renderApp();
+  } catch (error) {
+    alert(error.message);
+  }
+}
+
+async function handleSeedCategories() {
+  const presets = [
+    { name: 'Alimentacao', color: '#22C55E', kind: 'EXPENSE' },
+    { name: 'Moradia', color: '#3B82F6', kind: 'EXPENSE' },
+    { name: 'Transporte', color: '#F59E0B', kind: 'EXPENSE' },
+    { name: 'Saude', color: '#EF4444', kind: 'EXPENSE' },
+    { name: 'Lazer', color: '#8B5CF6', kind: 'EXPENSE' },
+    { name: 'Salario', color: '#166534', kind: 'INCOME' },
+    { name: 'Vendas', color: '#22C55E', kind: 'INCOME' },
+  ];
+  const existing = new Set(state.categories.map((category) => category.name.trim().toLowerCase()));
+  const missing = presets.filter((category) => !existing.has(category.name.toLowerCase()));
+  if (!missing.length) return;
+
+  try {
+    for (const item of missing) {
+      const category = await api().createCategory({ name: item.name, color: item.color });
+      state.categoryKinds[category.data.id] = item.kind;
+    }
     saveCategoryKinds();
     await loadData();
     renderApp();

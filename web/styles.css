@@ -1455,6 +1455,130 @@ select:focus {
   width: 42px;
 }
 
+.onboarding-card {
+  animation: cardIn 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  background:
+    radial-gradient(circle at 88% 12%, rgba(34, 197, 94, 0.16), transparent 120px),
+    linear-gradient(145deg, #ffffff, #f1f8f4);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  box-shadow: var(--shadow);
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+}
+
+.onboarding-head {
+  align-items: flex-start;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.onboarding-head span {
+  color: var(--green-dark);
+  display: block;
+  font-size: 12px;
+  font-weight: 950;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+}
+
+.onboarding-head h2 {
+  font-size: 21px;
+  line-height: 1.1;
+  margin: 0;
+}
+
+.onboarding-head p {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.35;
+  margin: 7px 0 0;
+}
+
+.onboarding-steps {
+  display: grid;
+  gap: 10px;
+}
+
+.onboarding-step {
+  align-items: center;
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  color: var(--text);
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 42px 1fr auto;
+  min-height: 68px;
+  padding: 12px;
+  text-align: left;
+  transition: border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+  width: 100%;
+}
+
+.onboarding-step:active {
+  transform: scale(0.985);
+}
+
+.onboarding-step:hover,
+.onboarding-step:focus-visible {
+  border-color: var(--green);
+  box-shadow: 0 12px 28px rgba(34, 197, 94, 0.12);
+}
+
+.onboarding-step.done {
+  background: var(--green-soft);
+  border-color: #bbf7d0;
+}
+
+.step-icon {
+  align-items: center;
+  background: var(--green-soft);
+  border-radius: 14px;
+  color: var(--green-dark);
+  display: flex;
+  height: 42px;
+  justify-content: center;
+  width: 42px;
+}
+
+.step-icon svg {
+  fill: currentColor;
+  height: 22px;
+  width: 22px;
+}
+
+.onboarding-step.done .step-icon {
+  background: var(--green);
+  color: white;
+  font-weight: 950;
+}
+
+.onboarding-step strong,
+.onboarding-step small {
+  display: block;
+}
+
+.onboarding-step strong {
+  font-size: 14px;
+}
+
+.onboarding-step small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.25;
+  margin-top: 3px;
+}
+
+.step-arrow {
+  color: var(--green);
+  font-size: 18px;
+  font-weight: 950;
+}
+
 .form-section {
   background: var(--surface-2);
   border: 1px solid var(--line);

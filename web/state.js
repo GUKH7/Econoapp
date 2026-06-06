@@ -24,6 +24,7 @@ export const state = {
   cards: [],
   budgets: JSON.parse(localStorage.getItem('econoapp.budgets') || '{}'),
   categoryColor: '#22C55E',
+  onboardingDismissed: localStorage.getItem('econoapp.onboardingDismissed') === 'true',
 };
 
 export const app = document.querySelector('#app');
@@ -57,6 +58,10 @@ export function savePaymentData() {
 
 export function saveCategoryKinds() {
   localStorage.setItem('econoapp.categoryKinds', JSON.stringify(state.categoryKinds));
+}
+
+export function saveOnboardingDismissed() {
+  localStorage.setItem('econoapp.onboardingDismissed', String(state.onboardingDismissed));
 }
 
 export function clearSession() {

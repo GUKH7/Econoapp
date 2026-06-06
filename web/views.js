@@ -104,8 +104,10 @@ function dashboardView() {
         `<span class="chip"><span class="dot" style="background:${category.color}"></span>${escapeHtml(category.name)}</span>`,
     )
     .join('');
+  const onboarding = onboardingCard();
 
   return `
+    ${onboarding}
     <article class="assistant-card">
       <div class="assistant-icon">${icon('chat')}</div>
       <div>
@@ -123,6 +125,66 @@ function dashboardView() {
         <div class="chip-list">${categories || '<p class="empty">Crie categorias para organizar os lancamentos.</p>'}</div>
       </article>
     </div>
+  `;
+}
+
+function onboardingCard() {
+  const hasAccount = state.wallets.some((wallet) => !wallet.scope || wallet.scope === state.scope);
+  const hasCategories = state.categories.some((category) => {
+    const kind = state.categoryKinds[category.id];
+    return state.scope === 'BUSINESS' ? kind === 'INCOME' || kind === 'EXPENSE' : kind !== 'INCOME' || kind === 'EXPENSE';
+  });
+  const hasTransaction = scopedTransactions().length > 0;
+  if (state.onboardingDismissed || (hasAccount && hasCategories && hasTransaction)) return '';
+
+  const steps = [
+    {
+      action: 'accounts',
+      done: hasAccount,
+      icon: icon('wallet'),
+      title: 'Conta ou carteira',
+      copy: 'Defina onde o dinheiro entra e sai.',
+    },
+    {
+      action: 'seed-categories',
+      done: hasCategories,
+      icon: icon('tag'),
+      title: 'Categorias iniciais',
+      copy: 'Crie uma base para receitas e gastos.',
+    },
+    {
+      action: 'transaction',
+      done: hasTransaction,
+      icon: icon('plus'),
+      title: 'Primeiro lancamento',
+      copy: 'Registre uma entrada ou despesa.',
+    },
+  ];
+
+  return `
+    <article class="onboarding-card">
+      <div class="onboarding-head">
+        <div>
+          <span>Primeiros passos</span>
+          <h2>Configure seu EconoApp</h2>
+          <p>Complete o basico para acompanhar seu dinheiro com dados organizados.</p>
+        </div>
+        <button class="icon-button compact" type="button" data-onboarding-dismiss aria-label="Ocultar primeiros passos">x</button>
+      </div>
+      <div class="onboarding-steps">
+        ${steps
+          .map(
+            (step) => `
+              <button class="onboarding-step ${step.done ? 'done' : ''}" type="button" data-onboarding-action="${step.action}">
+                <span class="step-icon">${step.done ? 'OK' : step.icon}</span>
+                <span><strong>${step.title}</strong><small>${step.copy}</small></span>
+                <span class="step-arrow">${step.done ? 'ok' : '>'}</span>
+              </button>
+            `,
+          )
+          .join('')}
+      </div>
+    </article>
   `;
 }
 
