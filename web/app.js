@@ -277,16 +277,22 @@ function bindViewEvents() {
   document.querySelectorAll('[data-tab-jump]').forEach((button) => {
     button.addEventListener('click', () => {
       const target = button.dataset.tabJump;
-      if (target === 'more-manage') {
-        document.querySelector('[data-category-form]')?.scrollIntoView({ behavior: 'smooth' });
-        return;
-      }
       if (MAIN_TABS.includes(target)) {
         switchTab(target);
         return;
       }
       renderWithTransition(() => {
         state.tab = target;
+      });
+    });
+  });
+
+  document.querySelectorAll('[data-manage-section]').forEach((button) => {
+    button.addEventListener('click', () => {
+      renderWithTransition(() => {
+        state.tab = 'more';
+        state.manageSection = button.dataset.manageSection;
+        state.fabOpen = false;
       });
     });
   });

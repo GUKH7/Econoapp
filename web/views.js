@@ -249,9 +249,26 @@ function transactionFormHtml(type, context) {
 function manageView() {
   const scopedWallets = state.wallets.filter((wallet) => !wallet.scope || wallet.scope === state.scope);
   const scopedCards = state.cards.filter((card) => !card.scope || card.scope === state.scope);
-  return `
-    <div class="split">
-      <article class="card">
+  const section = state.manageSection || 'accounts';
+  const sections = [
+    { id: 'accounts', label: 'Contas', meta: `${scopedWallets.length} cadastradas`, icon: icon('wallet') },
+    { id: 'cards', label: 'Cartoes', meta: `${scopedCards.length} cadastrados`, icon: icon('card') },
+    { id: 'categories', label: 'Categorias', meta: `${state.categories.length} itens`, icon: icon('tag') },
+    { id: 'channels', label: 'Canais', meta: `${state.channels.length} meios`, icon: icon('shop') },
+  ];
+  const nav = sections
+    .map(
+      (item) => `
+        <button class="manage-pill ${section === item.id ? 'active' : ''}" type="button" data-manage-section="${item.id}">
+          <span class="tab-icon">${item.icon}</span>
+          <span><strong>${item.label}</strong><small>${item.meta}</small></span>
+        </button>
+      `,
+    )
+    .join('');
+
+  const accountsPanel = `
+    <article class="card manage-panel">
         <div class="panel-title"><h2>Bancos e carteiras</h2></div>
         <form class="form" data-wallet-form>
           <label class="field">Nome<input name="name" required placeholder="Ex: Nubank, Inter, Dinheiro" /></label>
@@ -268,8 +285,10 @@ function manageView() {
           ${scopedWallets.map((wallet) => `<div class="row"><div><div class="row-title">${escapeHtml(wallet.name)}</div><div class="row-meta">${wallet.type === 'BANK' ? 'Banco' : 'Carteira'} ${scopeLabel()} - ${money.format(Number(wallet.balance || 0))}</div></div></div>`).join('') || '<p class="empty">Cadastre bancos ou carteiras para este escopo.</p>'}
         </div>
       </article>
+  `;
 
-      <article class="card">
+  const cardsPanel = `
+    <article class="card manage-panel">
         <div class="panel-title"><h2>Cartoes de credito</h2></div>
         <form class="form" data-card-form>
           <label class="field">Nome<input name="name" required placeholder="Ex: Nubank credito, Inter Black" /></label>
@@ -280,8 +299,10 @@ function manageView() {
           ${scopedCards.map((card) => `<div class="row"><div><div class="row-title">${escapeHtml(card.name)}</div><div class="row-meta">Cartao ${scopeLabel()} - limite ${money.format(Number(card.limit || 0))}</div></div></div>`).join('') || '<p class="empty">Cadastre cartoes para registrar gastos no credito.</p>'}
         </div>
       </article>
+  `;
 
-      <article class="card">
+  const categoriesPanel = `
+    <article class="card manage-panel">
         <div class="panel-title"><h2>Categorias</h2></div>
         <form class="form" data-category-form>
           <label class="field">Nome<input name="name" required placeholder="Ex: Alimentacao, Moradia, Taxas" /></label>
@@ -301,8 +322,10 @@ function manageView() {
           ${state.categories.map((category) => `<span class="chip"><span class="dot" style="background:${category.color}"></span>${escapeHtml(category.name)}${state.categoryKinds[category.id] === 'INCOME' ? ' - receita' : state.categoryKinds[category.id] === 'EXPENSE' ? ' - gasto' : ''}</span>`).join('')}
         </div>
       </article>
+  `;
 
-      <article class="card">
+  const channelsPanel = `
+    <article class="card manage-panel">
         <div class="panel-title"><h2>Canais de venda e meios</h2></div>
         <form class="form" data-channel-form>
           <label class="field">Nome<input name="name" required placeholder="Ex: Shopee, Mercado Livre, Pix Loja" /></label>
@@ -313,7 +336,20 @@ function manageView() {
           ${state.channels.map((channel) => `<div class="row"><div><div class="row-title">${escapeHtml(channel.name)}</div><div class="row-meta">Taxa ${Number(channel.feePercent).toFixed(2)}%</div></div></div>`).join('') || '<p class="empty">Cadastre canais para separar vendas do negocio.</p>'}
         </div>
       </article>
-    </div>
+  `;
+
+  const panels = {
+    accounts: accountsPanel,
+    cards: cardsPanel,
+    categories: categoriesPanel,
+    channels: channelsPanel,
+  };
+
+  return `
+    <section class="manage-shell">
+      <div class="manage-grid">${nav}</div>
+      ${panels[section] || accountsPanel}
+    </section>
   `;
 }
 
@@ -380,7 +416,8 @@ function moreView() {
         <div class="panel-title"><h2>Gerenciar</h2></div>
         <div class="menu-list">
           <button class="menu-item" type="button" data-tab-jump="launch"><span class="tab-icon">+/-</span><span>Lancamentos</span><span>></span></button>
-          <button class="menu-item" type="button" data-tab-jump="more-manage"><span class="tab-icon">${icon('tag')}</span><span>Categorias e canais</span><span>></span></button>
+          <button class="menu-item" type="button" data-manage-section="accounts"><span class="tab-icon">${icon('wallet')}</span><span>Contas e cartoes</span><span>></span></button>
+          <button class="menu-item" type="button" data-manage-section="categories"><span class="tab-icon">${icon('tag')}</span><span>Categorias e canais</span><span>></span></button>
           <button class="menu-item" type="button" data-tab-jump="budget"><span class="tab-icon">${icon('target')}</span><span>Limites</span><span>></span></button>
         </div>
       </article>
