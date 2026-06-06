@@ -111,6 +111,7 @@ function dashboardView() {
 
   return `
     ${onboarding}
+    ${dashboardInsights()}
     <article class="assistant-card">
       <div class="assistant-icon">${icon('chat')}</div>
       <div>
@@ -128,6 +129,52 @@ function dashboardView() {
         <div class="chip-list">${categories || '<p class="empty">Crie categorias para organizar os lancamentos.</p>'}</div>
       </article>
     </div>
+  `;
+}
+
+function dashboardInsights() {
+  const totals = scopedTotals();
+  const expenses = totalsByCategory('EXPENSE').sort((a, b) => b.total - a.total);
+  const topExpense = expenses[0];
+  const budget = Number(state.budgets[state.scope] || 0);
+  const budgetUsed = budget > 0 ? Math.min(100, Math.round((totals.expense / budget) * 100)) : 0;
+  const scopedWallets = state.wallets.filter((wallet) => !wallet.scope || wallet.scope === state.scope);
+  const walletBalance = scopedWallets.reduce((sum, wallet) => sum + Number(wallet.balance || 0), 0);
+  const insight =
+    totals.expense > totals.income && totals.income > 0
+      ? 'Gastos acima das receitas neste mes.'
+      : topExpense
+        ? `${topExpense.name} concentra seus maiores gastos.`
+        : 'Registre lancamentos para gerar insights.';
+
+  return `
+    <article class="insight-card">
+      <div class="panel-title">
+        <div>
+          <span class="eyebrow">Resumo do mes</span>
+          <h2>${scopeLabel()}</h2>
+        </div>
+        <button class="button secondary compact-action" type="button" data-tab-jump="reports">Relatorios</button>
+      </div>
+      <div class="insight-grid">
+        <div class="insight-metric">
+          <span>Resultado</span>
+          <strong class="${totals.balance < 0 ? 'expense' : 'income'}">${money.format(totals.balance)}</strong>
+        </div>
+        <div class="insight-metric">
+          <span>Contas</span>
+          <strong>${money.format(walletBalance)}</strong>
+        </div>
+      </div>
+      <div class="insight-progress">
+        <div><span>Limite usado</span><strong>${budget ? `${budgetUsed}%` : 'Nao definido'}</strong></div>
+        <div class="budget-progress"><span style="width:${budgetUsed}%"></span></div>
+      </div>
+      <div class="insight-note">
+        <span class="row-icon neutral-bg">${topExpense ? topExpense.name.slice(0, 1).toUpperCase() : icon('target')}</span>
+        <p>${escapeHtml(insight)}</p>
+      </div>
+    </article>
   `;
 }
 

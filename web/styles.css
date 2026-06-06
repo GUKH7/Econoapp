@@ -1212,6 +1212,12 @@ select:focus {
   color: var(--green-dark);
 }
 
+.compact-action {
+  font-size: 12px;
+  min-height: 36px;
+  padding: 0 12px;
+}
+
 .button.ghost {
   background: var(--surface-2);
   border-color: var(--line);
@@ -1547,6 +1553,88 @@ select:focus {
   height: 42px;
   justify-content: center;
   width: 42px;
+}
+
+.insight-card {
+  animation: cardIn 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  box-shadow: var(--shadow);
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+}
+
+.eyebrow {
+  color: var(--green-dark);
+  display: block;
+  font-size: 12px;
+  font-weight: 950;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+}
+
+.insight-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.insight-metric {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  display: grid;
+  gap: 6px;
+  padding: 13px;
+}
+
+.insight-metric span,
+.insight-progress span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.insight-metric strong {
+  font-size: clamp(20px, 6vw, 26px);
+  line-height: 1;
+  overflow-wrap: anywhere;
+}
+
+.insight-progress {
+  display: grid;
+  gap: 8px;
+}
+
+.insight-progress > div:first-child {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.insight-progress strong {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.insight-note {
+  align-items: center;
+  background: var(--green-soft);
+  border: 1px solid #bbf7d0;
+  border-radius: 16px;
+  color: var(--green-dark);
+  display: flex;
+  gap: 12px;
+  padding: 12px;
+}
+
+.insight-note p {
+  font-size: 13px;
+  font-weight: 850;
+  line-height: 1.35;
+  margin: 0;
 }
 
 .onboarding-card {
