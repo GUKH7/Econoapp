@@ -374,6 +374,16 @@ function bindViewEvents() {
       });
     });
   });
+
+  document.querySelectorAll('[data-amount-preset]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const form = button.closest('[data-transaction-form]');
+      const input = form?.querySelector('input[name="amount"]');
+      if (!input) return;
+      input.value = button.dataset.amountPreset;
+      input.focus();
+    });
+  });
 }
 
 function bindSwipeNavigation() {

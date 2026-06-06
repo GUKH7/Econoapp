@@ -78,8 +78,11 @@ export function transactionSheet() {
     <div class="sheet-backdrop" data-sheet-close></div>
     <section class="bottom-sheet" role="dialog" aria-modal="true" aria-label="${isIncome ? 'Nova receita' : 'Novo gasto'}">
       <div class="sheet-handle"></div>
-      <div class="panel-title">
-        <h2>${isIncome ? 'Nova receita' : 'Novo gasto'}</h2>
+      <div class="panel-title sheet-title">
+        <div>
+          <span>${scopeLabel()}</span>
+          <h2>${isIncome ? 'Nova receita' : 'Novo gasto'}</h2>
+        </div>
         <button class="icon-button" type="button" data-sheet-close aria-label="Fechar">x</button>
       </div>
       ${transactionFormHtml(type, 'sheet')}
@@ -230,6 +233,8 @@ function transactionFormHtml(type, context) {
   const isExpense = type === 'EXPENSE';
   const categoryLabel = isExpense ? 'Categoria do gasto' : 'Origem da receita';
   const createCategoryLabel = isExpense ? 'Criar nova categoria de gasto' : 'Criar nova origem de receita';
+  const paymentLabel = isExpense ? 'Forma de pagamento' : 'Receber em';
+  const quickAmounts = isExpense ? ['25,00', '50,00', '100,00'] : ['250,00', '1.000,00', '2.500,00'];
   const availableCategories = state.categories.filter((category) => {
     const kind = state.categoryKinds[category.id];
     if (isExpense) return !kind || kind === 'EXPENSE';
@@ -254,6 +259,10 @@ function transactionFormHtml(type, context) {
   return `
     <form class="form transaction-form" data-transaction-form data-context="${context}">
       <div class="entry-hero ${isExpense ? 'expense-mode' : 'income-mode'}">
+        <div class="entry-mode-row">
+          <span class="entry-mode-icon ${isExpense ? 'expense-bg' : 'income-bg'}">${isExpense ? icon('minus') : icon('plus')}</span>
+          <span><strong>${isExpense ? 'Saida de dinheiro' : 'Entrada de dinheiro'}</strong><small>${scopeLabel()} - ${currentMonth}</small></span>
+        </div>
         <div class="type-toggle" aria-label="Tipo do lancamento">
           <label class="${isExpense ? 'active' : ''}">
             <input type="radio" name="type" value="EXPENSE" data-transaction-type ${isExpense ? 'checked' : ''} />
@@ -268,10 +277,18 @@ function transactionFormHtml(type, context) {
           <span>Valor</span>
           <input class="amount-input" name="amount" inputmode="decimal" required placeholder="R$ 0,00" />
         </label>
+        <div class="amount-presets" aria-label="Valores rapidos">
+          ${quickAmounts.map((amount) => `<button type="button" data-amount-preset="${amount}">R$ ${amount}</button>`).join('')}
+        </div>
       </div>
       <div class="form-section">
-        <label class="field">Descricao<input name="description" required placeholder="Ex: Mercado, venda Shopee, frete" /></label>
-        <label class="field select-row">
+        <label class="field form-row">
+          <span class="row-icon neutral-bg">${icon('chat')}</span>
+          <span>Descricao</span>
+          <input name="description" required placeholder="Ex: Mercado, venda Shopee, frete" />
+        </label>
+        <label class="field select-row form-row">
+          <span class="row-icon neutral-bg">${icon('tag')}</span>
           <span>${categoryLabel}</span>
           <select name="categoryId" ${availableCategories.length ? 'required' : ''}>
             ${availableCategories.length ? availableCategories.map((category) => `<option value="${category.id}">${escapeHtml(category.name)}</option>`).join('') : '<option value="">Crie uma nova abaixo</option>'}
@@ -287,19 +304,22 @@ function transactionFormHtml(type, context) {
         </details>
       </div>
       <div class="form-section">
-        <label class="field select-row ${isExpense ? '' : 'hidden'}">
-          <span>Forma de pagamento</span>
+        <label class="field select-row form-row ${isExpense ? '' : 'hidden'}">
+          <span class="row-icon neutral-bg">${icon('wallet')}</span>
+          <span>${paymentLabel}</span>
           <select name="paymentMethod" ${isExpense ? 'required' : ''}>
             ${expensePaymentOptions || '<option value="">Cadastre uma carteira, banco ou cartao</option>'}
           </select>
         </label>
-        <label class="field select-row ${isExpense ? 'hidden' : ''}">
-          <span>Receber em</span>
+        <label class="field select-row form-row ${isExpense ? 'hidden' : ''}">
+          <span class="row-icon neutral-bg">${icon('wallet')}</span>
+          <span>${paymentLabel}</span>
           <select name="receiveAccount" ${isExpense ? '' : 'required'}>
             ${walletOptions || '<option value="">Cadastre um banco ou carteira</option>'}
           </select>
         </label>
-        <label class="field select-row ${state.scope === 'BUSINESS' ? '' : 'hidden'}">
+        <label class="field select-row form-row ${state.scope === 'BUSINESS' ? '' : 'hidden'}">
+          <span class="row-icon neutral-bg">${icon('shop')}</span>
           <span>Canal ou meio</span>
           <select name="channelId">
             <option value="">Sem canal</option>

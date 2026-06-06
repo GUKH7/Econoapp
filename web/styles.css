@@ -637,6 +637,19 @@ button {
   margin: 0;
 }
 
+.sheet-title {
+  align-items: flex-start;
+}
+
+.sheet-title span {
+  color: var(--green-dark);
+  display: block;
+  font-size: 12px;
+  font-weight: 950;
+  margin-bottom: 3px;
+  text-transform: uppercase;
+}
+
 .metric-label {
   color: var(--muted);
   font-size: 14px;
@@ -1018,6 +1031,45 @@ select:focus {
   padding: 14px;
 }
 
+.entry-mode-row {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+}
+
+.entry-mode-row strong,
+.entry-mode-row small {
+  display: block;
+}
+
+.entry-mode-row strong {
+  font-size: 15px;
+}
+
+.entry-mode-row small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  margin-top: 2px;
+}
+
+.entry-mode-icon {
+  align-items: center;
+  border-radius: 15px;
+  color: white;
+  display: flex;
+  flex: 0 0 44px;
+  height: 44px;
+  justify-content: center;
+  width: 44px;
+}
+
+.entry-mode-icon svg {
+  fill: currentColor;
+  height: 23px;
+  width: 23px;
+}
+
 .entry-hero.income-mode {
   box-shadow: inset 4px 0 0 var(--green);
 }
@@ -1072,6 +1124,48 @@ select:focus {
   color: var(--muted);
   font-size: 13px;
   font-weight: 850;
+}
+
+.amount-presets {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+}
+
+.amount-presets button {
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--green-dark);
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 950;
+  min-height: 34px;
+  padding: 0 13px;
+}
+
+.form-row {
+  align-items: center;
+  display: grid;
+  gap: 8px 12px;
+  grid-template-columns: 42px 1fr;
+}
+
+.form-row > input,
+.form-row > select,
+.form-row > .swatches {
+  grid-column: 1 / -1;
+}
+
+.form-row > span:not(.row-icon) {
+  font-weight: 900;
+}
+
+.neutral-bg {
+  background: var(--green-soft) !important;
+  color: var(--green-dark) !important;
 }
 
 .select-row select {
