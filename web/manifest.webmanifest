@@ -3,8 +3,8 @@
   "short_name": "EconoApp",
   "start_url": "./index.html",
   "display": "standalone",
-  "background_color": "#F1EFEA",
-  "theme_color": "#007338",
+  "background_color": "#F8FAFC",
+  "theme_color": "#22C55E",
   "orientation": "portrait",
   "icons": []
 }

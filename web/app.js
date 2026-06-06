@@ -60,10 +60,15 @@ async function bootstrap() {
 function renderAuth(initialError = '') {
   app.innerHTML = `
     <section class="auth-shell">
-      <div>
-        <h1 class="wordmark">ECONOAPP</h1>
-        <h2 class="auth-title">Controle sua grana sem misturar tudo.</h2>
-        <p class="auth-subtitle">Separe pessoal e negocio, acompanhe entradas, gastos, canais e categorias.</p>
+      <div class="auth-hero">
+        <div class="brand-row">
+          <span class="brand-mark" aria-hidden="true">
+            <span></span><span></span><span></span>
+          </span>
+          <h1 class="wordmark">Econo<span>App</span></h1>
+        </div>
+        <h2 class="auth-title">Financas simples, controle inteligente.</h2>
+        <p class="auth-subtitle">Separe pessoal e negocio, acompanhe entradas, gastos, canais e categorias em um painel claro.</p>
       </div>
 
       <div class="card">
@@ -99,7 +104,10 @@ function authFields(mode) {
       <label class="field">Telefone<input name="phone" inputmode="tel" required /></label>
       <label class="field">Email<input name="email" type="email" autocomplete="email" /></label>
       <label class="field">Senha<input name="password" type="password" minlength="8" required /></label>
-      <label class="field">API<input name="apiUrl" value="${escapeHtml(state.apiUrl)}" required /></label>
+      <details class="inline-create">
+        <summary>Configuracao avancada</summary>
+        <label class="field">API<input name="apiUrl" value="${escapeHtml(state.apiUrl)}" required /></label>
+      </details>
       <button class="button" type="submit">Criar conta</button>
     `;
   }
@@ -107,7 +115,10 @@ function authFields(mode) {
   return `
     <label class="field">Telefone ou email<input name="login" autocomplete="username" required /></label>
     <label class="field">Senha<input name="password" type="password" autocomplete="current-password" required /></label>
-    <label class="field">API<input name="apiUrl" value="${escapeHtml(state.apiUrl)}" required /></label>
+    <details class="inline-create">
+      <summary>Configuracao avancada</summary>
+      <label class="field">API<input name="apiUrl" value="${escapeHtml(state.apiUrl)}" required /></label>
+    </details>
     <button class="button" type="submit">Entrar</button>
   `;
 }
@@ -117,7 +128,7 @@ async function handleAuth(event) {
   setError('');
   const form = event.currentTarget;
   const data = Object.fromEntries(new FormData(form));
-  state.apiUrl = data.apiUrl;
+  state.apiUrl = data.apiUrl || state.apiUrl;
   localStorage.setItem('econoapp.apiUrl', state.apiUrl);
 
   try {
@@ -150,8 +161,12 @@ function renderApp() {
   app.innerHTML = `
     <section class="shell">
       <header class="topbar">
-        <div>
-          <h1 class="wordmark">ECONOAPP</h1>
+        <div class="app-heading">
+          <div class="brand-row compact">
+            <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
+            <h1 class="wordmark">Econo<span>App</span></h1>
+          </div>
+          <p>${state.scope === 'BUSINESS' ? 'Meu negocio' : 'Visao geral'}</p>
         </div>
         <div class="scope-switch" data-scope>
           <button class="${state.scope === 'PERSONAL' ? 'active' : ''}" type="button" data-value="PERSONAL">Pessoal</button>

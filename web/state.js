@@ -22,7 +22,7 @@ export const state = {
   wallets: [],
   cards: [],
   budgets: JSON.parse(localStorage.getItem('econoapp.budgets') || '{}'),
-  categoryColor: '#007338',
+  categoryColor: '#22C55E',
 };
 
 export const app = document.querySelector('#app');
@@ -32,7 +32,7 @@ export const dateFmt = new Intl.DateTimeFormat('pt-BR', {
   month: '2-digit',
   year: '2-digit',
 });
-export const colors = ['#28B463', '#CBA64B', '#EF5350', '#7EA2FF', '#8F5CF7', '#E85D9E'];
+export const colors = ['#22C55E', '#166534', '#3B82F6', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'];
 
 export function saveSession(tokens) {
   state.accessToken = tokens.accessToken;
