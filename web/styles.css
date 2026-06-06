@@ -351,69 +351,41 @@ button {
 }
 
 .welcome-illustration {
-  height: 150px;
-  margin: 26px auto 10px;
-  position: relative;
-  width: min(280px, 82vw);
-}
-
-.phone-shape,
-.wallet-shape,
-.bot-shape {
-  position: absolute;
-}
-
-.phone-shape {
-  background: linear-gradient(160deg, #22c55e, #166534);
-  border: 6px solid #dff7e8;
-  border-radius: 22px;
-  height: 118px;
-  left: 28px;
-  top: 14px;
-  width: 78px;
-}
-
-.wallet-shape {
-  background: #166534;
-  border-radius: 18px;
-  bottom: 10px;
-  box-shadow: 0 18px 30px rgba(22, 101, 52, 0.18);
-  height: 54px;
-  left: 74px;
-  width: 96px;
-}
-
-.bot-shape {
-  background: white;
-  border: 5px solid #dcfce7;
+  aspect-ratio: 1 / 1;
   border-radius: 28px;
-  box-shadow: var(--shadow);
-  height: 72px;
-  right: 28px;
-  top: 44px;
-  width: 86px;
-}
-
-.bot-shape::before {
-  background: var(--text);
-  border-radius: 999px;
-  content: "";
-  height: 8px;
-  left: 23px;
-  position: absolute;
-  top: 28px;
-  width: 40px;
-}
-
-.bot-shape i {
-  background: var(--green);
-  border-radius: 999px;
-  bottom: -14px;
   display: block;
-  height: 24px;
-  left: 31px;
-  position: absolute;
-  width: 24px;
+  height: auto;
+  margin: 22px auto 12px;
+  max-width: 330px;
+  object-fit: contain;
+  width: min(330px, 84vw);
+}
+
+.welcome-panel .auth-subtitle {
+  margin-left: auto;
+  margin-right: auto;
+  max-width: 390px;
+}
+
+.welcome-panel + .card {
+  margin-top: -4px;
+}
+
+.auth-shell .card {
+  position: relative;
+  z-index: 1;
+}
+
+@media (max-height: 760px) {
+  .welcome-illustration {
+    width: min(260px, 72vw);
+  }
+}
+
+@media (max-width: 380px) {
+  .welcome-illustration {
+    width: min(250px, 76vw);
+  }
 }
 
 .scope-switch,

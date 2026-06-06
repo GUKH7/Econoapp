@@ -97,11 +97,7 @@ function renderAuth(initialError = '') {
           <h1 class="wordmark">Econo<span>App</span></h1>
         </div>
         <h2 class="auth-title">Suas financas pessoais e do seu negocio em um so lugar</h2>
-        <div class="welcome-illustration" aria-hidden="true">
-          <span class="phone-shape"></span>
-          <span class="wallet-shape"></span>
-          <span class="bot-shape"><i></i></span>
-        </div>
+        <img class="welcome-illustration" src="./assets/login-illustration.jpg" alt="" aria-hidden="true" />
         <p class="auth-subtitle">Separe pessoal e negocio, acompanhe entradas, gastos, canais e categorias em um painel claro.</p>
       </div>
 
@@ -149,10 +145,6 @@ function authFields(mode) {
   return `
     <label class="field">Telefone ou email<input name="login" autocomplete="username" required /></label>
     <label class="field">Senha<input name="password" type="password" autocomplete="current-password" required /></label>
-    <details class="inline-create">
-      <summary>Configuracao avancada</summary>
-      <label class="field">API<input name="apiUrl" value="${escapeHtml(state.apiUrl)}" required /></label>
-    </details>
     <button class="button" type="submit">Entrar</button>
   `;
 }
