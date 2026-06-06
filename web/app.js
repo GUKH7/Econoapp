@@ -171,7 +171,7 @@ async function handleAuth(event) {
 function renderApp() {
   const totals = scopedTotals();
   app.innerHTML = `
-    <section class="shell">
+    <section class="shell" data-swipe-shell>
       <header class="topbar">
         <div class="app-heading">
           <div class="brand-row compact">
@@ -186,13 +186,15 @@ function renderApp() {
         </div>
       </header>
 
-      <section class="grid dashboard-grid">
-        ${balanceCard(`Saldo ${scopeLabel()}`, totals.balance)}
-        ${metricCard('Receitas', totals.income, 'income')}
-        ${metricCard('Gastos', totals.expense, 'expense')}
-      </section>
+      <main class="page-track" data-swipe-track>
+        <section class="grid dashboard-grid">
+          ${balanceCard(`Saldo ${scopeLabel()}`, totals.balance)}
+          ${metricCard('Receitas', totals.income, 'income')}
+          ${metricCard('Gastos', totals.expense, 'expense')}
+        </section>
 
-      <section class="grid" id="view" data-swipe-area>${viewHtml()}</section>
+        <section class="grid" id="view">${viewHtml()}</section>
+      </main>
 
       <nav class="tabs" data-tabs>
         ${tabButton('dashboard', 'Inicio')}
@@ -316,13 +318,16 @@ function bindViewEvents() {
 }
 
 function bindSwipeNavigation() {
-  const area = document.querySelector('[data-swipe-area]');
-  if (!area || !MAIN_TABS.includes(state.tab)) return;
+  const shell = document.querySelector('[data-swipe-shell]');
+  const track = document.querySelector('[data-swipe-track]');
+  if (!shell || !track || !MAIN_TABS.includes(state.tab)) return;
 
   let startX = 0;
   let startY = 0;
+  let startTime = 0;
   let pointerId = null;
   let isTracking = false;
+  let isHorizontal = false;
 
   const interactiveSelector = [
     'button',
@@ -338,41 +343,58 @@ function bindSwipeNavigation() {
     '[data-sheet-close]',
   ].join(',');
 
-  area.addEventListener('pointerdown', (event) => {
+  shell.addEventListener('pointerdown', (event) => {
     if (state.sheetOpen || state.fabOpen) return;
     if (event.target.closest(interactiveSelector)) return;
     startX = event.clientX;
     startY = event.clientY;
+    startTime = performance.now();
     pointerId = event.pointerId;
     isTracking = true;
-    area.setPointerCapture?.(pointerId);
+    isHorizontal = false;
+    shell.setPointerCapture?.(pointerId);
   });
 
-  area.addEventListener('pointermove', (event) => {
+  shell.addEventListener('pointermove', (event) => {
     if (!isTracking || event.pointerId !== pointerId) return;
     const deltaX = event.clientX - startX;
     const deltaY = event.clientY - startY;
-    if (Math.abs(deltaY) > Math.abs(deltaX) * 1.25) {
+
+    if (!isHorizontal && Math.abs(deltaX) > 10 && Math.abs(deltaX) > Math.abs(deltaY) * 1.15) {
+      isHorizontal = true;
+      track.classList.add('is-swiping');
+    }
+
+    if (!isHorizontal && Math.abs(deltaY) > 12 && Math.abs(deltaY) > Math.abs(deltaX)) {
       isTracking = false;
-      area.releasePointerCapture?.(pointerId);
+      shell.releasePointerCapture?.(pointerId);
       return;
     }
-    if (Math.abs(deltaX) > 12) {
-      area.style.setProperty('--swipe-offset', `${Math.max(-34, Math.min(34, deltaX / 4))}px`);
-      area.classList.add('is-swiping');
+
+    if (isHorizontal) {
+      event.preventDefault();
+      const currentIndex = MAIN_TABS.indexOf(state.tab);
+      const isAtStart = currentIndex === 0 && deltaX > 0;
+      const isAtEnd = currentIndex === MAIN_TABS.length - 1 && deltaX < 0;
+      const resistance = isAtStart || isAtEnd ? 0.1 : 0.22;
+      const offset = Math.max(-58, Math.min(58, deltaX * resistance));
+      track.style.setProperty('--swipe-offset', `${offset}px`);
     }
   });
 
-  area.addEventListener('pointerup', (event) => {
+  shell.addEventListener('pointerup', (event) => {
     if (!isTracking || event.pointerId !== pointerId) return;
     const deltaX = event.clientX - startX;
     const deltaY = event.clientY - startY;
+    const elapsed = Math.max(1, performance.now() - startTime);
+    const velocity = Math.abs(deltaX) / elapsed;
     isTracking = false;
-    area.releasePointerCapture?.(pointerId);
-    area.classList.remove('is-swiping');
-    area.style.removeProperty('--swipe-offset');
+    shell.releasePointerCapture?.(pointerId);
+    track.classList.remove('is-swiping');
+    track.style.removeProperty('--swipe-offset');
 
-    if (Math.abs(deltaX) < 72 || Math.abs(deltaX) < Math.abs(deltaY) * 1.4) return;
+    const hasIntent = Math.abs(deltaX) > 54 || (Math.abs(deltaX) > 34 && velocity > 0.45);
+    if (!hasIntent || Math.abs(deltaX) < Math.abs(deltaY) * 1.15) return;
     const currentIndex = MAIN_TABS.indexOf(state.tab);
     const targetIndex = deltaX < 0 ? currentIndex + 1 : currentIndex - 1;
     const targetTab = MAIN_TABS[targetIndex];
@@ -380,10 +402,11 @@ function bindSwipeNavigation() {
     switchTab(targetTab);
   });
 
-  area.addEventListener('pointercancel', () => {
+  shell.addEventListener('pointercancel', () => {
     isTracking = false;
-    area.classList.remove('is-swiping');
-    area.style.removeProperty('--swipe-offset');
+    isHorizontal = false;
+    track.classList.remove('is-swiping');
+    track.style.removeProperty('--swipe-offset');
   });
 }
 
