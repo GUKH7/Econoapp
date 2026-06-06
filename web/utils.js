@@ -15,9 +15,18 @@ export function parseAmount(value) {
 
 export function transitionTo(apply) {
   if (document.startViewTransition) {
-    document.startViewTransition(apply);
+    document.startViewTransition(() => {
+      apply();
+    });
     return;
   }
 
-  apply();
+  const root = document.documentElement;
+  root.classList.add('route-fallback-out');
+  window.setTimeout(() => {
+    apply();
+    root.classList.remove('route-fallback-out');
+    root.classList.add('route-fallback-in');
+    window.setTimeout(() => root.classList.remove('route-fallback-in'), 260);
+  }, 120);
 }

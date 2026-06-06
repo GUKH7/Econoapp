@@ -60,13 +60,8 @@ async function bootstrap() {
 function renderAuth(initialError = '') {
   app.innerHTML = `
     <section class="auth-shell">
-      <div class="auth-hero">
-        <div class="brand-row">
-          <span class="brand-mark" aria-hidden="true">
-            <span></span><span></span><span></span>
-          </span>
-          <h1 class="wordmark">Econo<span>App</span></h1>
-        </div>
+      <div>
+        <h1 class="wordmark">Econo<span>App</span></h1>
         <h2 class="auth-title">Financas simples, controle inteligente.</h2>
         <p class="auth-subtitle">Separe pessoal e negocio, acompanhe entradas, gastos, canais e categorias em um painel claro.</p>
       </div>
