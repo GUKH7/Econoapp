@@ -528,33 +528,81 @@ function manageView() {
 }
 
 function reportsView() {
-  const incomeByCategory = totalsByCategory('INCOME');
-  const expenseByCategory = totalsByCategory('EXPENSE');
-  const reportTotal = expenseByCategory.reduce((sum, item) => sum + item.total, 0);
+  const reportType = state.reportType || 'EXPENSE';
+  const incomeByCategory = totalsByCategory('INCOME').sort((a, b) => b.total - a.total);
+  const expenseByCategory = totalsByCategory('EXPENSE').sort((a, b) => b.total - a.total);
+  const categories = reportType === 'INCOME' ? incomeByCategory : expenseByCategory;
+  const reportTotal = categories.reduce((sum, item) => sum + item.total, 0);
+  const incomeTotal = incomeByCategory.reduce((sum, item) => sum + item.total, 0);
+  const expenseTotal = expenseByCategory.reduce((sum, item) => sum + item.total, 0);
+  const topCategory = categories[0];
+  const topPercent = topCategory && reportTotal > 0 ? Math.round((topCategory.total / reportTotal) * 100) : 0;
+  const reportLabel = reportType === 'INCOME' ? 'Receitas' : 'Gastos';
   return `
     <div class="report-tabs">
-      <button class="active" type="button">Gastos</button>
-      <button type="button">Receitas</button>
+      ${reportTab('EXPENSE', 'Gastos')}
+      ${reportTab('INCOME', 'Receitas')}
     </div>
     <div class="period-switch">
       <button type="button">Abril</button>
       <button class="active" type="button">${currentMonth}</button>
       <button type="button">Junho</button>
     </div>
+    <article class="report-summary">
+      <div class="report-summary-item">
+        <span>Receitas</span>
+        <strong class="income">${money.format(incomeTotal)}</strong>
+      </div>
+      <div class="report-summary-item">
+        <span>Gastos</span>
+        <strong class="expense">${money.format(expenseTotal)}</strong>
+      </div>
+    </article>
     <div class="split">
       <article class="card">
+        <div class="panel-title">
+          <div>
+            <span class="eyebrow">${reportLabel}</span>
+            <h2>Por categoria</h2>
+          </div>
+          <strong>${money.format(reportTotal)}</strong>
+        </div>
         <div class="donut-wrap">
-          <div class="donut-chart"></div>
+          <div class="donut-chart" style="${donutStyle(categories, reportTotal)}"></div>
           <div class="donut-center"><span>Total</span><strong>${money.format(reportTotal)}</strong></div>
         </div>
-        ${categoryRows(expenseByCategory) || '<p class="empty">Nao ha dados disponiveis no periodo.</p>'}
-      </article>
-      <article class="card">
-        <div class="panel-title"><h2>Receitas</h2></div>
-        ${categoryRows(incomeByCategory) || '<p class="empty">Nao ha dados disponiveis no periodo.</p>'}
+        ${
+          topCategory
+            ? `<div class="report-highlight">
+                <span class="row-icon" style="background:${topCategory.color}">${topCategory.name.slice(0, 1).toUpperCase()}</span>
+                <div>
+                  <span>Maior categoria</span>
+                  <strong>${escapeHtml(topCategory.name)}</strong>
+                  <small>${topPercent}% do total selecionado</small>
+                </div>
+              </div>`
+            : ''
+        }
+        ${categoryRows(categories, reportTotal) || '<p class="empty">Nao ha dados disponiveis no periodo.</p>'}
       </article>
     </div>
   `;
+}
+
+function reportTab(type, label) {
+  return `<button class="${state.reportType === type ? 'active' : ''}" type="button" data-report-type="${type}">${label}</button>`;
+}
+
+function donutStyle(items, total) {
+  if (!items.length || total <= 0) return 'background: conic-gradient(#e5ebe7 0% 100%);';
+  let cursor = 0;
+  const stops = items.map((item, index) => {
+    const start = cursor;
+    const end = index === items.length - 1 ? 100 : cursor + (Number(item.total || 0) / total) * 100;
+    cursor = end;
+    return `${item.color || colors[index % colors.length]} ${start.toFixed(2)}% ${end.toFixed(2)}%`;
+  });
+  return `background: conic-gradient(${stops.join(', ')});`;
 }
 
 function budgetView() {
@@ -615,19 +663,26 @@ function emptyState(title, copy, icon) {
   `;
 }
 
-function categoryRows(items) {
+function categoryRows(items, total = 0) {
   return items
-    .map(
-      (category) => `
-        <div class="row">
-          <div style="display:flex;align-items:center;gap:12px">
+    .map((category) => {
+      const percent = total > 0 ? Math.round((Number(category.total || 0) / total) * 100) : 0;
+      return `
+        <div class="row category-row">
+          <div class="category-row-main">
             <span class="row-icon" style="background:${category.color}">${category.name.slice(0, 1).toUpperCase()}</span>
-            <div class="row-title">${escapeHtml(category.name)}</div>
+            <div>
+              <div class="row-title">${escapeHtml(category.name)}</div>
+              <div class="category-share"><span style="width:${percent}%"></span></div>
+            </div>
           </div>
-          <strong>${money.format(category.total)}</strong>
+          <div class="category-row-value">
+            <strong>${money.format(category.total)}</strong>
+            <small>${percent}%</small>
+          </div>
         </div>
-      `,
-    )
+      `;
+    })
     .join('');
 }
 

@@ -27,6 +27,7 @@ export const state = {
   onboardingDismissed: localStorage.getItem('econoapp.onboardingDismissed') === 'true',
   transactionFilter: 'ALL',
   transactionSearch: '',
+  reportType: 'EXPENSE',
 };
 
 export const app = document.querySelector('#app');

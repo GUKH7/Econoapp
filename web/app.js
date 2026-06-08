@@ -431,6 +431,15 @@ function bindViewEvents() {
       renderTransactionList();
     });
   });
+
+  document.querySelectorAll('[data-report-type]').forEach((button) => {
+    button.addEventListener('click', () => {
+      if (button.dataset.reportType === state.reportType) return;
+      renderWithTransition(() => {
+        state.reportType = button.dataset.reportType;
+      });
+    });
+  });
 }
 
 function renderTransactionList() {
