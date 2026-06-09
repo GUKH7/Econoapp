@@ -52,7 +52,7 @@ function renderWithTransition(mutator, direction = 'forward') {
   transitionTo(() => {
     mutator();
     renderApp();
-  }, direction);
+  }, direction, { native: false });
 }
 
 function transitionDirectionForTab(targetTab) {
@@ -288,32 +288,28 @@ function bindShellEvents() {
   });
 
   document.querySelector('[data-fab]')?.addEventListener('click', () => {
-    renderWithTransition(() => {
-      state.fabOpen = !state.fabOpen;
-    });
+    state.fabOpen = !state.fabOpen;
+    renderApp();
   });
 
   document.querySelector('[data-fab-close]')?.addEventListener('click', () => {
-    renderWithTransition(() => {
-      state.fabOpen = false;
-    });
+    state.fabOpen = false;
+    renderApp();
   });
 
   document.querySelectorAll('[data-action-type]').forEach((button) => {
     button.addEventListener('click', () => {
-      renderWithTransition(() => {
-        state.quickType = button.dataset.actionType;
-        state.fabOpen = false;
-        state.sheetOpen = true;
-      });
+      state.quickType = button.dataset.actionType;
+      state.fabOpen = false;
+      state.sheetOpen = true;
+      renderApp();
     });
   });
 
   document.querySelectorAll('[data-sheet-close]').forEach((element) => {
     element.addEventListener('click', () => {
-      renderWithTransition(() => {
-        state.sheetOpen = false;
-      });
+      state.sheetOpen = false;
+      renderApp();
     });
   });
 

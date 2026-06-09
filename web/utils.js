@@ -22,11 +22,11 @@ export function formatCurrencyInput(value) {
   }).format(cents / 100);
 }
 
-export function transitionTo(apply, direction = 'forward') {
+export function transitionTo(apply, direction = 'forward', options = {}) {
   const root = document.documentElement;
   root.dataset.routeDirection = direction;
 
-  if (document.startViewTransition) {
+  if (document.startViewTransition && options.native !== false) {
     document.startViewTransition(() => {
       apply();
     });

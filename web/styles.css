@@ -192,6 +192,16 @@ body {
   animation-name: routeNewBack;
 }
 
+.route-fallback-out .tabs,
+.route-fallback-out .tabs *,
+.route-fallback-out .fab,
+.route-fallback-in .tabs,
+.route-fallback-in .tabs *,
+.route-fallback-in .fab {
+  animation: none !important;
+  transition: none !important;
+}
+
 button,
 input,
 select {
