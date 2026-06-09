@@ -194,7 +194,7 @@ button {
   max-width: 640px;
   min-height: 100dvh;
   overflow-x: hidden;
-  padding: 18px 16px 112px;
+  padding: 18px 16px 154px;
   width: 100%;
 }
 
@@ -519,6 +519,7 @@ button {
 .page-track {
   display: grid;
   gap: 14px;
+  padding-bottom: 36px;
 }
 
 [data-swipe-track] {
@@ -580,7 +581,7 @@ button {
   gap: 8px;
   height: 54px;
   justify-content: flex-end;
-  margin: -10px 0 8px;
+  margin: 0 0 8px;
   position: relative;
   z-index: 1;
 }
@@ -663,6 +664,8 @@ button {
   letter-spacing: 0;
   line-height: 1;
   margin-top: 8px;
+  overflow-wrap: normal;
+  white-space: nowrap;
 }
 
 .balance-card .metric-value {
@@ -820,6 +823,33 @@ button {
   padding: 12px;
 }
 
+.report-insight {
+  align-items: center;
+  animation: cardIn 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  background: linear-gradient(135deg, var(--green-soft), #ffffff);
+  border: 1px solid #bbf7d0;
+  border-radius: 18px;
+  box-shadow: var(--shadow);
+  display: flex;
+  gap: 12px;
+  padding: 14px 16px;
+}
+
+.report-insight strong {
+  color: var(--green-dark);
+  display: block;
+  font-size: 14px;
+  margin-bottom: 2px;
+}
+
+.report-insight p {
+  color: #2f6b45;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.35;
+  margin: 0;
+}
+
 .report-highlight span:not(.row-icon),
 .report-highlight small {
   color: var(--muted);
@@ -847,6 +877,7 @@ button {
   display: grid;
   gap: 4px;
   justify-items: end;
+  min-width: max-content;
   text-align: right;
 }
 
@@ -1865,6 +1896,7 @@ select:focus {
 @media (min-width: 780px) {
   .shell {
     max-width: 980px;
+    padding-bottom: 128px;
   }
 
   .split {
@@ -1892,13 +1924,81 @@ select:focus {
     gap: 12px;
   }
 
+  .mini-card,
+  .card,
+  .insight-card {
+    padding: 16px;
+  }
+
   .metric-value {
-    font-size: clamp(26px, 12vw, 34px);
-    overflow-wrap: anywhere;
+    font-size: clamp(20px, 6.2vw, 24px);
+    letter-spacing: 0;
   }
 
   .balance-card .metric-value {
-    font-size: clamp(40px, 17vw, 56px);
+    font-size: clamp(34px, 11.6vw, 44px);
+  }
+
+  .balance-card {
+    min-height: 228px;
+    padding: 24px 22px 20px;
+  }
+
+  .sparkline {
+    height: 54px;
+  }
+
+  .report-summary {
+    gap: 8px;
+  }
+
+  .report-summary-item {
+    padding: 12px;
+  }
+
+  .report-summary-item strong {
+    font-size: clamp(20px, 6.2vw, 24px);
+  }
+
+  .report-panel .panel-title {
+    align-items: flex-start;
+  }
+
+  .report-panel .panel-title > strong {
+    font-size: 18px;
+    padding-top: 4px;
+    white-space: nowrap;
+  }
+
+  .donut-chart {
+    height: min(156px, 42vw);
+    width: min(156px, 42vw);
+  }
+
+  .donut-chart::after {
+    inset: min(38px, 10vw);
+  }
+
+  .category-row {
+    align-items: flex-start;
+  }
+
+  .category-row-main {
+    grid-template-columns: 38px minmax(0, 1fr);
+  }
+
+  .category-row-main .row-icon {
+    flex-basis: 38px;
+    height: 38px;
+    width: 38px;
+  }
+
+  .category-share {
+    min-width: 86px;
+  }
+
+  .insight-note {
+    display: none;
   }
 
   .bottom-sheet {

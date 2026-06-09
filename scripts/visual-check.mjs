@@ -240,6 +240,10 @@ async function routeApi(page) {
 
 async function prepareSession(page) {
   await page.addInitScript((storedCategoryKinds) => {
+    Object.defineProperty(document, 'startViewTransition', {
+      configurable: true,
+      value: undefined,
+    });
     localStorage.setItem('econoapp.accessToken', 'visual-access-token');
     localStorage.setItem('econoapp.refreshToken', 'visual-refresh-token');
     localStorage.setItem('econoapp.onboardingDismissed', 'true');

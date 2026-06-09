@@ -101,6 +101,7 @@ export function viewHtml() {
 
 function dashboardView() {
   const rows = scopedTransactions().slice(0, 8).map(transactionRow).join('');
+  const assistantCopy = assistantInsight();
   const categories = state.categories
     .map(
       (category) =>
@@ -116,7 +117,7 @@ function dashboardView() {
       <div class="assistant-icon">${icon('chat')}</div>
       <div>
         <strong>EconoAssistente</strong>
-        <p>Seus dados ficam separados entre pessoal e negocio para decisoes mais claras.</p>
+        <p>${escapeHtml(assistantCopy)}</p>
       </div>
     </article>
     <div class="split">
@@ -130,6 +131,26 @@ function dashboardView() {
       </article>
     </div>
   `;
+}
+
+function assistantInsight() {
+  const totals = scopedTotals();
+  const expenses = totalsByCategory('EXPENSE').sort((a, b) => b.total - a.total);
+  const topExpense = expenses[0];
+
+  if (!scopedTransactions().length) {
+    return 'Registre uma receita ou gasto para eu te mostrar alertas e oportunidades.';
+  }
+
+  if (totals.balance < 0) {
+    return `Seu resultado esta negativo em ${money.format(Math.abs(totals.balance))}. Revise os maiores gastos.`;
+  }
+
+  if (topExpense) {
+    return `${topExpense.name} e sua maior categoria de gasto neste periodo.`;
+  }
+
+  return `Seu saldo esta positivo em ${money.format(totals.balance)} neste periodo.`;
 }
 
 function dashboardInsights() {
@@ -538,6 +559,9 @@ function reportsView() {
   const topCategory = categories[0];
   const topPercent = topCategory && reportTotal > 0 ? Math.round((topCategory.total / reportTotal) * 100) : 0;
   const reportLabel = reportType === 'INCOME' ? 'Receitas' : 'Gastos';
+  const reportInsight = topCategory
+    ? `${topCategory.name} representa ${topPercent}% de ${reportLabel.toLowerCase()} no periodo.`
+    : `Sem ${reportLabel.toLowerCase()} para analisar neste periodo.`;
   return `
     <div class="report-tabs">
       ${reportTab('EXPENSE', 'Gastos')}
@@ -558,8 +582,15 @@ function reportsView() {
         <strong class="expense">${money.format(expenseTotal)}</strong>
       </div>
     </article>
+    <article class="report-insight">
+      <span class="row-icon neutral-bg">${topCategory ? topCategory.name.slice(0, 1).toUpperCase() : icon('reports')}</span>
+      <div>
+        <strong>Insight do periodo</strong>
+        <p>${escapeHtml(reportInsight)}</p>
+      </div>
+    </article>
     <div class="split">
-      <article class="card">
+      <article class="card report-panel">
         <div class="panel-title">
           <div>
             <span class="eyebrow">${reportLabel}</span>
