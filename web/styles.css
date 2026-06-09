@@ -147,42 +147,48 @@ body {
 
 ::view-transition-old(root),
 ::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+::view-transition-old(page-content),
+::view-transition-new(page-content) {
   animation-duration: 340ms;
   animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
   mix-blend-mode: normal;
 }
 
-::view-transition-old(root) {
+::view-transition-old(page-content) {
   animation-name: routeOld;
 }
 
-::view-transition-new(root) {
+::view-transition-new(page-content) {
   animation-name: routeNew;
 }
 
-[data-route-direction="back"]::view-transition-old(root) {
+[data-route-direction="back"]::view-transition-old(page-content) {
   animation-name: routeOldBack;
 }
 
-[data-route-direction="back"]::view-transition-new(root) {
+[data-route-direction="back"]::view-transition-new(page-content) {
   animation-name: routeNewBack;
 }
 
-.route-fallback-out #app {
+.route-fallback-out .page-track {
   opacity: 0;
   transform: translateX(-10px) scale(0.992);
   transition: opacity 120ms ease, transform 120ms ease;
 }
 
-.route-fallback-out[data-route-direction="back"] #app {
+.route-fallback-out[data-route-direction="back"] .page-track {
   transform: translateX(10px) scale(0.992);
 }
 
-.route-fallback-in #app {
+.route-fallback-in .page-track {
   animation: routeNew 260ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
-.route-fallback-in[data-route-direction="back"] #app {
+.route-fallback-in[data-route-direction="back"] .page-track {
   animation-name: routeNewBack;
 }
 
@@ -198,7 +204,6 @@ button {
 }
 
 .shell {
-  animation: pageIn 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
   margin: 0 auto;
   max-width: 640px;
   min-height: 100dvh;
@@ -626,6 +631,7 @@ button {
   display: grid;
   gap: 14px;
   padding-bottom: calc(var(--content-safe-bottom) - var(--bottom-nav-height));
+  view-transition-name: page-content;
 }
 
 [data-swipe-track] {
