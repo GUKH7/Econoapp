@@ -533,7 +533,7 @@ function transactionFormHtml(type, context) {
         </div>
         <label class="amount-field">
           <span>Valor</span>
-          <input class="amount-input" name="amount" inputmode="decimal" required placeholder="R$ 0,00" />
+          <input class="amount-input" name="amount" inputmode="numeric" required placeholder="R$ 0,00" />
         </label>
         <div class="amount-presets" aria-label="Valores rapidos">
           ${quickAmounts.map((amount) => `<button type="button" data-amount-preset="${amount}">R$ ${amount}</button>`).join('')}

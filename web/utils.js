@@ -13,6 +13,15 @@ export function parseAmount(value) {
   return Number.isFinite(amount) ? amount : 0;
 }
 
+export function formatCurrencyInput(value) {
+  const digits = String(value ?? '').replace(/\D/g, '');
+  const cents = Number(digits || '0');
+  return new Intl.NumberFormat('pt-BR', {
+    currency: 'BRL',
+    style: 'currency',
+  }).format(cents / 100);
+}
+
 export function transitionTo(apply, direction = 'forward') {
   const root = document.documentElement;
   root.dataset.routeDirection = direction;

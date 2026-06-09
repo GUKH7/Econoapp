@@ -10,7 +10,7 @@ import {
   saveSession,
   state,
 } from './state.js';
-import { escapeHtml, parseAmount, transitionTo } from './utils.js';
+import { escapeHtml, formatCurrencyInput, parseAmount, transitionTo } from './utils.js';
 import {
   paymentMetaFromValue,
   paymentTargetFromValue,
@@ -409,12 +409,22 @@ function bindViewEvents() {
     });
   });
 
+  document.querySelectorAll('input[name="amount"]').forEach((input) => {
+    input.addEventListener('input', () => {
+      input.value = formatCurrencyInput(input.value);
+    });
+    input.addEventListener('focus', () => {
+      if (!input.value.trim()) input.value = formatCurrencyInput('0');
+      input.select();
+    });
+  });
+
   document.querySelectorAll('[data-amount-preset]').forEach((button) => {
     button.addEventListener('click', () => {
       const form = button.closest('[data-transaction-form]');
       const input = form?.querySelector('input[name="amount"]');
       if (!input) return;
-      input.value = button.dataset.amountPreset;
+      input.value = formatCurrencyInput(`${button.dataset.amountPreset}00`);
       input.focus();
     });
   });
