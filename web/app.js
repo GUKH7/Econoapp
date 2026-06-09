@@ -392,9 +392,12 @@ function bindViewEvents() {
   document.querySelector('[data-budget-form]')?.addEventListener('submit', handleBudgetSubmit);
 
   document.querySelectorAll('[data-color]').forEach((button) => {
-    button.addEventListener('click', () => {
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
       state.categoryColor = button.dataset.color;
-      renderApp();
+      document
+        .querySelectorAll('[data-color]')
+        .forEach((item) => item.classList.toggle('active', item.dataset.color === state.categoryColor));
     });
   });
 
