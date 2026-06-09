@@ -2058,15 +2058,21 @@ select:focus {
 
 @media (max-width: 430px) {
   :root {
-    --bottom-nav-height: 76px;
-    --fab-size: 58px;
-    --fab-bottom: 47px;
-    --content-safe-bottom: 172px;
+    --bottom-nav-height: 70px;
+    --fab-size: 56px;
+    --fab-bottom: 42px;
+    --content-safe-bottom: 158px;
   }
 
   .shell {
-    padding-left: 14px;
-    padding-right: 14px;
+    padding-left: 12px;
+    padding-right: 12px;
+    padding-top: 14px;
+  }
+
+  .page-track,
+  .grid {
+    gap: 12px;
   }
 
   .topbar {
@@ -2080,31 +2086,52 @@ select:focus {
   }
 
   .dashboard-grid {
-    gap: 12px;
+    gap: 10px;
+    margin-bottom: 10px;
   }
 
   .mini-card,
   .card,
   .insight-card {
-    padding: 16px;
+    border-radius: 16px;
+    padding: 14px;
+  }
+
+  .panel-title {
+    margin-bottom: 10px;
+  }
+
+  .panel-title h2,
+  .panel-title h3 {
+    font-size: 18px;
+  }
+
+  .metric-label {
+    font-size: 12px;
   }
 
   .metric-value {
-    font-size: clamp(20px, 6.2vw, 24px);
+    font-size: clamp(19px, 5.8vw, 23px);
     letter-spacing: 0;
+    margin-top: 6px;
   }
 
   .balance-card .metric-value {
-    font-size: clamp(34px, 11.6vw, 44px);
+    font-size: clamp(34px, 10.8vw, 42px);
   }
 
   .balance-card {
-    min-height: 228px;
-    padding: 24px 22px 20px;
+    min-height: 198px;
+    padding: 20px 20px 16px;
   }
 
   .sparkline {
-    height: 54px;
+    height: 42px;
+    margin-bottom: 4px;
+  }
+
+  .sparkline span {
+    width: 5px;
   }
 
   .report-summary {
@@ -2121,11 +2148,15 @@ select:focus {
 
   .report-comparison {
     grid-template-columns: minmax(0, 1fr) 72px;
-    padding: 16px;
+    padding: 14px;
+  }
+
+  .report-comparison h2 {
+    font-size: clamp(19px, 6.4vw, 25px);
   }
 
   .comparison-bars {
-    min-height: 82px;
+    min-height: 72px;
   }
 
   .comparison-bars span {
@@ -2150,6 +2181,67 @@ select:focus {
     font-size: 11px;
   }
 
+  .assistant-card {
+    border-radius: 16px;
+    gap: 10px;
+    padding: 10px 12px;
+  }
+
+  .assistant-icon {
+    border-radius: 12px;
+    flex-basis: 38px;
+    height: 38px;
+    width: 38px;
+  }
+
+  .assistant-card strong {
+    font-size: 14px;
+  }
+
+  .assistant-card p {
+    font-size: 12px;
+    line-height: 1.28;
+  }
+
+  .assistant-action {
+    font-size: 11px;
+    margin-top: 8px;
+    min-height: 30px;
+    padding: 0 12px;
+  }
+
+  .tabs {
+    border-radius: 20px 20px 0 0;
+    padding: 6px 8px max(6px, env(safe-area-inset-bottom));
+  }
+
+  .tabs button {
+    font-size: 10px;
+    min-height: 50px;
+  }
+
+  .tab-icon {
+    height: 22px;
+    width: 22px;
+  }
+
+  .insight-card {
+    gap: 11px;
+  }
+
+  .insight-grid {
+    gap: 8px;
+  }
+
+  .insight-metric {
+    border-radius: 14px;
+    padding: 10px;
+  }
+
+  .insight-metric strong {
+    font-size: clamp(18px, 5.7vw, 23px);
+  }
+
   .report-panel .panel-title {
     align-items: flex-start;
   }
@@ -2161,12 +2253,12 @@ select:focus {
   }
 
   .donut-chart {
-    height: min(156px, 42vw);
-    width: min(156px, 42vw);
+    height: min(142px, 38vw);
+    width: min(142px, 38vw);
   }
 
   .donut-chart::after {
-    inset: min(38px, 10vw);
+    inset: min(34px, 9vw);
   }
 
   .category-row {
