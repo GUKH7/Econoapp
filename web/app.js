@@ -253,7 +253,6 @@ function renderApp() {
         ${tabButton('dashboard', 'Inicio')}
         ${tabButton('transactions', 'Fluxo')}
         ${tabButton('reports', 'Relatorios')}
-        ${tabButton('budget', 'Limites')}
         ${tabButton('more', 'Mais')}
       </nav>
       <button class="fab ${state.fabOpen ? 'open' : ''}" type="button" data-fab aria-label="Adicionar">+</button>

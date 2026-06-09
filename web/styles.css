@@ -728,6 +728,14 @@ button {
   transform: translateY(-2px);
 }
 
+.tabs button:nth-child(3) {
+  grid-column: 4;
+}
+
+.tabs button:nth-child(4) {
+  grid-column: 5;
+}
+
 .tab-icon {
   align-items: center;
   display: inline-flex;
