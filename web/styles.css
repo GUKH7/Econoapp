@@ -22,7 +22,12 @@
   --fab-size: 64px;
   --fab-bottom: 54px;
   --content-safe-bottom: 172px;
+  --radius-card: 18px;
+  --radius-card-sm: 16px;
+  --radius-control: 14px;
+  --control-height: 48px;
   --shadow: 0 18px 48px rgba(31, 41, 55, 0.1);
+  --shadow-card: 0 14px 34px rgba(31, 41, 55, 0.08);
   color-scheme: light;
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
@@ -456,9 +461,9 @@ button {
 
 .search-field input {
   background: var(--surface-2);
-  border: 0;
+  border: 1px solid var(--line);
   border-radius: 999px;
-  min-height: 44px;
+  min-height: var(--control-height);
 }
 
 .filter-chips,
@@ -472,7 +477,7 @@ button {
 .filter-chips button,
 .report-tabs button {
   background: var(--surface-2);
-  border: 0;
+  border: 1px solid transparent;
   border-radius: 999px;
   color: var(--muted);
   flex: 0 0 auto;
@@ -480,12 +485,15 @@ button {
   font-weight: 900;
   min-height: 34px;
   padding: 0 14px;
+  transition: background 140ms ease, border-color 140ms ease, color 140ms ease, transform 140ms ease;
 }
 
 .filter-chips button.active,
 .report-tabs button.active {
   background: var(--green);
+  border-color: var(--green);
   color: white;
+  box-shadow: 0 10px 22px rgba(34, 197, 94, 0.16);
 }
 
 .report-summary {
@@ -497,8 +505,8 @@ button {
 .report-summary-item {
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 16px;
-  box-shadow: var(--shadow);
+  border-radius: var(--radius-card-sm);
+  box-shadow: var(--shadow-card);
   display: grid;
   gap: 6px;
   padding: 14px;
@@ -526,7 +534,7 @@ button {
 .report-comparison {
   align-items: stretch;
   background: linear-gradient(135deg, var(--text), #166534);
-  border-radius: 22px;
+  border-radius: var(--radius-card);
   box-shadow: 0 18px 42px rgba(22, 101, 52, 0.18);
   color: white;
   display: grid;
@@ -703,8 +711,8 @@ button {
   animation: cardIn 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 18px;
-  box-shadow: var(--shadow);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
   padding: 18px;
 }
 
@@ -719,7 +727,7 @@ button {
 }
 
 .mini-card {
-  border-radius: 16px;
+  border-radius: var(--radius-card-sm);
 }
 
 .panel-title {
@@ -935,8 +943,8 @@ button {
   animation: cardIn 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
   background: linear-gradient(135deg, var(--green-soft), #ffffff);
   border: 1px solid #bbf7d0;
-  border-radius: 18px;
-  box-shadow: var(--shadow);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
   display: flex;
   gap: 12px;
   padding: 14px 16px;
@@ -1414,14 +1422,15 @@ select:focus {
   align-items: center;
   background: var(--green);
   border: 1px solid var(--green);
-  border-radius: 14px;
+  border-radius: var(--radius-control);
   color: white;
   display: inline-flex;
   font-weight: 950;
   justify-content: center;
-  min-height: 54px;
+  min-height: var(--control-height);
   padding: 0 16px;
-  transition: transform 120ms ease, filter 120ms ease, background 120ms ease, border-color 120ms ease;
+  box-shadow: 0 12px 26px rgba(34, 197, 94, 0.14);
+  transition: transform 120ms ease, filter 120ms ease, background 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
 }
 
 .button:disabled {
@@ -1440,6 +1449,7 @@ select:focus {
   background: transparent;
   border-color: var(--green);
   color: var(--green-dark);
+  box-shadow: none;
 }
 
 .compact-action {
@@ -1452,11 +1462,13 @@ select:focus {
   background: var(--surface-2);
   border-color: var(--line);
   color: var(--text);
+  box-shadow: none;
 }
 
 .button.danger {
   background: var(--red);
   border-color: var(--red);
+  box-shadow: 0 12px 26px rgba(239, 68, 68, 0.14);
 }
 
 .row {
@@ -1465,7 +1477,8 @@ select:focus {
   display: flex;
   gap: 12px;
   justify-content: space-between;
-  padding: 15px 0;
+  min-height: 66px;
+  padding: 12px 0;
   transition: background 140ms ease, transform 140ms ease;
 }
 
@@ -1493,11 +1506,11 @@ select:focus {
   border-radius: 999px;
   color: white;
   display: flex;
-  flex: 0 0 42px;
+  flex: 0 0 40px;
   font-weight: 950;
-  height: 42px;
+  height: 40px;
   justify-content: center;
-  width: 42px;
+  width: 40px;
 }
 
 .income-bg {
@@ -1521,9 +1534,10 @@ select:focus {
   border-radius: 999px;
   color: var(--text);
   display: inline-flex;
-  font-weight: 750;
+  font-size: 13px;
+  font-weight: 850;
   gap: 8px;
-  min-height: 38px;
+  min-height: 36px;
   padding: 0 12px;
 }
 
@@ -1637,7 +1651,8 @@ select:focus {
 .menu-list {
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 18px;
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
   overflow: hidden;
 }
 
@@ -1648,10 +1663,10 @@ select:focus {
   border-bottom: 1px solid var(--line);
   color: var(--text);
   display: grid;
-  gap: 14px;
-  grid-template-columns: 42px 1fr auto;
-  min-height: 70px;
-  padding: 0 16px;
+  gap: 12px;
+  grid-template-columns: 40px 1fr auto;
+  min-height: 64px;
+  padding: 0 14px;
   text-align: left;
   width: 100%;
   transition: background 140ms ease, transform 140ms ease;
@@ -1669,22 +1684,23 @@ select:focus {
 .menu-item .tab-icon {
   align-items: center;
   background: var(--surface-2);
-  border-radius: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
   color: var(--green-dark);
   display: flex;
-  height: 42px;
+  height: 40px;
   justify-content: center;
-  width: 42px;
+  width: 40px;
 }
 
 .menu-item span:nth-child(2) {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 850;
 }
 
 .menu-item span:last-child {
   color: var(--green);
-  font-size: 28px;
+  font-size: 24px;
 }
 
 .manage-shell {
@@ -1752,7 +1768,7 @@ select:focus {
   animation: cardIn 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
   background: var(--green-soft);
   border: 1px solid #bbf7d0;
-  border-radius: 18px;
+  border-radius: var(--radius-card);
   color: var(--green-dark);
   display: flex;
   gap: 14px;
@@ -1834,8 +1850,8 @@ select:focus {
   animation: cardIn 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
   background: white;
   border: 1px solid var(--line);
-  border-radius: 20px;
-  box-shadow: var(--shadow);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
   display: grid;
   gap: 14px;
   padding: 18px;
@@ -1859,7 +1875,7 @@ select:focus {
 .insight-metric {
   background: var(--surface-2);
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: var(--radius-card-sm);
   display: grid;
   gap: 6px;
   padding: 13px;
