@@ -2,7 +2,7 @@
 
 Web app responsivo/PWA do EconoApp. Ele usa a mesma API NestJS do backend e foi pensado para ser empacotado como APK depois com Capacitor ou TWA.
 
-O servidor web tambem faz proxy de `/api/v1/*` para a API local em `http://localhost:3001`. Assim, para testar por tunel publico, basta expor a porta `5173`.
+O servidor web também faz proxy de `/api/v1/*` para a API local em `http://localhost:3001`. Assim, para testar por túnel público, basta expor a porta `5173`.
 
 ## Rodar localmente
 
@@ -17,13 +17,13 @@ Acesse:
 http://localhost:5173
 ```
 
-No celular, use o IP da maquina:
+No celular, use o IP da máquina:
 
 ```text
 http://192.168.15.12:5173
 ```
 
-## Túnel publico temporario
+## Túnel público temporário
 
 Exponha apenas o web server:
 
@@ -31,4 +31,4 @@ Exponha apenas o web server:
 cloudflared tunnel --url http://localhost:5173
 ```
 
-Ou ferramenta equivalente. O app usara `/api/v1` no mesmo dominio publico.
+Ou ferramenta equivalente. O app usará `/api/v1` no mesmo domínio público.

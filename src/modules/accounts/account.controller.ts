@@ -61,21 +61,21 @@ export class AccountController {
     return { data: { success: true } };
   }
 
-  @ApiOperation({ summary: 'Criar cartao de credito' })
+  @ApiOperation({ summary: 'Criar cartão de crédito' })
   @Post('cards')
   async createCard(@CurrentUser() user: JwtPayload, @Body() dto: CreateCreditCardDto) {
     const data = await this.accountService.createCard(user.sub, dto);
     return { data };
   }
 
-  @ApiOperation({ summary: 'Listar cartoes de credito' })
+  @ApiOperation({ summary: 'Listar cartões de crédito' })
   @Get('cards')
   async listCards(@CurrentUser() user: JwtPayload) {
     const data = await this.accountService.findCardsByUser(user.sub);
     return { data };
   }
 
-  @ApiOperation({ summary: 'Atualizar cartao de credito' })
+  @ApiOperation({ summary: 'Atualizar cartão de crédito' })
   @Patch('cards/:id')
   async updateCard(
     @CurrentUser() user: JwtPayload,
@@ -86,7 +86,7 @@ export class AccountController {
     return { data };
   }
 
-  @ApiOperation({ summary: 'Remover cartao de credito' })
+  @ApiOperation({ summary: 'Remover cartão de crédito' })
   @Delete('cards/:id')
   async removeCard(
     @CurrentUser() user: JwtPayload,

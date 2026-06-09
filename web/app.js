@@ -32,13 +32,13 @@ const MAIN_TABS = ['dashboard', 'transactions', 'reports', 'budget', 'more'];
 function screenTitle() {
   const titles = {
     dashboard: 'Resumo',
-    transactions: 'Transacoes',
-    reports: 'Relatorios',
+    transactions: 'Transações',
+    reports: 'Relatórios',
     budget: 'Limites',
     more: state.manageSection === 'accounts' ? 'Contas e carteiras' : 'Mais',
-    launch: 'Lancamentos',
+    launch: 'Lançamentos',
   };
-  if (state.scope === 'BUSINESS' && state.tab === 'dashboard') return 'Negocio';
+  if (state.scope === 'BUSINESS' && state.tab === 'dashboard') return 'Negócio';
   return titles[state.tab] || 'Resumo';
 }
 
@@ -97,9 +97,9 @@ function renderAuth(initialError = '') {
           <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
           <h1 class="wordmark">Econo<span>App</span></h1>
         </div>
-        <h2 class="auth-title">Suas financas pessoais e do seu negocio em um so lugar</h2>
+        <h2 class="auth-title">Suas finanças pessoais e do seu negócio em um só lugar</h2>
         <img class="welcome-illustration" src="./assets/login-illustration.jpg" alt="" aria-hidden="true" />
-        <p class="auth-subtitle">Separe pessoal e negocio, acompanhe entradas, gastos, canais e categorias em um painel claro.</p>
+        <p class="auth-subtitle">Separe pessoal e negócio, acompanhe entradas, gastos, canais e categorias em um painel claro.</p>
       </div>
 
       <div class="card">
@@ -236,7 +236,7 @@ function renderApp() {
           state.tab === 'dashboard'
             ? `<div class="scope-switch" data-scope>
                 <button class="${state.scope === 'PERSONAL' ? 'active' : ''}" type="button" data-value="PERSONAL">Pessoal</button>
-                <button class="${state.scope === 'BUSINESS' ? 'active' : ''}" type="button" data-value="BUSINESS">Negocio</button>
+                <button class="${state.scope === 'BUSINESS' ? 'active' : ''}" type="button" data-value="BUSINESS">Negócio</button>
               </div>
               <section class="grid dashboard-grid">
                 ${balanceCard(`Saldo total`, totals.balance)}
@@ -250,9 +250,9 @@ function renderApp() {
       </main>
 
       <nav class="tabs" data-tabs>
-        ${tabButton('dashboard', 'Inicio')}
+        ${tabButton('dashboard', 'Início')}
         ${tabButton('transactions', 'Fluxo')}
-        ${tabButton('reports', 'Relatorios')}
+        ${tabButton('reports', 'Relatórios')}
         ${tabButton('more', 'Mais')}
       </nav>
       <button class="fab ${state.fabOpen ? 'open' : ''}" type="button" data-fab aria-label="Adicionar">+</button>
@@ -604,12 +604,12 @@ async function handleCategorySubmit(event) {
 
 async function handleSeedCategories() {
   const presets = [
-    { name: 'Alimentacao', color: '#22C55E', kind: 'EXPENSE' },
+    { name: 'Alimentação', color: '#22C55E', kind: 'EXPENSE' },
     { name: 'Moradia', color: '#3B82F6', kind: 'EXPENSE' },
     { name: 'Transporte', color: '#F59E0B', kind: 'EXPENSE' },
-    { name: 'Saude', color: '#EF4444', kind: 'EXPENSE' },
+    { name: 'Saúde', color: '#EF4444', kind: 'EXPENSE' },
     { name: 'Lazer', color: '#8B5CF6', kind: 'EXPENSE' },
-    { name: 'Salario', color: '#166534', kind: 'INCOME' },
+    { name: 'Salário', color: '#166534', kind: 'INCOME' },
     { name: 'Vendas', color: '#22C55E', kind: 'INCOME' },
   ];
   const existing = new Set(state.categories.map((category) => category.name.trim().toLowerCase()));

@@ -25,7 +25,7 @@ export function scopedTotals() {
 }
 
 export function scopeLabel() {
-  return state.scope === 'BUSINESS' ? 'Negocio' : 'Pessoal';
+  return state.scope === 'BUSINESS' ? 'Negócio' : 'Pessoal';
 }
 
 export function totalsByCategory(type) {
@@ -49,7 +49,7 @@ export function paymentMetaFromValue(value, mode = 'PAYMENT') {
   const [kind, id] = String(value).split(':');
   if (kind === 'card') {
     const card = state.cards.find((item) => item.id === id);
-    return { kind: 'CARD', id, label: card ? `Cartao ${card.name}` : 'Cartao' };
+    return { kind: 'CARD', id, label: card ? `Cartão ${card.name}` : 'Cartão' };
   }
 
   const wallet = state.wallets.find((item) => item.id === id);
@@ -65,7 +65,7 @@ export function paymentMetaFromValue(value, mode = 'PAYMENT') {
 export function paymentMetaForTransaction(transaction) {
   if (transaction.creditCardId) {
     const card = state.cards.find((item) => item.id === transaction.creditCardId);
-    return { label: card ? `Cartao ${card.name}` : 'Cartao' };
+    return { label: card ? `Cartão ${card.name}` : 'Cartão' };
   }
 
   if (transaction.accountId) {

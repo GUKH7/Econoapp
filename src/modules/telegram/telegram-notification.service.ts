@@ -44,7 +44,7 @@ export class TelegramNotificationService {
 
   private async safeSend(telegramId: string, text: string): Promise<void> {
     if (!this.bot) {
-      this.logger.warn('Telegram desativado: notificacao ignorada.');
+      this.logger.warn('Telegram desativado: notificação ignorada.');
       return;
     }
 

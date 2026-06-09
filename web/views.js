@@ -71,12 +71,12 @@ function percentChange(current, previous) {
 }
 
 function changeText(current, previous, kind = 'neutral') {
-  if (previous <= 0 && current > 0) return 'Sem base no mes anterior';
+  if (previous <= 0 && current > 0) return 'Sem base no mês anterior';
   const change = percentChange(current, previous);
-  if (current === previous) return 'Estavel vs mes anterior';
+  if (current === previous) return 'Estável vs mês anterior';
   const direction = change > 0 ? 'acima' : 'abaixo';
-  const prefix = kind === 'expense' && change > 0 ? 'Atencao: ' : '';
-  return `${prefix}${Math.abs(change)}% ${direction} do mes anterior`;
+  const prefix = kind === 'expense' && change > 0 ? 'Atenção: ' : '';
+  return `${prefix}${Math.abs(change)}% ${direction} do mês anterior`;
 }
 
 function comparisonText(current, previous, label) {
@@ -118,7 +118,7 @@ export function balanceCard(label, value) {
       <div class="metric-label">${label}<span class="balance-eye">ver</span></div>
       <div class="metric-value">${money.format(value)}</div>
       <div class="sparkline" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span></div>
-      <div class="month-title"><span>${currentMonth}</span><span>${scopedTransactions().length} lancamentos</span></div>
+      <div class="month-title"><span>${currentMonth}</span><span>${scopedTransactions().length} lançamentos</span></div>
     </article>
   `;
 }
@@ -138,7 +138,7 @@ export function fabMenu() {
   return `
     <div class="fab-menu" data-fab-close></div>
     <div class="fab-actions">
-      <button class="fab-action" type="button" data-action-type="INCOME"><span class="row-icon income-bg">${icon('plus')}</span><span><strong>Nova receita</strong><small>Entrada pessoal ou do negocio</small></span></button>
+      <button class="fab-action" type="button" data-action-type="INCOME"><span class="row-icon income-bg">${icon('plus')}</span><span><strong>Nova receita</strong><small>Entrada pessoal ou do negócio</small></span></button>
       <button class="fab-action" type="button" data-action-type="EXPENSE"><span class="row-icon expense-bg">${icon('minus')}</span><span><strong>Novo gasto</strong><small>Despesa, compra ou taxa</small></span></button>
     </div>
   `;
@@ -201,11 +201,11 @@ function dashboardView() {
     <div class="split">
       <article class="card">
         <div class="panel-title"><h2>Fluxo recente</h2><button class="button secondary" type="button" data-tab-jump="transactions">Ver tudo</button></div>
-        ${rows || emptyState('Nenhum lancamento no periodo', 'Toque no + para adicionar uma receita ou gasto.', '+')}
+        ${rows || emptyState('Nenhum lançamento no período', 'Toque no + para adicionar uma receita ou gasto.', '+')}
       </article>
       <article class="card">
         <div class="panel-title"><h2>Categorias</h2><button class="button secondary" type="button" data-tab-jump="more">Editar</button></div>
-        <div class="chip-list">${categories || '<p class="empty">Crie categorias para organizar os lancamentos.</p>'}</div>
+        <div class="chip-list">${categories || '<p class="empty">Crie categorias para organizar os lançamentos.</p>'}</div>
       </article>
     </div>
   `;
@@ -224,8 +224,8 @@ function assistantInsight() {
 
   if (!transactions.length) {
     return {
-      action: 'Criar lancamento',
-      copy: 'Comece registrando uma receita ou gasto. Depois eu consigo apontar categorias, limites e tendencias.',
+      action: 'Criar lançamento',
+      copy: 'Comece registrando uma receita ou gasto. Depois eu consigo apontar categorias, limites e tendências.',
       target: 'launch',
       title: 'Vamos criar sua primeira leitura',
       tone: 'neutral',
@@ -235,7 +235,7 @@ function assistantInsight() {
   if (totals.balance < 0) {
     return {
       action: 'Ver gastos',
-      copy: `O resultado esta negativo em ${money.format(Math.abs(totals.balance))}. Comece revisando ${topExpense?.name || 'os maiores gastos'} antes de novos lancamentos.`,
+      copy: `O resultado está negativo em ${money.format(Math.abs(totals.balance))}. Comece revisando ${topExpense?.name || 'os maiores gastos'} antes de novos lançamentos.`,
       target: 'reports',
       title: 'Alerta de resultado negativo',
       tone: 'warning',
@@ -245,7 +245,7 @@ function assistantInsight() {
   if (budget > 0 && budgetUsed >= 90) {
     return {
       action: 'Ajustar limite',
-      copy: `Voce ja usou ${budgetUsed}% do limite de ${scopeLabel().toLowerCase()}. Reduza gastos variaveis ou aumente o limite se ele estiver defasado.`,
+      copy: `Você já usou ${budgetUsed}% do limite de ${scopeLabel().toLowerCase()}. Reduza gastos variáveis ou aumente o limite se ele estiver defasado.`,
       target: 'budget',
       title: 'Limite quase no teto',
       tone: 'warning',
@@ -255,7 +255,7 @@ function assistantInsight() {
   if (topExpense && topPercent >= 45) {
     return {
       action: 'Analisar categoria',
-      copy: `${topExpense.name} concentra ${topPercent}% dos gastos. Se for recorrente, vale definir uma meta especifica para essa categoria.`,
+      copy: `${topExpense.name} concentra ${topPercent}% dos gastos. Se for recorrente, vale definir uma meta específica para essa categoria.`,
       target: 'reports',
       title: 'Gasto concentrado detectado',
       tone: 'attention',
@@ -265,7 +265,7 @@ function assistantInsight() {
   if (!budget && totals.expense > 0) {
     return {
       action: 'Definir limite',
-      copy: `Voce ja tem ${money.format(totals.expense)} em gastos no periodo. Criar um limite ajuda a acompanhar o ritmo antes do fim do mes.`,
+      copy: `Você já tem ${money.format(totals.expense)} em gastos no período. Criar um limite ajuda a acompanhar o ritmo antes do fim do mês.`,
       target: 'budget',
       title: 'Falta um teto de gastos',
       tone: 'neutral',
@@ -275,7 +275,7 @@ function assistantInsight() {
   if (state.scope === 'BUSINESS' && !state.channels.length) {
     return {
       action: 'Criar canal',
-      copy: 'No modo negocio, canais de venda deixam claro de onde vem o faturamento e quais taxas pesam mais.',
+      copy: 'No modo negócio, canais de venda deixam claro de onde vem o faturamento e quais taxas pesam mais.',
       manageSection: 'channels',
       target: 'more',
       title: 'Separe seus canais de venda',
@@ -286,7 +286,7 @@ function assistantInsight() {
   if (!scopedWallets.length && !scopedCards.length) {
     return {
       action: 'Gerenciar contas',
-      copy: 'Cadastre banco, carteira ou cartao para entender onde o dinheiro entra, sai e fica parado.',
+      copy: 'Cadastre banco, carteira ou cartão para entender onde o dinheiro entra, sai e fica parado.',
       manageSection: 'accounts',
       target: 'more',
       title: 'Organize os meios de pagamento',
@@ -296,7 +296,7 @@ function assistantInsight() {
 
   if (topExpense) {
     return {
-      action: 'Ver relatorios',
+      action: 'Ver relatórios',
       copy: `${topExpense.name} e a maior categoria agora, mas seu resultado segue positivo em ${money.format(totals.balance)}.`,
       target: 'reports',
       title: 'Controle em bom ritmo',
@@ -306,7 +306,7 @@ function assistantInsight() {
 
   return {
     action: 'Ver fluxo',
-    copy: `Saldo positivo de ${money.format(totals.balance)} neste periodo. Continue registrando para eu comparar melhor os proximos meses.`,
+    copy: `Saldo positivo de ${money.format(totals.balance)} neste período. Continue registrando para eu comparar melhor os próximos meses.`,
     target: 'transactions',
     title: 'Saldo positivo',
     tone: 'positive',
@@ -323,19 +323,19 @@ function dashboardInsights() {
   const walletBalance = scopedWallets.reduce((sum, wallet) => sum + Number(wallet.balance || 0), 0);
   const insight =
     totals.expense > totals.income && totals.income > 0
-      ? 'Gastos acima das receitas neste mes.'
+      ? 'Gastos acima das receitas neste mês.'
       : topExpense
         ? `${topExpense.name} concentra seus maiores gastos.`
-        : 'Registre lancamentos para gerar insights.';
+        : 'Registre lançamentos para gerar insights.';
 
   return `
     <article class="insight-card">
       <div class="panel-title">
         <div>
-          <span class="eyebrow">Resumo do mes</span>
+          <span class="eyebrow">Resumo do mês</span>
           <h2>${scopeLabel()}</h2>
         </div>
-        <button class="button secondary compact-action" type="button" data-tab-jump="reports">Relatorios</button>
+        <button class="button secondary compact-action" type="button" data-tab-jump="reports">Relatórios</button>
       </div>
       <div class="insight-grid">
         <div class="insight-metric">
@@ -348,7 +348,7 @@ function dashboardInsights() {
         </div>
       </div>
       <div class="insight-progress">
-        <div><span>Limite usado</span><strong>${budget ? `${budgetUsed}%` : 'Nao definido'}</strong></div>
+        <div><span>Limite usado</span><strong>${budget ? `${budgetUsed}%` : 'Não definido'}</strong></div>
         <div class="budget-progress"><span style="width:${budgetUsed}%"></span></div>
       </div>
       <div class="insight-note">
@@ -387,7 +387,7 @@ function onboardingCard() {
       action: 'transaction',
       done: hasTransaction,
       icon: icon('plus'),
-      title: 'Primeiro lancamento',
+      title: 'Primeiro lançamento',
       copy: 'Registre uma entrada ou despesa.',
     },
   ];
@@ -398,7 +398,7 @@ function onboardingCard() {
         <div>
           <span>Primeiros passos</span>
           <h2>Configure seu EconoApp</h2>
-          <p>Complete o basico para acompanhar seu dinheiro com dados organizados.</p>
+          <p>Complete o básico para acompanhar seu dinheiro com dados organizados.</p>
         </div>
         <button class="icon-button compact" type="button" data-onboarding-dismiss aria-label="Ocultar primeiros passos">x</button>
       </div>
@@ -421,7 +421,7 @@ function onboardingCard() {
 
 function transactionsView() {
   return `
-    <label class="search-field"><input type="search" placeholder="Buscar transacoes" value="${escapeHtml(state.transactionSearch)}" data-transaction-search /></label>
+    <label class="search-field"><input type="search" placeholder="Buscar transações" value="${escapeHtml(state.transactionSearch)}" data-transaction-search /></label>
     <div class="filter-chips">
       ${transactionFilterButton('ALL', 'Todos')}
       ${transactionFilterButton('INCOME', 'Receitas')}
@@ -456,7 +456,7 @@ function filteredTransactions() {
       category?.name,
       transaction.source,
       payment?.label,
-      transactionScope(transaction) === 'BUSINESS' ? 'negocio' : 'pessoal',
+      transactionScope(transaction) === 'BUSINESS' ? 'negócio' : 'pessoal',
     ]
       .filter(Boolean)
       .join(' ')
@@ -467,7 +467,7 @@ function filteredTransactions() {
 
 export function transactionListHtml() {
   const rows = filteredTransactions().map(transactionRow).join('');
-  return rows || emptyState('Nenhum lancamento encontrado', 'Ajuste a busca ou toque no + para adicionar um lancamento.', '+');
+  return rows || emptyState('Nenhum lançamento encontrado', 'Ajuste a busca ou toque no + para adicionar um lançamento.', '+');
 }
 
 function launchView() {
@@ -511,7 +511,7 @@ function transactionFormHtml(type, context) {
       (wallet) =>
         `<option value="account:${wallet.id}">${wallet.type === 'BANK' ? 'Banco' : 'Carteira'} - ${escapeHtml(wallet.name)}</option>`,
     ),
-    ...scopedCards.map((card) => `<option value="card:${card.id}">Cartao - ${escapeHtml(card.name)}</option>`),
+    ...scopedCards.map((card) => `<option value="card:${card.id}">Cartão - ${escapeHtml(card.name)}</option>`),
   ].join('');
 
   return `
@@ -519,9 +519,9 @@ function transactionFormHtml(type, context) {
       <div class="entry-hero ${isExpense ? 'expense-mode' : 'income-mode'}">
         <div class="entry-mode-row">
           <span class="entry-mode-icon ${isExpense ? 'expense-bg' : 'income-bg'}">${isExpense ? icon('minus') : icon('plus')}</span>
-          <span><strong>${isExpense ? 'Saida de dinheiro' : 'Entrada de dinheiro'}</strong><small>${scopeLabel()} - ${currentMonth}</small></span>
+          <span><strong>${isExpense ? 'Saída de dinheiro' : 'Entrada de dinheiro'}</strong><small>${scopeLabel()} - ${currentMonth}</small></span>
         </div>
-        <div class="type-toggle" aria-label="Tipo do lancamento">
+        <div class="type-toggle" aria-label="Tipo do lançamento">
           <label class="${isExpense ? 'active' : ''}">
             <input type="radio" name="type" value="EXPENSE" data-transaction-type ${isExpense ? 'checked' : ''} />
             <span>Gasto</span>
@@ -542,7 +542,7 @@ function transactionFormHtml(type, context) {
       <div class="form-section">
         <label class="field form-row">
           <span class="row-icon neutral-bg">${icon('chat')}</span>
-          <span>Descricao</span>
+          <span>Descrição</span>
           <input name="description" required placeholder="Ex: Mercado, venda Shopee, frete" />
         </label>
         <label class="field select-row form-row">
@@ -554,7 +554,7 @@ function transactionFormHtml(type, context) {
         </label>
         <details class="inline-create" ${availableCategories.length ? '' : 'open'}>
           <summary>${createCategoryLabel}</summary>
-          <label class="field">Nome<input name="newCategoryName" placeholder="${isExpense ? 'Ex: Alimentacao, Frete, Taxas' : 'Ex: Salario, Vendas, Rendimentos'}" /></label>
+          <label class="field">Nome<input name="newCategoryName" placeholder="${isExpense ? 'Ex: Alimentação, Frete, Taxas' : 'Ex: Salário, Vendas, Rendimentos'}" /></label>
           <div class="field">
             <label>Cor</label>
             <div class="swatches">${colors.map((color) => `<button class="swatch ${state.categoryColor === color ? 'active' : ''}" type="button" style="background:${color}" data-color="${color}"></button>`).join('')}</div>
@@ -566,7 +566,7 @@ function transactionFormHtml(type, context) {
           <span class="row-icon neutral-bg">${icon('wallet')}</span>
           <span>${paymentLabel}</span>
           <select name="paymentMethod" ${isExpense ? 'required' : ''}>
-            ${expensePaymentOptions || '<option value="">Cadastre uma carteira, banco ou cartao</option>'}
+            ${expensePaymentOptions || '<option value="">Cadastre uma carteira, banco ou cartão</option>'}
           </select>
         </label>
         <label class="field select-row form-row ${isExpense ? 'hidden' : ''}">
@@ -586,7 +586,7 @@ function transactionFormHtml(type, context) {
         </label>
       </div>
       <div class="sheet-actions">
-        <button class="button" type="submit">Salvar lancamento</button>
+        <button class="button" type="submit">Salvar lançamento</button>
       </div>
     </form>
   `;
@@ -639,19 +639,19 @@ function manageView() {
 
   const cardsPanel = `
     <article class="card manage-panel">
-        <div class="panel-title"><h2>Cartoes de credito</h2></div>
+        <div class="panel-title"><h2>Cartões de crédito</h2></div>
         <div class="credit-preview">
           <span>EconoApp</span>
           <strong>**** 1234</strong>
-          <small>Credito</small>
+          <small>Crédito</small>
         </div>
         <form class="form" data-card-form>
-          <label class="field">Nome<input name="name" required placeholder="Ex: Nubank credito, Inter Black" /></label>
+          <label class="field">Nome<input name="name" required placeholder="Ex: Nubank crédito, Inter Black" /></label>
           <label class="field">Limite<input name="limit" inputmode="decimal" placeholder="0,00" /></label>
-          <button class="button" type="submit">Criar cartao</button>
+          <button class="button" type="submit">Criar cartão</button>
         </form>
         <div style="margin-top:14px">
-          ${scopedCards.map((card) => `<div class="row"><div><div class="row-title">${escapeHtml(card.name)}</div><div class="row-meta">Cartao ${scopeLabel()} - limite ${money.format(Number(card.limit || 0))}</div></div></div>`).join('') || '<p class="empty">Cadastre cartoes para registrar gastos no credito.</p>'}
+          ${scopedCards.map((card) => `<div class="row"><div><div class="row-title">${escapeHtml(card.name)}</div><div class="row-meta">Cartão ${scopeLabel()} - limite ${money.format(Number(card.limit || 0))}</div></div></div>`).join('') || '<p class="empty">Cadastre cartões para registrar gastos no crédito.</p>'}
         </div>
       </article>
   `;
@@ -660,7 +660,7 @@ function manageView() {
     <article class="card manage-panel">
         <div class="panel-title"><h2>Categorias</h2></div>
         <form class="form" data-category-form>
-          <label class="field">Nome<input name="name" required placeholder="Ex: Alimentacao, Moradia, Taxas" /></label>
+          <label class="field">Nome<input name="name" required placeholder="Ex: Alimentação, Moradia, Taxas" /></label>
           <label class="field">Uso
             <select name="kind">
               <option value="EXPENSE">Gasto</option>
@@ -688,7 +688,7 @@ function manageView() {
           <button class="button" type="submit">Criar canal</button>
         </form>
         <div style="margin-top:14px">
-          ${state.channels.map((channel) => `<div class="row"><div><div class="row-title">${escapeHtml(channel.name)}</div><div class="row-meta">Taxa ${Number(channel.feePercent).toFixed(2)}%</div></div></div>`).join('') || '<p class="empty">Cadastre canais para separar vendas do negocio.</p>'}
+          ${state.channels.map((channel) => `<div class="row"><div><div class="row-title">${escapeHtml(channel.name)}</div><div class="row-meta">Taxa ${Number(channel.feePercent).toFixed(2)}%</div></div></div>`).join('') || '<p class="empty">Cadastre canais para separar vendas do negócio.</p>'}
         </div>
       </article>
   `;
@@ -723,24 +723,24 @@ function reportsView() {
   const reportLabel = reportType === 'INCOME' ? 'Receitas' : 'Gastos';
   const previousSelectedTotal = reportType === 'INCOME' ? previousTotals.income : previousTotals.expense;
   const reportInsight = topCategory
-    ? `${topCategory.name} representa ${topPercent}% de ${reportLabel.toLowerCase()} no periodo.`
-    : `Sem ${reportLabel.toLowerCase()} para analisar neste periodo.`;
+    ? `${topCategory.name} representa ${topPercent}% de ${reportLabel.toLowerCase()} no período.`
+    : `Sem ${reportLabel.toLowerCase()} para analisar neste período.`;
   const balanceInsight =
     currentTotals.balance >= 0
       ? `Resultado positivo de ${money.format(currentTotals.balance)} em ${currentMonth}.`
       : `Resultado negativo de ${money.format(Math.abs(currentTotals.balance))}; vale revisar gastos recorrentes.`;
   const expenseInsight =
     previousTotals.expense <= 0 && currentTotals.expense > 0
-      ? `Gastos registrados em ${currentMonth}, ainda sem base de comparacao com ${previousMonth}.`
+      ? `Gastos registrados em ${currentMonth}, ainda sem base de comparação com ${previousMonth}.`
       : currentTotals.expense > previousTotals.expense
         ? `Gastos subiram ${Math.abs(percentChange(currentTotals.expense, previousTotals.expense))}% contra ${previousMonth}.`
         : `Gastos ficaram ${Math.abs(percentChange(currentTotals.expense, previousTotals.expense))}% abaixo de ${previousMonth}.`;
   const incomeInsight =
     previousTotals.income <= 0 && currentTotals.income > 0
-      ? `Receitas registradas em ${currentMonth}, ainda sem base de comparacao com ${previousMonth}.`
+      ? `Receitas registradas em ${currentMonth}, ainda sem base de comparação com ${previousMonth}.`
       : currentTotals.income >= previousTotals.income
-        ? `Receitas evoluiram ${Math.abs(percentChange(currentTotals.income, previousTotals.income))}% no comparativo mensal.`
-        : `Receitas cairam ${Math.abs(percentChange(currentTotals.income, previousTotals.income))}% no comparativo mensal.`;
+        ? `Receitas evoluíram ${Math.abs(percentChange(currentTotals.income, previousTotals.income))}% no comparativo mensal.`
+        : `Receitas caíram ${Math.abs(percentChange(currentTotals.income, previousTotals.income))}% no comparativo mensal.`;
   return `
     <div class="report-tabs">
       ${reportTab('EXPENSE', 'Gastos')}
@@ -777,7 +777,7 @@ function reportsView() {
     <article class="report-insight">
       <span class="row-icon neutral-bg">${topCategory ? topCategory.name.slice(0, 1).toUpperCase() : icon('reports')}</span>
       <div>
-        <strong>Insight do periodo</strong>
+        <strong>Insight do período</strong>
         <p>${escapeHtml(reportInsight)}</p>
       </div>
     </article>
@@ -819,7 +819,7 @@ function reportsView() {
               </div>`
             : ''
         }
-        ${categoryRows(categories, reportTotal) || '<p class="empty">Nao ha dados disponiveis no periodo.</p>'}
+        ${categoryRows(categories, reportTotal) || '<p class="empty">Não há dados disponíveis no período.</p>'}
       </article>
     </div>
   `;
@@ -863,7 +863,7 @@ function budgetView() {
           ? `<div class="panel-title"><h2>Limite ${scopeLabel()}</h2><strong>${money.format(currentBudget)}</strong></div>
              <div class="budget-progress"><span style="width:${used}%"></span></div>
              <p class="muted">${money.format(totals.expense)} usados de ${money.format(currentBudget)}</p>`
-          : emptyState('Nenhum limite definido', 'Defina um teto de gastos para acompanhar o mes.', 'O')
+          : emptyState('Nenhum limite definido', 'Defina um teto de gastos para acompanhar o mês.', 'O')
       }
       <form class="form" data-budget-form style="margin-top:18px">
         <label class="field">Novo limite<input name="budget" inputmode="decimal" placeholder="0,00" /></label>
@@ -884,8 +884,8 @@ function moreView() {
       <article class="card">
         <div class="panel-title"><h2>Gerenciar</h2></div>
         <div class="menu-list">
-          <button class="menu-item" type="button" data-tab-jump="launch"><span class="tab-icon">+/-</span><span>Lancamentos</span><span>></span></button>
-          <button class="menu-item" type="button" data-manage-section="accounts"><span class="tab-icon">${icon('wallet')}</span><span>Contas e cartoes</span><span>></span></button>
+          <button class="menu-item" type="button" data-tab-jump="launch"><span class="tab-icon">+/-</span><span>Lançamentos</span><span>></span></button>
+          <button class="menu-item" type="button" data-manage-section="accounts"><span class="tab-icon">${icon('wallet')}</span><span>Contas e cartões</span><span>></span></button>
           <button class="menu-item" type="button" data-manage-section="categories"><span class="tab-icon">${icon('tag')}</span><span>Categorias e canais</span><span>></span></button>
           <button class="menu-item" type="button" data-tab-jump="budget"><span class="tab-icon">${icon('target')}</span><span>Limites</span><span>></span></button>
         </div>
@@ -941,7 +941,7 @@ function transactionRow(transaction) {
         <span class="row-icon" style="background:${category?.color || iconColor}">${iconText}</span>
         <div>
           <div class="row-title">${escapeHtml(transaction.description)}</div>
-          <div class="row-meta">${dateFmt.format(new Date(transaction.date))} - ${category?.name || transaction.source}${paymentLabel} - ${transactionScope(transaction) === 'BUSINESS' ? 'Negocio' : 'Pessoal'}</div>
+          <div class="row-meta">${dateFmt.format(new Date(transaction.date))} - ${category?.name || transaction.source}${paymentLabel} - ${transactionScope(transaction) === 'BUSINESS' ? 'Negócio' : 'Pessoal'}</div>
         </div>
       </div>
       <strong class="${typeClass}">${money.format(value)}</strong>

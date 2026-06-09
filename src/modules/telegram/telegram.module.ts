@@ -46,7 +46,7 @@ export class TelegramModule implements OnModuleInit {
 
   async onModuleInit(): Promise<void> {
     if (!isTelegramEnabled) {
-      this.logger.warn('Telegram desativado: TELEGRAM_BOT_TOKEN nao configurado.');
+      this.logger.warn('Telegram desativado: TELEGRAM_BOT_TOKEN não configurado.');
       return;
     }
 

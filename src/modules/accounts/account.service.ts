@@ -20,14 +20,14 @@ export class AccountService {
 
   async updateAccount(userId: string, id: string, input: UpdateFinancialAccountDto) {
     const existing = await this.accountRepository.findAccountById(userId, id);
-    if (!existing) throw new NotFoundException('Conta nao encontrada');
+    if (!existing) throw new NotFoundException('Conta não encontrada');
     await this.accountRepository.updateAccount(userId, id, input);
     return this.accountRepository.findAccountById(userId, id);
   }
 
   async deleteAccount(userId: string, id: string): Promise<void> {
     const existing = await this.accountRepository.findAccountById(userId, id);
-    if (!existing) throw new NotFoundException('Conta nao encontrada');
+    if (!existing) throw new NotFoundException('Conta não encontrada');
     await this.accountRepository.deleteAccount(userId, id);
   }
 
@@ -41,24 +41,24 @@ export class AccountService {
 
   async updateCard(userId: string, id: string, input: UpdateCreditCardDto) {
     const existing = await this.accountRepository.findCardById(userId, id);
-    if (!existing) throw new NotFoundException('Cartao nao encontrado');
+    if (!existing) throw new NotFoundException('Cartão não encontrado');
     await this.accountRepository.updateCard(userId, id, input);
     return this.accountRepository.findCardById(userId, id);
   }
 
   async deleteCard(userId: string, id: string): Promise<void> {
     const existing = await this.accountRepository.findCardById(userId, id);
-    if (!existing) throw new NotFoundException('Cartao nao encontrado');
+    if (!existing) throw new NotFoundException('Cartão não encontrado');
     await this.accountRepository.deleteCard(userId, id);
   }
 
   async ensureAccountBelongsToUser(userId: string, id: string): Promise<void> {
     const existing = await this.accountRepository.findAccountById(userId, id);
-    if (!existing) throw new NotFoundException('Conta nao encontrada');
+    if (!existing) throw new NotFoundException('Conta não encontrada');
   }
 
   async ensureCardBelongsToUser(userId: string, id: string): Promise<void> {
     const existing = await this.accountRepository.findCardById(userId, id);
-    if (!existing) throw new NotFoundException('Cartao nao encontrado');
+    if (!existing) throw new NotFoundException('Cartão não encontrado');
   }
 }
