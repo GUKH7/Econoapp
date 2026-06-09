@@ -516,6 +516,100 @@ button {
   overflow-wrap: anywhere;
 }
 
+.report-summary-item small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 850;
+  line-height: 1.25;
+}
+
+.report-comparison {
+  align-items: stretch;
+  background: linear-gradient(135deg, var(--text), #166534);
+  border-radius: 22px;
+  box-shadow: 0 18px 42px rgba(22, 101, 52, 0.18);
+  color: white;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(0, 1fr) 86px;
+  overflow: hidden;
+  padding: 18px;
+}
+
+.report-comparison .eyebrow,
+.report-comparison p {
+  color: rgba(255, 255, 255, 0.76);
+}
+
+.report-comparison h2 {
+  font-size: clamp(20px, 7vw, 28px);
+  line-height: 1.05;
+  margin: 5px 0 8px;
+}
+
+.report-comparison p {
+  font-size: 13px;
+  font-weight: 850;
+  margin: 0;
+}
+
+.comparison-bars {
+  align-items: end;
+  display: flex;
+  gap: 10px;
+  justify-content: end;
+  min-height: 96px;
+}
+
+.comparison-bars span {
+  background: rgba(255, 255, 255, 0.38);
+  border-radius: 999px 999px 0 0;
+  display: block;
+  width: 26px;
+}
+
+.comparison-bars span.active {
+  background: var(--green);
+  box-shadow: 0 0 28px rgba(34, 197, 94, 0.36);
+}
+
+.report-advice {
+  display: grid;
+  gap: 12px;
+}
+
+.report-advice-summary {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+  line-height: 1.3;
+  margin: 4px 0 0;
+}
+
+.advice-list {
+  display: grid;
+  gap: 10px;
+}
+
+.advice-list > div {
+  align-items: center;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 42px minmax(0, 1fr);
+  padding: 10px;
+}
+
+.advice-list p {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 850;
+  line-height: 1.35;
+  margin: 0;
+}
+
 .shell {
   touch-action: pan-y;
 }
@@ -1978,6 +2072,37 @@ select:focus {
 
   .report-summary-item strong {
     font-size: clamp(20px, 6.2vw, 24px);
+  }
+
+  .report-comparison {
+    grid-template-columns: minmax(0, 1fr) 72px;
+    padding: 16px;
+  }
+
+  .comparison-bars {
+    min-height: 82px;
+  }
+
+  .comparison-bars span {
+    width: 22px;
+  }
+
+  .advice-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .advice-list > div {
+    align-items: start;
+    grid-template-columns: 1fr;
+  }
+
+  .advice-list .row-icon {
+    height: 38px;
+    width: 38px;
+  }
+
+  .advice-list p {
+    font-size: 11px;
   }
 
   .report-panel .panel-title {

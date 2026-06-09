@@ -11,6 +11,79 @@ import {
 
 const monthLabel = new Intl.DateTimeFormat('pt-BR', { month: 'long' }).format(new Date());
 const currentMonth = monthLabel.charAt(0).toUpperCase() + monthLabel.slice(1);
+const previousMonthLabel = new Intl.DateTimeFormat('pt-BR', { month: 'long' }).format(
+  new Date(new Date().getFullYear(), new Date().getMonth() - 1, 1),
+);
+const previousMonth = previousMonthLabel.charAt(0).toUpperCase() + previousMonthLabel.slice(1);
+const nextMonthLabel = new Intl.DateTimeFormat('pt-BR', { month: 'long' }).format(
+  new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1),
+);
+const nextMonth = nextMonthLabel.charAt(0).toUpperCase() + nextMonthLabel.slice(1);
+
+function transactionValue(transaction) {
+  return Number(transaction.netAmount || transaction.amount || 0);
+}
+
+function transactionMonthKey(transaction) {
+  const date = new Date(transaction.date);
+  if (Number.isNaN(date.getTime())) return '';
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function monthKey(offset = 0) {
+  const date = new Date();
+  date.setMonth(date.getMonth() + offset, 1);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function totalsForTransactions(transactions) {
+  return transactions.reduce(
+    (acc, transaction) => {
+      const value = transactionValue(transaction);
+      if (transaction.type === 'INCOME') acc.income += value;
+      if (transaction.type === 'EXPENSE') acc.expense += value;
+      acc.balance = acc.income - acc.expense;
+      return acc;
+    },
+    { income: 0, expense: 0, balance: 0 },
+  );
+}
+
+function scopedTransactionsForMonth(offset = 0) {
+  const key = monthKey(offset);
+  return scopedTransactions().filter((transaction) => transactionMonthKey(transaction) === key);
+}
+
+function totalsByCategoryForTransactions(type, transactions) {
+  const byId = new Map(state.categories.map((category) => [category.id, { ...category, total: 0 }]));
+  transactions
+    .filter((transaction) => transaction.type === type)
+    .forEach((transaction) => {
+      const category = byId.get(transaction.categoryId);
+      if (category) category.total += transactionValue(transaction);
+    });
+  return [...byId.values()].filter((category) => category.total > 0);
+}
+
+function percentChange(current, previous) {
+  if (previous <= 0) return current > 0 ? 100 : 0;
+  return Math.round(((current - previous) / previous) * 100);
+}
+
+function changeText(current, previous, kind = 'neutral') {
+  if (previous <= 0 && current > 0) return 'Sem base no mes anterior';
+  const change = percentChange(current, previous);
+  if (current === previous) return 'Estavel vs mes anterior';
+  const direction = change > 0 ? 'acima' : 'abaixo';
+  const prefix = kind === 'expense' && change > 0 ? 'Atencao: ' : '';
+  return `${prefix}${Math.abs(change)}% ${direction} do mes anterior`;
+}
+
+function comparisonText(current, previous, label) {
+  if (previous <= 0 && current > 0) return `${label} sem base em ${previousMonth}`;
+  const change = percentChange(current, previous);
+  return `${change >= 0 ? '+' : ''}${change}% vs ${previousMonth}`;
+}
 
 function icon(name) {
   const icons = {
@@ -550,36 +623,68 @@ function manageView() {
 
 function reportsView() {
   const reportType = state.reportType || 'EXPENSE';
-  const incomeByCategory = totalsByCategory('INCOME').sort((a, b) => b.total - a.total);
-  const expenseByCategory = totalsByCategory('EXPENSE').sort((a, b) => b.total - a.total);
+  const currentTransactions = scopedTransactionsForMonth(0);
+  const previousTransactions = scopedTransactionsForMonth(-1);
+  const currentTotals = totalsForTransactions(currentTransactions);
+  const previousTotals = totalsForTransactions(previousTransactions);
+  const incomeByCategory = totalsByCategoryForTransactions('INCOME', currentTransactions).sort((a, b) => b.total - a.total);
+  const expenseByCategory = totalsByCategoryForTransactions('EXPENSE', currentTransactions).sort((a, b) => b.total - a.total);
   const categories = reportType === 'INCOME' ? incomeByCategory : expenseByCategory;
   const reportTotal = categories.reduce((sum, item) => sum + item.total, 0);
-  const incomeTotal = incomeByCategory.reduce((sum, item) => sum + item.total, 0);
-  const expenseTotal = expenseByCategory.reduce((sum, item) => sum + item.total, 0);
   const topCategory = categories[0];
   const topPercent = topCategory && reportTotal > 0 ? Math.round((topCategory.total / reportTotal) * 100) : 0;
   const reportLabel = reportType === 'INCOME' ? 'Receitas' : 'Gastos';
+  const previousSelectedTotal = reportType === 'INCOME' ? previousTotals.income : previousTotals.expense;
   const reportInsight = topCategory
     ? `${topCategory.name} representa ${topPercent}% de ${reportLabel.toLowerCase()} no periodo.`
     : `Sem ${reportLabel.toLowerCase()} para analisar neste periodo.`;
+  const balanceInsight =
+    currentTotals.balance >= 0
+      ? `Resultado positivo de ${money.format(currentTotals.balance)} em ${currentMonth}.`
+      : `Resultado negativo de ${money.format(Math.abs(currentTotals.balance))}; vale revisar gastos recorrentes.`;
+  const expenseInsight =
+    previousTotals.expense <= 0 && currentTotals.expense > 0
+      ? `Gastos registrados em ${currentMonth}, ainda sem base de comparacao com ${previousMonth}.`
+      : currentTotals.expense > previousTotals.expense
+        ? `Gastos subiram ${Math.abs(percentChange(currentTotals.expense, previousTotals.expense))}% contra ${previousMonth}.`
+        : `Gastos ficaram ${Math.abs(percentChange(currentTotals.expense, previousTotals.expense))}% abaixo de ${previousMonth}.`;
+  const incomeInsight =
+    previousTotals.income <= 0 && currentTotals.income > 0
+      ? `Receitas registradas em ${currentMonth}, ainda sem base de comparacao com ${previousMonth}.`
+      : currentTotals.income >= previousTotals.income
+        ? `Receitas evoluiram ${Math.abs(percentChange(currentTotals.income, previousTotals.income))}% no comparativo mensal.`
+        : `Receitas cairam ${Math.abs(percentChange(currentTotals.income, previousTotals.income))}% no comparativo mensal.`;
   return `
     <div class="report-tabs">
       ${reportTab('EXPENSE', 'Gastos')}
       ${reportTab('INCOME', 'Receitas')}
     </div>
     <div class="period-switch">
-      <button type="button">Abril</button>
+      <button type="button">${previousMonth}</button>
       <button class="active" type="button">${currentMonth}</button>
-      <button type="button">Junho</button>
+      <button type="button">${nextMonth}</button>
     </div>
     <article class="report-summary">
       <div class="report-summary-item">
         <span>Receitas</span>
-        <strong class="income">${money.format(incomeTotal)}</strong>
+        <strong class="income">${money.format(currentTotals.income)}</strong>
+        <small>${changeText(currentTotals.income, previousTotals.income)}</small>
       </div>
       <div class="report-summary-item">
         <span>Gastos</span>
-        <strong class="expense">${money.format(expenseTotal)}</strong>
+        <strong class="expense">${money.format(currentTotals.expense)}</strong>
+        <small>${changeText(currentTotals.expense, previousTotals.expense, 'expense')}</small>
+      </div>
+    </article>
+    <article class="report-comparison">
+      <div>
+        <span class="eyebrow">Comparativo mensal</span>
+        <h2>${reportLabel} em ${currentMonth}</h2>
+        <p>${comparisonText(reportTotal, previousSelectedTotal, reportLabel)}</p>
+      </div>
+      <div class="comparison-bars" aria-hidden="true">
+        <span style="height:${comparisonBarHeight(previousSelectedTotal, reportTotal)}%"></span>
+        <span class="active" style="height:${comparisonBarHeight(reportTotal, previousSelectedTotal)}%"></span>
       </div>
     </article>
     <article class="report-insight">
@@ -587,6 +692,19 @@ function reportsView() {
       <div>
         <strong>Insight do periodo</strong>
         <p>${escapeHtml(reportInsight)}</p>
+      </div>
+    </article>
+    <article class="card report-advice">
+      <div class="panel-title">
+        <div>
+          <span class="eyebrow">Leitura rapida</span>
+          <h2>O que observar</h2>
+          <p class="report-advice-summary">${escapeHtml(balanceInsight)}</p>
+        </div>
+      </div>
+      <div class="advice-list">
+        <div><span class="row-icon income-bg">${icon('reports')}</span><p>${escapeHtml(incomeInsight)}</p></div>
+        <div><span class="row-icon expense-bg">${icon('target')}</span><p>${escapeHtml(expenseInsight)}</p></div>
       </div>
     </article>
     <div class="split">
@@ -622,6 +740,11 @@ function reportsView() {
 
 function reportTab(type, label) {
   return `<button class="${state.reportType === type ? 'active' : ''}" type="button" data-report-type="${type}">${label}</button>`;
+}
+
+function comparisonBarHeight(value, otherValue) {
+  const max = Math.max(Number(value || 0), Number(otherValue || 0), 1);
+  return Math.max(18, Math.round((Number(value || 0) / max) * 100));
 }
 
 function donutStyle(items, total) {
