@@ -174,7 +174,10 @@ export function viewHtml() {
 
 function dashboardView() {
   const rows = scopedTransactions().slice(0, 8).map(transactionRow).join('');
-  const assistantCopy = assistantInsight();
+  const assistant = assistantInsight();
+  const assistantActionAttr = assistant.manageSection
+    ? `data-manage-section="${assistant.manageSection}"`
+    : `data-tab-jump="${assistant.target}"`;
   const categories = state.categories
     .map(
       (category) =>
@@ -186,11 +189,13 @@ function dashboardView() {
   return `
     ${onboarding}
     ${dashboardInsights()}
-    <article class="assistant-card">
+    <article class="assistant-card ${assistant.tone}">
       <div class="assistant-icon">${icon('chat')}</div>
       <div>
-        <strong>EconoAssistente</strong>
-        <p>${escapeHtml(assistantCopy)}</p>
+        <span>EconoAssistente</span>
+        <strong>${escapeHtml(assistant.title)}</strong>
+        <p>${escapeHtml(assistant.copy)}</p>
+        <button class="assistant-action" type="button" ${assistantActionAttr}>${escapeHtml(assistant.action)}</button>
       </div>
     </article>
     <div class="split">
@@ -208,22 +213,104 @@ function dashboardView() {
 
 function assistantInsight() {
   const totals = scopedTotals();
+  const transactions = scopedTransactions();
   const expenses = totalsByCategory('EXPENSE').sort((a, b) => b.total - a.total);
   const topExpense = expenses[0];
+  const topPercent = topExpense && totals.expense > 0 ? Math.round((topExpense.total / totals.expense) * 100) : 0;
+  const budget = Number(state.budgets[state.scope] || 0);
+  const budgetUsed = budget > 0 ? Math.round((totals.expense / budget) * 100) : 0;
+  const scopedWallets = state.wallets.filter((wallet) => !wallet.scope || wallet.scope === state.scope);
+  const scopedCards = state.cards.filter((card) => !card.scope || card.scope === state.scope);
 
-  if (!scopedTransactions().length) {
-    return 'Registre uma receita ou gasto para eu te mostrar alertas e oportunidades.';
+  if (!transactions.length) {
+    return {
+      action: 'Criar lancamento',
+      copy: 'Comece registrando uma receita ou gasto. Depois eu consigo apontar categorias, limites e tendencias.',
+      target: 'launch',
+      title: 'Vamos criar sua primeira leitura',
+      tone: 'neutral',
+    };
   }
 
   if (totals.balance < 0) {
-    return `Seu resultado esta negativo em ${money.format(Math.abs(totals.balance))}. Revise os maiores gastos.`;
+    return {
+      action: 'Ver gastos',
+      copy: `O resultado esta negativo em ${money.format(Math.abs(totals.balance))}. Comece revisando ${topExpense?.name || 'os maiores gastos'} antes de novos lancamentos.`,
+      target: 'reports',
+      title: 'Alerta de resultado negativo',
+      tone: 'warning',
+    };
+  }
+
+  if (budget > 0 && budgetUsed >= 90) {
+    return {
+      action: 'Ajustar limite',
+      copy: `Voce ja usou ${budgetUsed}% do limite de ${scopeLabel().toLowerCase()}. Reduza gastos variaveis ou aumente o limite se ele estiver defasado.`,
+      target: 'budget',
+      title: 'Limite quase no teto',
+      tone: 'warning',
+    };
+  }
+
+  if (topExpense && topPercent >= 45) {
+    return {
+      action: 'Analisar categoria',
+      copy: `${topExpense.name} concentra ${topPercent}% dos gastos. Se for recorrente, vale definir uma meta especifica para essa categoria.`,
+      target: 'reports',
+      title: 'Gasto concentrado detectado',
+      tone: 'attention',
+    };
+  }
+
+  if (!budget && totals.expense > 0) {
+    return {
+      action: 'Definir limite',
+      copy: `Voce ja tem ${money.format(totals.expense)} em gastos no periodo. Criar um limite ajuda a acompanhar o ritmo antes do fim do mes.`,
+      target: 'budget',
+      title: 'Falta um teto de gastos',
+      tone: 'neutral',
+    };
+  }
+
+  if (state.scope === 'BUSINESS' && !state.channels.length) {
+    return {
+      action: 'Criar canal',
+      copy: 'No modo negocio, canais de venda deixam claro de onde vem o faturamento e quais taxas pesam mais.',
+      manageSection: 'channels',
+      target: 'more',
+      title: 'Separe seus canais de venda',
+      tone: 'neutral',
+    };
+  }
+
+  if (!scopedWallets.length && !scopedCards.length) {
+    return {
+      action: 'Gerenciar contas',
+      copy: 'Cadastre banco, carteira ou cartao para entender onde o dinheiro entra, sai e fica parado.',
+      manageSection: 'accounts',
+      target: 'more',
+      title: 'Organize os meios de pagamento',
+      tone: 'neutral',
+    };
   }
 
   if (topExpense) {
-    return `${topExpense.name} e sua maior categoria de gasto neste periodo.`;
+    return {
+      action: 'Ver relatorios',
+      copy: `${topExpense.name} e a maior categoria agora, mas seu resultado segue positivo em ${money.format(totals.balance)}.`,
+      target: 'reports',
+      title: 'Controle em bom ritmo',
+      tone: 'positive',
+    };
   }
 
-  return `Seu saldo esta positivo em ${money.format(totals.balance)} neste periodo.`;
+  return {
+    action: 'Ver fluxo',
+    copy: `Saldo positivo de ${money.format(totals.balance)} neste periodo. Continue registrando para eu comparar melhor os proximos meses.`,
+    target: 'transactions',
+    title: 'Saldo positivo',
+    tone: 'positive',
+  };
 }
 
 function dashboardInsights() {
