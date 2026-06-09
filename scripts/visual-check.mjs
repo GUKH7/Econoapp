@@ -207,6 +207,16 @@ async function screenshot(page, name) {
   await page.screenshot({ path: path.join(outputDir, `${name}.png`), fullPage: true });
 }
 
+async function viewportScreenshot(page, name) {
+  await page.waitForTimeout(350);
+  await page.screenshot({ path: path.join(outputDir, `${name}.png`), fullPage: false });
+}
+
+async function screenshotBottomViewport(page, name) {
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  await viewportScreenshot(page, `${name}-bottom`);
+}
+
 async function disableMotion(page) {
   await page.addStyleTag({
     content: `
@@ -275,12 +285,16 @@ async function runViewport(browser, baseUrl, name, viewport) {
   await assertText(page, 'Resumo');
   await assertVisible(page, '.balance-card', 'card de saldo');
   await screenshot(page, `${name}-dashboard`);
+  await screenshotBottomViewport(page, `${name}-dashboard`);
+  await page.evaluate(() => window.scrollTo(0, 0));
 
   await page.locator('nav.tabs [data-tab="reports"]').click();
   await assertText(page, 'Por categoria');
   await assertVisible(page, '.donut-chart', 'grafico donut');
   await assertText(page, 'Maior categoria');
   await screenshot(page, `${name}-reports-expenses`);
+  await screenshotBottomViewport(page, `${name}-reports-expenses`);
+  await page.evaluate(() => window.scrollTo(0, 0));
 
   await page.locator('[data-report-type="INCOME"]').click();
   await assertText(page, 'Receitas');

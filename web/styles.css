@@ -18,6 +18,10 @@
   --gold: #f59e0b;
   --blue: #3b82f6;
   --purple: #8b5cf6;
+  --bottom-nav-height: 86px;
+  --fab-size: 64px;
+  --fab-bottom: 52px;
+  --content-safe-bottom: 156px;
   --shadow: 0 18px 48px rgba(31, 41, 55, 0.1);
   color-scheme: light;
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -194,7 +198,7 @@ button {
   max-width: 640px;
   min-height: 100dvh;
   overflow-x: hidden;
-  padding: 18px 16px 154px;
+  padding: 18px 16px var(--content-safe-bottom);
   width: 100%;
 }
 
@@ -519,7 +523,7 @@ button {
 .page-track {
   display: grid;
   gap: 14px;
-  padding-bottom: 36px;
+  padding-bottom: calc(var(--content-safe-bottom) - var(--bottom-nav-height));
 }
 
 [data-swipe-track] {
@@ -695,7 +699,8 @@ button {
   grid-template-columns: repeat(5, minmax(0, 1fr));
   left: 50%;
   max-width: 640px;
-  padding: 10px 10px max(10px, env(safe-area-inset-bottom));
+  min-height: var(--bottom-nav-height);
+  padding: 8px 10px max(8px, env(safe-area-inset-bottom));
   position: fixed;
   transform: translateX(-50%);
   width: 100%;
@@ -713,7 +718,7 @@ button {
   font-weight: 800;
   gap: 3px;
   justify-items: center;
-  min-height: 58px;
+  min-height: 54px;
   padding: 4px;
   transition: color 150ms ease, transform 150ms ease, background 150ms ease;
 }
@@ -746,18 +751,18 @@ button {
   background: var(--green);
   border: 0;
   border-radius: 999px;
-  bottom: 64px;
+  bottom: var(--fab-bottom);
   box-shadow: 0 18px 36px rgba(34, 197, 94, 0.34);
   color: white;
   display: flex;
-  font-size: 36px;
-  height: 72px;
+  font-size: 32px;
+  height: var(--fab-size);
   justify-content: center;
   left: 50%;
   line-height: 1;
   position: fixed;
   transform: translateX(-50%);
-  width: 72px;
+  width: var(--fab-size);
   transition: transform 140ms ease, background 140ms ease;
   z-index: 40;
 }
@@ -954,7 +959,7 @@ button {
 }
 
 .fab-actions {
-  bottom: 146px;
+  bottom: calc(var(--fab-bottom) + var(--fab-size) + 18px);
   display: grid;
   gap: 16px;
   left: 50%;
@@ -1896,7 +1901,7 @@ select:focus {
 @media (min-width: 780px) {
   .shell {
     max-width: 980px;
-    padding-bottom: 128px;
+    padding-bottom: 132px;
   }
 
   .split {
@@ -1905,6 +1910,13 @@ select:focus {
 }
 
 @media (max-width: 430px) {
+  :root {
+    --bottom-nav-height: 76px;
+    --fab-size: 58px;
+    --fab-bottom: 44px;
+    --content-safe-bottom: 172px;
+  }
+
   .shell {
     padding-left: 14px;
     padding-right: 14px;
