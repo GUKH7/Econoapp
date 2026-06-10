@@ -76,6 +76,7 @@ export interface UserResponse {
   name: string;
   phone: string;
   email: string | null;
+  isWhatsappAdmin?: boolean;
 }
 
 export interface AuthTokensResponse {

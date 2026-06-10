@@ -44,6 +44,11 @@ export function moreView() {
           <button class="menu-item" type="button" data-tab-jump="launch"><span class="tab-icon">+/-</span><span>Lançamentos</span><span>></span></button>
           <button class="menu-item" type="button" data-manage-section="accounts"><span class="tab-icon">${icon('wallet')}</span><span>Contas e cartões</span><span>></span></button>
           <button class="menu-item" type="button" data-manage-section="categories"><span class="tab-icon">${icon('tag')}</span><span>Categorias e canais</span><span>></span></button>
+          ${
+            state.user?.isWhatsappAdmin
+              ? `<button class="menu-item" type="button" data-manage-section="whatsapp"><span class="tab-icon">${icon('chat')}</span><span>WhatsApp</span><span>></span></button>`
+              : ''
+          }
           <button class="menu-item" type="button" data-tab-jump="budget"><span class="tab-icon">${icon('target')}</span><span>Limites</span><span>></span></button>
         </div>
       </article>
@@ -61,6 +66,9 @@ export function manageView() {
     { id: 'cards', label: 'Cartoes', meta: `${scopedCards.length} cadastrados`, icon: icon('card') },
     { id: 'categories', label: 'Categorias', meta: `${state.categories.length} itens`, icon: icon('tag') },
     { id: 'channels', label: 'Canais', meta: `${state.channels.length} meios`, icon: icon('shop') },
+    ...(state.user?.isWhatsappAdmin
+      ? [{ id: 'whatsapp', label: 'WhatsApp', meta: whatsappStatusLabel(), icon: icon('chat') }]
+      : []),
   ];
   const nav = sections
     .map(
@@ -153,17 +161,65 @@ export function manageView() {
       </article>
   `;
 
+  const whatsapp = state.whatsappStatus;
+  const qrCode = whatsapp?.status === 'aguardando_qr' && whatsapp.qrcode ? whatsapp.qrcode : '';
+  const whatsappPanel = `
+    <article class="card manage-panel">
+        <div class="panel-title">
+          <h2>WhatsApp</h2>
+          <span class="status-badge ${whatsapp?.status === 'conectado' ? 'connected' : ''}">${escapeHtml(whatsappStatusLabel())}</span>
+        </div>
+        <div class="whatsapp-status">
+          ${
+            qrCode
+              ? `<img class="whatsapp-qr" src="${escapeHtml(qrCode)}" alt="QR Code para conectar o WhatsApp" />`
+              : `<div class="whatsapp-placeholder">${state.whatsappLoading ? 'Carregando...' : whatsapp?.status === 'conectado' ? 'Conectado' : 'Sem QR Code disponível'}</div>`
+          }
+          <p class="row-meta">${state.whatsappError ? escapeHtml(state.whatsappError) : whatsappHelpText()}</p>
+        </div>
+        <div class="actions-row">
+          <button class="button secondary" type="button" data-whatsapp-refresh>${state.whatsappLoading ? 'Atualizando...' : 'Atualizar status'}</button>
+          <button class="button" type="button" data-whatsapp-restart>Reiniciar conexão</button>
+        </div>
+        <form class="form" data-whatsapp-message-form style="margin-top:16px">
+          <label class="field">Telefone com DDI<input name="phone" inputmode="tel" placeholder="5511999999999" required /></label>
+          <label class="field">Mensagem<textarea name="message" rows="3" placeholder="Mensagem de teste" required></textarea></label>
+          <button class="button" type="submit" ${whatsapp?.status === 'conectado' ? '' : 'disabled'}>Enviar mensagem</button>
+        </form>
+      </article>
+  `;
+
   const panels = {
     accounts: accountsPanel,
     cards: cardsPanel,
     categories: categoriesPanel,
     channels: channelsPanel,
+    whatsapp: whatsappPanel,
   };
 
   return `
     <section class="manage-shell">
       <div class="manage-grid">${nav}</div>
-      ${panels[section] || accountsPanel}
+      ${state.user?.isWhatsappAdmin || section !== 'whatsapp' ? panels[section] || accountsPanel : accountsPanel}
     </section>
   `;
+}
+
+function whatsappStatusLabel() {
+  const status = state.whatsappStatus?.status;
+  const labels = {
+    aguardando_qr: 'Aguardando QR',
+    conectado: 'Conectado',
+    iniciando: 'Iniciando',
+    reconectando: 'Reconectando',
+  };
+  return labels[status] || 'Não consultado';
+}
+
+function whatsappHelpText() {
+  const status = state.whatsappStatus?.status;
+  if (status === 'aguardando_qr') return 'Escaneie o QR Code no WhatsApp para conectar.';
+  if (status === 'conectado') return 'A API WhatsApp está pronta para enviar mensagens.';
+  if (status === 'iniciando' || status === 'reconectando') return 'Aguarde alguns instantes e atualize o status.';
+  return 'Consulte o status para verificar a conexão com a API WhatsApp.';
 }

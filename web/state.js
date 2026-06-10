@@ -28,6 +28,9 @@ export const state = {
   transactionFilter: 'ALL',
   transactionSearch: '',
   reportType: 'EXPENSE',
+  whatsappStatus: null,
+  whatsappLoading: false,
+  whatsappError: '',
 };
 
 export const app = document.querySelector('#app');

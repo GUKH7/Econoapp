@@ -16,6 +16,7 @@ enum TransactionType {
 enum TransactionSource {
   MANUAL
   TELEGRAM
+  WHATSAPP
   AUDIO
 }
 

@@ -16,6 +16,7 @@ import { AccountModule } from '@/modules/accounts/account.module';
 import { DashboardModule } from '@/modules/dashboard/dashboard.module';
 import { HealthModule } from '@/modules/health/health.module';
 import { TelegramModule } from '@/modules/telegram/telegram.module';
+import { WhatsappModule } from '@/modules/whatsapp/whatsapp.module';
 
 @Module({
   imports: [
@@ -52,6 +53,7 @@ import { TelegramModule } from '@/modules/telegram/telegram.module';
     AccountModule,
 
     TelegramModule,
+    WhatsappModule,
     DashboardModule,
     HealthModule,
   ],

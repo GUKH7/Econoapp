@@ -108,7 +108,13 @@ export class AuthService {
 
   async me(
     userId: string,
-  ): Promise<{ id: string; name: string; phone: string; email: string | null }> {
+  ): Promise<{
+    id: string;
+    name: string;
+    phone: string;
+    email: string | null;
+    isWhatsappAdmin: boolean;
+  }> {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) {
       throw new NotFoundException('Usuário não encontrado');
@@ -119,6 +125,7 @@ export class AuthService {
       name: user.name,
       phone: user.phone,
       email: user.email,
+      isWhatsappAdmin: isWhatsappAdminPhone(user.phone),
     };
   }
 
@@ -176,4 +183,16 @@ export class AuthService {
 
     return { accessToken, refreshToken };
   }
+}
+
+export function isWhatsappAdminPhone(phone: string): boolean {
+  const admins = new Set(env.WHATSAPP_ADMIN_PHONES.split(',').flatMap(phoneCandidates));
+  if (!admins.size) return false;
+  return phoneCandidates(phone).some((candidate) => admins.has(candidate));
+}
+
+function phoneCandidates(phone: string): string[] {
+  const normalized = phone.replace(/\D/g, '');
+  const withoutBrazilCode = normalized.startsWith('55') ? normalized.slice(2) : normalized;
+  return [...new Set([normalized, withoutBrazilCode, `55${withoutBrazilCode}`].filter(Boolean))];
 }

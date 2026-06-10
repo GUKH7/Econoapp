@@ -342,6 +342,9 @@ function bindViewEvents() {
         state.manageSection = button.dataset.manageSection;
         state.fabOpen = false;
       });
+      if (button.dataset.manageSection === 'whatsapp' && !state.whatsappStatus) {
+        refreshWhatsappStatus();
+      }
     });
   });
 
@@ -386,6 +389,15 @@ function bindViewEvents() {
   document.querySelector('[data-wallet-form]')?.addEventListener('submit', handleWalletSubmit);
   document.querySelector('[data-card-form]')?.addEventListener('submit', handleCardSubmit);
   document.querySelector('[data-budget-form]')?.addEventListener('submit', handleBudgetSubmit);
+  document.querySelector('[data-whatsapp-refresh]')?.addEventListener('click', () => {
+    refreshWhatsappStatus();
+  });
+  document.querySelector('[data-whatsapp-restart]')?.addEventListener('click', () => {
+    restartWhatsapp();
+  });
+  document
+    .querySelector('[data-whatsapp-message-form]')
+    ?.addEventListener('submit', handleWhatsappMessageSubmit);
 
   document.querySelectorAll('[data-color]').forEach((button) => {
     button.addEventListener('click', (event) => {
@@ -688,6 +700,51 @@ function handleBudgetSubmit(event) {
   state.budgets[state.scope] = parseAmount(data.budget);
   saveBudgets();
   renderApp();
+}
+
+async function refreshWhatsappStatus() {
+  state.whatsappLoading = true;
+  state.whatsappError = '';
+  renderApp();
+  try {
+    const response = await api().whatsappStatus();
+    state.whatsappStatus = response.data;
+  } catch (error) {
+    state.whatsappError = error.message;
+  } finally {
+    state.whatsappLoading = false;
+    renderApp();
+  }
+}
+
+async function restartWhatsapp() {
+  state.whatsappLoading = true;
+  state.whatsappError = '';
+  renderApp();
+  try {
+    const response = await api().whatsappRestart();
+    state.whatsappStatus = response.data;
+  } catch (error) {
+    state.whatsappError = error.message;
+  } finally {
+    state.whatsappLoading = false;
+    renderApp();
+  }
+}
+
+async function handleWhatsappMessageSubmit(event) {
+  event.preventDefault();
+  const data = Object.fromEntries(new FormData(event.currentTarget));
+  try {
+    await api().sendWhatsappMessage({
+      phone: String(data.phone).replace(/\D/g, ''),
+      message: String(data.message).trim(),
+    });
+    event.currentTarget.reset();
+    alert('Mensagem enviada pelo WhatsApp.');
+  } catch (error) {
+    alert(error.message);
+  }
 }
 
 bootstrap();

@@ -53,6 +53,10 @@ export function api() {
       request('/accounts', { method: 'POST', body: JSON.stringify(payload) }),
     createCard: (payload) =>
       request('/accounts/cards', { method: 'POST', body: JSON.stringify(payload) }),
+    whatsappStatus: () => request('/whatsapp/status'),
+    whatsappRestart: () => request('/whatsapp/restart'),
+    sendWhatsappMessage: (payload) =>
+      request('/whatsapp/send-message', { method: 'POST', body: JSON.stringify(payload) }),
   };
 }
 

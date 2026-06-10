@@ -246,7 +246,8 @@
 }
 
 input:focus,
-select:focus {
+select:focus,
+textarea:focus {
   border-color: var(--green-bright);
   box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.14);
 }
@@ -317,6 +318,57 @@ select:focus {
   gap: 8px;
   min-height: 36px;
   padding: 0 12px;
+}
+
+.status-badge {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 950;
+  padding: 7px 10px;
+}
+
+.status-badge.connected {
+  background: var(--green-soft);
+  border-color: #bbf7d0;
+  color: var(--green-dark);
+}
+
+.whatsapp-status {
+  display: grid;
+  gap: 12px;
+  justify-items: center;
+  margin-bottom: 14px;
+  text-align: center;
+}
+
+.whatsapp-qr {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  max-width: min(280px, 100%);
+  width: 100%;
+}
+
+.whatsapp-placeholder {
+  align-items: center;
+  background: var(--surface-2);
+  border: 1px dashed var(--line);
+  border-radius: 16px;
+  color: var(--muted);
+  display: flex;
+  font-weight: 900;
+  justify-content: center;
+  min-height: 180px;
+  padding: 18px;
+  width: 100%;
+}
+
+.actions-row {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .dot {

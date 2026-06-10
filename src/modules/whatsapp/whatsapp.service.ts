@@ -1,0 +1,422 @@
+import { BadRequestException, Inject, Injectable, ServiceUnavailableException } from '@nestjs/common';
+import { FinancialScope, Transaction, TransactionSource, TransactionType } from '@prisma/client';
+import { env } from '@/config/env';
+import { PrismaService } from '@/config/database';
+import { GeminiService } from '@/services/ai/gemini.service';
+import { TransactionService } from '@/modules/transactions/transaction.service';
+import { SendWhatsappMessageDto } from './dto/send-whatsapp-message.dto';
+import { WhatsappWebhookDto } from './dto/whatsapp-webhook.dto';
+
+type WhatsappStatus = 'aguardando_qr' | 'conectado' | 'iniciando' | 'reconectando';
+
+export interface WhatsappStatusResponse {
+  status: WhatsappStatus;
+  qrcode?: string;
+}
+
+interface PendingMessage {
+  originalText: string;
+  askedAt: number;
+}
+
+@Injectable()
+export class WhatsappService {
+  private readonly baseUrl = env.WHATSAPP_BOT_API_URL.replace(/\/+$/, '');
+  private readonly sendMessagePath = this.normalizePath(env.WHATSAPP_BOT_SEND_MESSAGE_PATH);
+  private readonly pendingByPhone = new Map<string, PendingMessage>();
+
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(GeminiService) private readonly geminiService: GeminiService,
+    @Inject(TransactionService) private readonly transactionService: TransactionService,
+  ) {}
+
+  async getStatus(): Promise<WhatsappStatusResponse> {
+    const response = await this.request<unknown>('/status');
+    return this.normalizeStatusResponse(response);
+  }
+
+  async restart(): Promise<WhatsappStatusResponse> {
+    const response = await this.request<unknown>('/restart');
+    return this.normalizeStatusResponse(response);
+  }
+
+  async sendMessage(dto: SendWhatsappMessageDto): Promise<unknown> {
+    const phone = String(dto.phone || dto.number || dto.to || '').replace(/\D/g, '');
+    const message = String(dto.message || dto.text || '').trim();
+
+    if (!phone) throw new BadRequestException('Informe o telefone com DDI, exemplo: 5511999999999.');
+    if (!message) throw new BadRequestException('Informe a mensagem para envio.');
+    if (!phone.startsWith('55') || phone.length < 12) {
+      throw new BadRequestException('O telefone deve incluir DDI do Brasil, exemplo: 5511999999999.');
+    }
+
+    const status = await this.getStatus();
+    if (status.status !== 'conectado') {
+      throw new ServiceUnavailableException('WhatsApp nao esta pronto.');
+    }
+
+    return this.request(this.sendMessagePath, {
+      method: 'POST',
+      body: JSON.stringify({ phone, message }),
+    });
+  }
+
+  async handleWebhook(dto: WhatsappWebhookDto): Promise<{ phone: string; reply: string }> {
+    const phone = this.extractPhone(dto);
+    const message = this.extractMessage(dto);
+
+    if (!phone || !message) {
+      throw new BadRequestException('Webhook WhatsApp precisa informar telefone e mensagem.');
+    }
+
+    const user = await this.findUserByPhone(phone);
+    if (!user) {
+      const reply =
+        'Nao encontrei seu cadastro no EconoApp. Entre no app e cadastre este telefone para usar o chatbot.';
+      await this.safeReply(phone, reply);
+      return { phone, reply };
+    }
+
+    const pending = this.pendingByPhone.get(phone);
+    const textToProcess = pending ? `${pending.originalText}. ${message}` : message;
+    this.pendingByPhone.delete(phone);
+
+    const reply = await this.processUserMessage(user.id, phone, textToProcess);
+    await this.safeReply(phone, reply);
+    return { phone, reply };
+  }
+
+  private async processUserMessage(userId: string, phone: string, message: string): Promise<string> {
+    if (this.isQuestion(message)) {
+      return this.answerQuestion(userId, message);
+    }
+
+    if (this.needsMoreDescription(message)) {
+      this.pendingByPhone.set(phone, { originalText: message, askedAt: Date.now() });
+      return message.toLowerCase().includes('vendi')
+        ? 'Foi venda de qual produto ou canal?'
+        : 'Esse gasto foi com o que?';
+    }
+
+    const [channels, categories] = await Promise.all([
+      this.prisma.salesChannel.findMany({ where: { userId }, select: { name: true } }),
+      this.prisma.category.findMany({ where: { userId }, select: { name: true } }),
+    ]);
+
+    const extracted = await this.geminiService.extractFinancialData(message, {
+      channelNames: channels.map((item) => item.name),
+      categoryNames: categories.map((item) => item.name),
+    });
+
+    if (extracted.confidence <= 0 || extracted.amount <= 0) {
+      return 'Nao entendi se isso e uma receita, gasto, venda ou pergunta. Pode mandar com valor e descricao?';
+    }
+
+    const categoryHint = String(extracted.categoryHint || '').trim();
+    if (!categoryHint || this.normalizeText(categoryHint) === 'nao_especificado') {
+      this.pendingByPhone.set(phone, { originalText: message, askedAt: Date.now() });
+      return extracted.type === 'INCOME'
+        ? 'Essa receita foi de que produto, servico ou origem?'
+        : 'Esse gasto foi com o que?';
+    }
+
+    const channel = await this.resolveChannel(userId, extracted.channelHint);
+    const category = await this.resolveCategory(userId, categoryHint, extracted.type);
+    const scope = this.inferScope(message, Boolean(channel));
+
+    const transaction = await this.transactionService.create(userId, {
+      description: message,
+      amount: extracted.amount,
+      type: extracted.type as TransactionType,
+      source: TransactionSource.WHATSAPP,
+      scope,
+      categoryId: category.id,
+      ...(channel ? { channelId: channel.id } : {}),
+    });
+
+    return this.transactionConfirmation(transaction, category.name, channel?.name, scope);
+  }
+
+  private async answerQuestion(userId: string, message: string): Promise<string> {
+    const lower = this.normalizeText(message);
+    const scope = lower.includes('negocio') || lower.includes('loja') ? FinancialScope.BUSINESS : undefined;
+    const { start, end } = this.currentMonthRange();
+
+    if (lower.includes('shopee') || lower.includes('instagram') || lower.includes('mercado livre')) {
+      const channelName = lower.includes('shopee')
+        ? 'Shopee'
+        : lower.includes('instagram')
+          ? 'Instagram'
+          : 'Mercado Livre';
+      const result = await this.totalByChannel(userId, channelName, start, end);
+      return `Neste mes voce vendeu ${this.formatMoney(result)} em ${channelName}.`;
+    }
+
+    if (lower.includes('maior despesa')) {
+      const largest = await this.prisma.transaction.findFirst({
+        where: { userId, type: 'EXPENSE', date: { gte: start, lte: end }, ...(scope ? { scope } : {}) },
+        orderBy: { amount: 'desc' },
+        include: { category: true },
+      });
+      if (!largest) return 'Voce ainda nao tem despesas registradas neste mes.';
+      return `Sua maior despesa do mes foi ${largest.description}: ${this.formatMoney(Number(largest.amount))} em ${largest.category.name}.`;
+    }
+
+    if (lower.includes('lucro') || lower.includes('negocio')) {
+      const totals = await this.monthTotals(userId, start, end, FinancialScope.BUSINESS);
+      return `Seu negocio esta com saldo de ${this.formatMoney(totals.balance)} neste mes.\nReceitas: ${this.formatMoney(totals.income)}\nGastos: ${this.formatMoney(totals.expense)}.`;
+    }
+
+    const totals = await this.monthTotals(userId, start, end, scope);
+    if (lower.includes('gastei') || lower.includes('gasto') || lower.includes('despesa')) {
+      const topCategory = await this.topExpenseCategory(userId, start, end, scope);
+      return [
+        `Neste mes voce gastou ${this.formatMoney(totals.expense)}.`,
+        topCategory ? `Maior categoria: ${topCategory.name} - ${this.formatMoney(topCategory.total)}.` : '',
+        `Saldo atual: ${this.formatMoney(totals.balance)}.`,
+      ]
+        .filter(Boolean)
+        .join('\n');
+    }
+
+    return `Resumo do mes:\nReceitas: ${this.formatMoney(totals.income)}\nGastos: ${this.formatMoney(totals.expense)}\nSaldo: ${this.formatMoney(totals.balance)}.`;
+  }
+
+  private async findUserByPhone(phone: string) {
+    const normalized = phone.replace(/\D/g, '');
+    const withoutBrazilCode = normalized.startsWith('55') ? normalized.slice(2) : normalized;
+    const candidates = [...new Set([normalized, withoutBrazilCode, `55${withoutBrazilCode}`])];
+    return this.prisma.user.findFirst({
+      where: { OR: candidates.map((candidate) => ({ phone: candidate })) },
+    });
+  }
+
+  private async resolveCategory(userId: string, hint: string, type: string) {
+    const normalizedHint = this.normalizeText(hint);
+    const existing = await this.prisma.category.findFirst({ where: { userId, name: { equals: hint, mode: 'insensitive' } } });
+    if (existing) return existing;
+
+    const fallbackName =
+      type === 'EXPENSE' && normalizedHint.includes('mercado') ? 'Alimentacao' : this.titleCase(hint);
+    return this.prisma.category.create({
+      data: { userId, name: fallbackName, color: type === 'INCOME' ? '#22C55E' : '#EF4444' },
+    });
+  }
+
+  private async resolveChannel(userId: string, hint?: string | null) {
+    if (!hint) return null;
+    const existing = await this.prisma.salesChannel.findFirst({
+      where: { userId, name: { equals: hint, mode: 'insensitive' } },
+    });
+    if (existing) return existing;
+    return this.prisma.salesChannel.create({ data: { userId, name: this.titleCase(hint), feePercent: 0 } });
+  }
+
+  private async monthTotals(userId: string, start: Date, end: Date, scope?: FinancialScope) {
+    const [income, expense] = await Promise.all([
+      this.prisma.transaction.aggregate({
+        where: { userId, type: 'INCOME', date: { gte: start, lte: end }, ...(scope ? { scope } : {}) },
+        _sum: { netAmount: true },
+      }),
+      this.prisma.transaction.aggregate({
+        where: { userId, type: 'EXPENSE', date: { gte: start, lte: end }, ...(scope ? { scope } : {}) },
+        _sum: { netAmount: true },
+      }),
+    ]);
+    const totalIncome = Number(income._sum.netAmount ?? 0);
+    const totalExpense = Number(expense._sum.netAmount ?? 0);
+    return { income: totalIncome, expense: totalExpense, balance: totalIncome - totalExpense };
+  }
+
+  private async topExpenseCategory(userId: string, start: Date, end: Date, scope?: FinancialScope) {
+    const groups = await this.prisma.transaction.groupBy({
+      by: ['categoryId'],
+      where: { userId, type: 'EXPENSE', date: { gte: start, lte: end }, ...(scope ? { scope } : {}) },
+      _sum: { amount: true },
+      orderBy: { _sum: { amount: 'desc' } },
+      take: 1,
+    });
+    const top = groups[0];
+    if (!top) return null;
+    const category = await this.prisma.category.findUnique({ where: { id: top.categoryId } });
+    return { name: category?.name ?? 'Sem categoria', total: Number(top._sum.amount ?? 0) };
+  }
+
+  private async totalByChannel(userId: string, channelName: string, start: Date, end: Date): Promise<number> {
+    const channel = await this.prisma.salesChannel.findFirst({
+      where: { userId, name: { equals: channelName, mode: 'insensitive' } },
+    });
+    if (!channel) return 0;
+    const result = await this.prisma.transaction.aggregate({
+      where: { userId, channelId: channel.id, type: 'INCOME', date: { gte: start, lte: end } },
+      _sum: { netAmount: true },
+    });
+    return Number(result._sum.netAmount ?? 0);
+  }
+
+  private transactionConfirmation(
+    transaction: Transaction,
+    categoryName: string,
+    channelName: string | undefined,
+    scope: FinancialScope,
+  ): string {
+    const type = transaction.type === 'EXPENSE' ? 'Despesa' : 'Receita';
+    return [
+      'Lancamento registrado ✅',
+      '',
+      `${type}: ${transaction.description}`,
+      `Valor: ${this.formatMoney(Number(transaction.amount))}`,
+      `Categoria: ${categoryName}`,
+      channelName ? `Canal: ${channelName}` : '',
+      `Modo: ${scope === 'BUSINESS' ? 'Negocio' : 'Pessoal'}`,
+    ]
+      .filter(Boolean)
+      .join('\n');
+  }
+
+  private async safeReply(phone: string, reply: string): Promise<void> {
+    try {
+      await this.sendMessage({ phone, message: reply });
+    } catch {
+      // O webhook deve registrar/processar a entrada mesmo se o provedor estiver temporariamente indisponivel.
+    }
+  }
+
+  private extractPhone(payload: WhatsappWebhookDto): string {
+    const data = this.asRecord(payload.data);
+    const value = payload.phone ?? payload.number ?? payload.from ?? data?.phone ?? data?.number ?? data?.from;
+    return String(value || '').replace(/\D/g, '');
+  }
+
+  private extractMessage(payload: WhatsappWebhookDto): string {
+    const data = this.asRecord(payload.data);
+    const nestedMessage = this.asRecord(data?.message);
+    const value =
+      payload.message ??
+      payload.text ??
+      payload.body ??
+      data?.text ??
+      data?.body ??
+      nestedMessage?.conversation ??
+      nestedMessage?.text;
+    return typeof value === 'string' ? value.trim() : '';
+  }
+
+  private asRecord(value: unknown): Record<string, unknown> | null {
+    return value && typeof value === 'object' ? (value as Record<string, unknown>) : null;
+  }
+
+  private normalizeStatusResponse(response: unknown): WhatsappStatusResponse {
+    const data = this.asRecord(response) ?? {};
+    const rawStatus = String(data.status || 'iniciando');
+    const qrCandidate = data.qrcode ?? data.qrCode ?? data.qr ?? data.base64;
+    const qrcode = typeof qrCandidate === 'string' && qrCandidate.trim() ? qrCandidate.trim() : undefined;
+
+    return {
+      status: this.isKnownStatus(rawStatus) ? rawStatus : 'iniciando',
+      ...(qrcode ? { qrcode } : {}),
+    };
+  }
+
+  private isKnownStatus(value: string): value is WhatsappStatus {
+    return ['aguardando_qr', 'conectado', 'iniciando', 'reconectando'].includes(value);
+  }
+
+  private isQuestion(message: string): boolean {
+    const lower = this.normalizeText(message);
+    return (
+      message.includes('?') ||
+      /^(quanto|qual|como|meu|minha|resumo|saldo|lucro)/.test(lower) ||
+      lower.includes('quanto posso gastar')
+    );
+  }
+
+  private needsMoreDescription(message: string): boolean {
+    const lower = this.normalizeText(message);
+    const hasAmount = /(?:r\$ ?)?\d+([\.,]\d{1,2})?/.test(lower);
+    if (!hasAmount) return false;
+    return /^(gastei|paguei|recebi|vendi) (?:r\$ ?)?\d+([\.,]\d{1,2})?$/.test(lower);
+  }
+
+  private inferScope(message: string, hasChannel: boolean): FinancialScope {
+    const lower = this.normalizeText(message);
+    if (hasChannel || lower.includes('vendi') || lower.includes('loja') || lower.includes('frete')) {
+      return FinancialScope.BUSINESS;
+    }
+    return FinancialScope.PERSONAL;
+  }
+
+  private currentMonthRange(): { start: Date; end: Date } {
+    const now = new Date();
+    const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+    return { start, end };
+  }
+
+  private normalizeText(value: string): string {
+    return value
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .trim();
+  }
+
+  private titleCase(value: string): string {
+    return value
+      .trim()
+      .split(/\s+/)
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ');
+  }
+
+  private formatMoney(value: number): string {
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+  }
+
+  private async request<T>(path: string, init: RequestInit = {}): Promise<T> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 12000);
+
+    try {
+      const response = await fetch(`${this.baseUrl}${this.normalizePath(path)}`, {
+        ...init,
+        headers: {
+          'Content-Type': 'application/json',
+          ...init.headers,
+        },
+        signal: controller.signal,
+      });
+      const body = (await response.json().catch(() => null)) as unknown;
+      const bodyRecord = this.asRecord(body);
+
+      if (!response.ok) {
+        const message =
+          String(bodyRecord?.message || bodyRecord?.error || '') || 'Falha ao comunicar com a API WhatsApp.';
+        throw new ServiceUnavailableException(message);
+      }
+
+      return this.unwrapProviderData<T>(body);
+    } catch (error) {
+      if (error instanceof ServiceUnavailableException) throw error;
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new ServiceUnavailableException('A API WhatsApp demorou para responder.');
+      }
+      throw new ServiceUnavailableException('Nao foi possivel comunicar com a API WhatsApp.');
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  private normalizePath(path: string): string {
+    return `/${path.replace(/^\/+/, '')}`;
+  }
+
+  private unwrapProviderData<T>(body: unknown): T {
+    const record = this.asRecord(body);
+    if (record && 'data' in record && record.data !== undefined) {
+      return record.data as T;
+    }
+    return body as T;
+  }
+}

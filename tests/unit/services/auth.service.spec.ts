@@ -20,6 +20,7 @@ vi.mock('@/config/env', () => ({
     JWT_EXPIRES_IN: '1h',
     JWT_REFRESH_EXPIRES_IN: '7d',
     GEMINI_API_KEY: 'test-gemini-api-key',
+    WHATSAPP_ADMIN_PHONES: '11999999999',
     PORT: 3001,
     NODE_ENV: 'test',
   },
@@ -38,7 +39,7 @@ vi.mock('node:crypto', () => ({
 // Imports dos módulos reais (após os mocks)
 // ---------------------------------------------------------------------------
 
-import { AuthService } from '@/modules/auth/auth.service';
+import { AuthService, isWhatsappAdminPhone } from '@/modules/auth/auth.service';
 import { PrismaService } from '@/config/database';
 import {
   ConflictException,
@@ -366,6 +367,7 @@ describe('AuthService', () => {
         name: 'Gustavo Santos',
         phone: '11999999999',
         email: 'gustavo@example.com',
+        isWhatsappAdmin: true,
       });
       expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({
         where: { id: 'user-1' },
@@ -437,6 +439,15 @@ describe('AuthService', () => {
 
       // update NÃO deve ter sido chamado
       expect(mockPrisma.user.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('isWhatsappAdminPhone', () => {
+    it('reconhece admin com ou sem DDI do Brasil', () => {
+      expect(isWhatsappAdminPhone('11999999999')).toBe(true);
+      expect(isWhatsappAdminPhone('5511999999999')).toBe(true);
+      expect(isWhatsappAdminPhone('+55 (11) 99999-9999')).toBe(true);
+      expect(isWhatsappAdminPhone('11888888888')).toBe(false);
     });
   });
 });
