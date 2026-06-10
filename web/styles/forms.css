@@ -1,0 +1,132 @@
+/* Form controls, buttons, inputs, swatches, and reusable form sections. */
+
+.search-field input {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  min-height: var(--control-height);
+}
+
+.form {
+  display: grid;
+  gap: 14px;
+}
+
+.field {
+  display: grid;
+  gap: 8px;
+}
+
+.field label {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 850;
+}
+
+.inline-create {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 12px;
+}
+
+.inline-create summary {
+  color: var(--green-dark);
+  cursor: pointer;
+  font-weight: 900;
+  list-style: none;
+}
+
+.inline-create summary::-webkit-details-marker {
+  display: none;
+}
+
+.inline-create[open] {
+  display: grid;
+  gap: 12px;
+}
+
+.neutral-bg {
+  background: var(--green-soft) !important;
+  color: var(--green-dark) !important;
+}
+
+.select-row select {
+  background-color: white;
+  font-weight: 800;
+}
+
+.button {
+  align-items: center;
+  background: var(--green);
+  border: 1px solid var(--green);
+  border-radius: var(--radius-control);
+  color: white;
+  display: inline-flex;
+  font-weight: 950;
+  justify-content: center;
+  min-height: var(--control-height);
+  padding: 0 16px;
+  box-shadow: 0 12px 26px rgba(34, 197, 94, 0.14);
+  transition: transform 120ms ease, filter 120ms ease, background 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.button:disabled {
+  cursor: wait;
+  filter: grayscale(0.15);
+  opacity: 0.72;
+}
+
+.button.secondary {
+  background: transparent;
+  border-color: var(--green);
+  color: var(--green-dark);
+  box-shadow: none;
+}
+
+.button.ghost {
+  background: var(--surface-2);
+  border-color: var(--line);
+  color: var(--text);
+  box-shadow: none;
+}
+
+.button.danger {
+  background: var(--red);
+  border-color: var(--red);
+  box-shadow: 0 12px 26px rgba(239, 68, 68, 0.14);
+}
+
+.income-bg {
+  background: var(--green) !important;
+}
+
+.expense-bg {
+  background: var(--red) !important;
+}
+
+.swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+.swatch {
+  border: 2px solid transparent;
+  border-radius: 10px;
+  height: 38px;
+  width: 38px;
+}
+
+.swatch.active {
+  border-color: var(--text);
+}
+
+.form-section {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  display: grid;
+  gap: 14px;
+  padding: 14px;
+}

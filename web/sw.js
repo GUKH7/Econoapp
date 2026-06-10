@@ -1,7 +1,13 @@
-const CACHE_NAME = 'econoapp-v44';
+const CACHE_NAME = 'econoapp-v45';
 const ASSETS = [
   './index.html',
   './styles.css',
+  './styles/base-theme.css',
+  './styles/cards.css',
+  './styles/forms.css',
+  './styles/layout-navigation.css',
+  './styles/reports.css',
+  './styles/transaction-sheet.css',
   './assets/login-illustration.jpg',
   './app.js',
   './api.js',
