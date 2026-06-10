@@ -1,4 +1,4 @@
-import { money, state } from '../state.js';
+import { colors, money, state } from '../state.js';
 import { escapeHtml } from '../utils.js';
 import { scopedTotals, scopeLabel } from '../finance.js';
 import { currentMonth, emptyState, icon } from './shared.js';
