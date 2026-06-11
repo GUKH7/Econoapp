@@ -10,7 +10,7 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 
-import { geminiOutputSchema } from '@/services/ai/gemini.service';
+import { geminiOutputSchema, whatsappIntentSchema } from '@/services/ai/gemini.service';
 import { isConfidenceAcceptable } from '@/domain/finance/transaction-rules';
 
 vi.mock('@/config/env', () => ({
@@ -213,6 +213,26 @@ describe('geminiOutputSchema (Zod)', () => {
 
       expect(result.success).toBe(false);
     });
+  });
+});
+
+describe('whatsappIntentSchema (Zod)', () => {
+  it('aceita uma intenção financeira válida', () => {
+    expect(
+      whatsappIntentSchema.safeParse({
+        intent: 'FINANCIAL_QUERY',
+        confidence: 0.92,
+      }).success,
+    ).toBe(true);
+  });
+
+  it('rejeita intenção que permitiria ferramenta não controlada', () => {
+    expect(
+      whatsappIntentSchema.safeParse({
+        intent: 'EXECUTE_SQL',
+        confidence: 1,
+      }).success,
+    ).toBe(false);
   });
 });
 

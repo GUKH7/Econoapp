@@ -1,8 +1,8 @@
 import { BadRequestException, Inject, Injectable, ServiceUnavailableException } from '@nestjs/common';
-import { FinancialScope, Transaction, TransactionSource, TransactionType } from '@prisma/client';
+import { FinancialScope, Prisma, Transaction, TransactionSource, TransactionType } from '@prisma/client';
 import { env } from '@/config/env';
 import { PrismaService } from '@/config/database';
-import { GeminiService } from '@/services/ai/gemini.service';
+import { GeminiService, WhatsappConversationMessage } from '@/services/ai/gemini.service';
 import { TransactionService } from '@/modules/transactions/transaction.service';
 import { SendWhatsappMessageDto } from './dto/send-whatsapp-message.dto';
 import { WhatsappWebhookDto } from './dto/whatsapp-webhook.dto';
@@ -14,16 +14,10 @@ export interface WhatsappStatusResponse {
   qrcode?: string;
 }
 
-interface PendingMessage {
-  originalText: string;
-  askedAt: number;
-}
-
 @Injectable()
 export class WhatsappService {
   private readonly baseUrl = env.WHATSAPP_BOT_API_URL.replace(/\/+$/, '');
   private readonly sendMessagePath = this.normalizePath(env.WHATSAPP_BOT_SEND_MESSAGE_PATH);
-  private readonly pendingByPhone = new Map<string, PendingMessage>();
 
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
@@ -78,27 +72,88 @@ export class WhatsappService {
       return { phone, reply };
     }
 
-    const pending = this.pendingByPhone.get(phone);
-    const textToProcess = pending ? `${pending.originalText}. ${message}` : message;
-    this.pendingByPhone.delete(phone);
+    const conversation = await this.getConversation(user.id, phone);
+    const recentMessages = this.parseRecentMessages(conversation.recentMessages);
+    const textToProcess = conversation.pendingText ? `${conversation.pendingText}. ${message}` : message;
+    if (conversation.pendingText) {
+      await this.prisma.whatsappConversation.update({
+        where: { userId: user.id },
+        data: { pendingText: null },
+      });
+    }
 
-    const reply = await this.processUserMessage(user.id, phone, textToProcess);
+    const reply = await this.processUserMessage(
+      user.id,
+      user.name,
+      phone,
+      textToProcess,
+      recentMessages,
+    );
+    await this.appendConversation(user.id, phone, recentMessages, message, reply);
     await this.safeReply(phone, reply);
     return { phone, reply };
   }
 
-  private async processUserMessage(userId: string, phone: string, message: string): Promise<string> {
-    if (this.isQuestion(message)) {
+  private async processUserMessage(
+    userId: string,
+    userName: string,
+    phone: string,
+    message: string,
+    recentMessages: WhatsappConversationMessage[],
+  ): Promise<string> {
+    if (this.isKnownFinancialQuestion(message)) {
       return this.answerQuestion(userId, message);
     }
 
     if (this.needsMoreDescription(message)) {
-      this.pendingByPhone.set(phone, { originalText: message, askedAt: Date.now() });
+      await this.setPendingMessage(userId, phone, message);
       return message.toLowerCase().includes('vendi')
         ? 'Foi venda de qual produto ou canal?'
         : 'Esse gasto foi com o que?';
     }
 
+    if (this.looksLikeTransaction(message)) {
+      return this.createTransactionFromMessage(userId, phone, message);
+    }
+
+    try {
+      const classification = await this.geminiService.classifyWhatsappMessage(message, recentMessages);
+
+      if (classification.confidence < 0.6) {
+        return 'Não entendi com segurança. Você quer registrar um lançamento ou consultar suas finanças?';
+      }
+      if (classification.intent === 'TRANSACTION') {
+        return this.createTransactionFromMessage(userId, phone, message);
+      }
+      if (classification.intent === 'HELP') {
+        return this.helpReply();
+      }
+      if (classification.intent === 'FINANCIAL_QUERY' || classification.intent === 'GENERAL_CONVERSATION') {
+        const financialContext =
+          classification.intent === 'FINANCIAL_QUERY'
+            ? await this.buildFinancialContext(userId)
+            : 'Nenhuma consulta financeira foi solicitada nesta mensagem.';
+        return this.geminiService.generateWhatsappReply({
+          message,
+          userName,
+          financialContext,
+          recentMessages,
+        });
+      }
+    } catch {
+      if (this.isQuestion(message)) {
+        return this.answerQuestion(userId, message);
+      }
+    }
+
+    return 'Posso registrar receitas e gastos ou responder perguntas sobre suas finanças. O que você quer consultar?';
+  }
+
+  private async createTransactionFromMessage(
+    userId: string,
+    phone: string,
+    message: string,
+  ): Promise<string> {
     const [channels, categories] = await Promise.all([
       this.prisma.salesChannel.findMany({ where: { userId }, select: { name: true } }),
       this.prisma.category.findMany({ where: { userId }, select: { name: true } }),
@@ -115,9 +170,9 @@ export class WhatsappService {
 
     const categoryHint = String(extracted.categoryHint || '').trim();
     if (!categoryHint || this.normalizeText(categoryHint) === 'nao_especificado') {
-      this.pendingByPhone.set(phone, { originalText: message, askedAt: Date.now() });
+      await this.setPendingMessage(userId, phone, message);
       return extracted.type === 'INCOME'
-        ? 'Essa receita foi de que produto, servico ou origem?'
+        ? 'Essa receita foi de que produto, serviço ou origem?'
         : 'Esse gasto foi com o que?';
     }
 
@@ -136,6 +191,69 @@ export class WhatsappService {
     });
 
     return this.transactionConfirmation(transaction, category.name, channel?.name, scope);
+  }
+
+  private async buildFinancialContext(userId: string): Promise<string> {
+    const current = this.currentMonthRange();
+    const previous = this.previousMonthRange();
+    const [
+      currentTotals,
+      previousTotals,
+      personalTotals,
+      businessTotals,
+      topCategories,
+      recentTransactions,
+      accounts,
+      creditCards,
+    ] = await Promise.all([
+        this.monthTotals(userId, current.start, current.end),
+        this.monthTotals(userId, previous.start, previous.end),
+        this.monthTotals(userId, current.start, current.end, FinancialScope.PERSONAL),
+        this.monthTotals(userId, current.start, current.end, FinancialScope.BUSINESS),
+        this.topExpenseCategories(userId, current.start, current.end),
+        this.prisma.transaction.findMany({
+          where: { userId },
+          orderBy: { date: 'desc' },
+          take: 8,
+          include: { category: true, channel: true },
+        }),
+        this.prisma.financialAccount.findMany({
+          where: { userId, isActive: true },
+          select: { name: true, balance: true, scope: true },
+        }),
+        this.prisma.creditCard.findMany({
+          where: { userId, isActive: true },
+          select: { name: true, limit: true, scope: true },
+        }),
+      ]);
+
+    const expenseChange = this.percentageChange(previousTotals.expense, currentTotals.expense);
+    const incomeChange = this.percentageChange(previousTotals.income, currentTotals.income);
+    const lines = [
+      `Mês atual: receitas ${this.formatMoney(currentTotals.income)}, gastos ${this.formatMoney(currentTotals.expense)}, saldo ${this.formatMoney(currentTotals.balance)}.`,
+      `Mês anterior: receitas ${this.formatMoney(previousTotals.income)}, gastos ${this.formatMoney(previousTotals.expense)}, saldo ${this.formatMoney(previousTotals.balance)}.`,
+      `Comparação: receitas ${incomeChange}; gastos ${expenseChange}.`,
+      `Pessoal no mês atual: receitas ${this.formatMoney(personalTotals.income)}, gastos ${this.formatMoney(personalTotals.expense)}, saldo ${this.formatMoney(personalTotals.balance)}.`,
+      `Negócio no mês atual: receitas ${this.formatMoney(businessTotals.income)}, gastos ${this.formatMoney(businessTotals.expense)}, saldo ${this.formatMoney(businessTotals.balance)}.`,
+      topCategories.length
+        ? `Maiores categorias de gasto: ${topCategories.map((item) => `${item.name} (${this.formatMoney(item.total)})`).join(', ')}.`
+        : 'Não há categorias de gasto no mês atual.',
+      accounts.length
+        ? `Contas e carteiras: ${accounts.map((item) => `${item.name} ${this.formatMoney(Number(item.balance))} [${item.scope}]`).join(', ')}.`
+        : 'Não há contas ou carteiras cadastradas.',
+      creditCards.length
+        ? `Cartões: ${creditCards.map((item) => `${item.name}, limite ${this.formatMoney(Number(item.limit))} [${item.scope}]`).join(', ')}.`
+        : 'Não há cartões cadastrados.',
+      recentTransactions.length
+        ? `Transações recentes: ${recentTransactions
+            .map(
+              (item) =>
+                `${item.type === 'INCOME' ? 'receita' : 'gasto'} ${this.formatMoney(Number(item.amount))} - ${item.description} - ${item.category.name} [${item.scope}]${item.channel ? ` - ${item.channel.name}` : ''}`,
+            )
+            .join('; ')}.`
+        : 'Não há transações recentes.',
+    ];
+    return lines.join('\n');
   }
 
   private async answerQuestion(userId: string, message: string): Promise<string> {
@@ -243,6 +361,27 @@ export class WhatsappService {
     return { name: category?.name ?? 'Sem categoria', total: Number(top._sum.amount ?? 0) };
   }
 
+  private async topExpenseCategories(userId: string, start: Date, end: Date) {
+    const groups = await this.prisma.transaction.groupBy({
+      by: ['categoryId'],
+      where: { userId, type: 'EXPENSE', date: { gte: start, lte: end } },
+      _sum: { amount: true },
+      orderBy: { _sum: { amount: 'desc' } },
+      take: 3,
+    });
+    if (!groups.length) return [];
+
+    const categories = await this.prisma.category.findMany({
+      where: { id: { in: groups.map((item) => item.categoryId) }, userId },
+      select: { id: true, name: true },
+    });
+    const namesById = new Map(categories.map((item) => [item.id, item.name]));
+    return groups.map((item) => ({
+      name: namesById.get(item.categoryId) ?? 'Sem categoria',
+      total: Number(item._sum.amount ?? 0),
+    }));
+  }
+
   private async totalByChannel(userId: string, channelName: string, start: Date, end: Date): Promise<number> {
     const channel = await this.prisma.salesChannel.findFirst({
       where: { userId, name: { equals: channelName, mode: 'insensitive' } },
@@ -273,6 +412,71 @@ export class WhatsappService {
     ]
       .filter(Boolean)
       .join('\n');
+  }
+
+  private async getConversation(userId: string, phone: string) {
+    return this.prisma.whatsappConversation.upsert({
+      where: { userId },
+      create: { userId, phone, recentMessages: [] },
+      update: { phone },
+    });
+  }
+
+  private async setPendingMessage(userId: string, phone: string, pendingText: string): Promise<void> {
+    await this.prisma.whatsappConversation.upsert({
+      where: { userId },
+      create: { userId, phone, pendingText, recentMessages: [] },
+      update: { phone, pendingText },
+    });
+  }
+
+  private async appendConversation(
+    userId: string,
+    phone: string,
+    current: WhatsappConversationMessage[],
+    userMessage: string,
+    assistantMessage: string,
+  ): Promise<void> {
+    const recentMessages = [
+      ...current,
+      { role: 'user' as const, text: userMessage },
+      { role: 'assistant' as const, text: assistantMessage },
+    ].slice(-10);
+    const messagesJson = recentMessages as unknown as Prisma.InputJsonValue;
+    await this.prisma.whatsappConversation.upsert({
+      where: { userId },
+      create: { userId, phone, recentMessages: messagesJson },
+      update: { phone, recentMessages: messagesJson },
+    });
+  }
+
+  private parseRecentMessages(value: unknown): WhatsappConversationMessage[] {
+    if (!Array.isArray(value)) return [];
+    return value
+      .filter(
+        (item): item is WhatsappConversationMessage =>
+          Boolean(
+            item &&
+              typeof item === 'object' &&
+              'role' in item &&
+              (item.role === 'user' || item.role === 'assistant') &&
+              'text' in item &&
+              typeof item.text === 'string',
+          ),
+      )
+      .slice(-10);
+  }
+
+  private helpReply(): string {
+    return [
+      'Posso ajudar você a:',
+      '• registrar receitas, gastos e vendas;',
+      '• consultar saldo, gastos e receitas;',
+      '• comparar meses e identificar maiores despesas;',
+      '• analisar suas finanças pessoais ou do negócio.',
+      '',
+      'Exemplos: “Gastei R$ 40 no mercado” ou “Onde estou gastando mais?”.',
+    ].join('\n');
   }
 
   private async safeReply(phone: string, reply: string): Promise<void> {
@@ -332,6 +536,25 @@ export class WhatsappService {
     );
   }
 
+  private isKnownFinancialQuestion(message: string): boolean {
+    const lower = this.normalizeText(message);
+    return (
+      lower.includes('quanto gastei') ||
+      lower.includes('quanto vendi') ||
+      lower.includes('maior despesa') ||
+      lower.includes('resumo do mes') ||
+      lower.includes('saldo atual') ||
+      lower.includes('meu negocio esta no lucro') ||
+      lower.includes('como esta meu negocio')
+    );
+  }
+
+  private looksLikeTransaction(message: string): boolean {
+    const lower = this.normalizeText(message);
+    const hasAmount = /(?:r\$ ?)?\d+([\.,]\d{1,2})?/.test(lower);
+    return hasAmount && /\b(gastei|paguei|comprei|recebi|vendi|ganhei|entrou|saiu)\b/.test(lower);
+  }
+
   private needsMoreDescription(message: string): boolean {
     const lower = this.normalizeText(message);
     const hasAmount = /(?:r\$ ?)?\d+([\.,]\d{1,2})?/.test(lower);
@@ -352,6 +575,23 @@ export class WhatsappService {
     const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
     const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
     return { start, end };
+  }
+
+  private previousMonthRange(): { start: Date; end: Date } {
+    const now = new Date();
+    const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
+    const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    return { start, end };
+  }
+
+  private percentageChange(previous: number, current: number): string {
+    if (previous === 0) {
+      return current === 0 ? 'sem alteração' : 'sem base de comparação';
+    }
+    const change = ((current - previous) / Math.abs(previous)) * 100;
+    if (change === 0) return 'sem alteração';
+    const direction = change > 0 ? 'aumento' : 'queda';
+    return `${direction} de ${Math.abs(change).toFixed(1).replace('.', ',')}%`;
   }
 
   private normalizeText(value: string): string {

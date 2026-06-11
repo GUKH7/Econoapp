@@ -31,20 +31,21 @@ enum FinancialAccountType {
 }
 
 model User {
-  id            String         @id @default(uuid()) @db.Uuid
-  name          String
-  phone         String         @unique
-  telegramId    String?        @unique
-  email         String?        @unique
-  passwordHash  String
-  createdAt     DateTime       @default(now()) @db.Timestamptz(6)
-  updatedAt     DateTime       @updatedAt @db.Timestamptz(6)
-  refreshTokens RefreshToken[]
-  channels      SalesChannel[]
-  categories    Category[]
-  transactions  Transaction[]
-  accounts      FinancialAccount[]
-  creditCards   CreditCard[]
+  id                   String                @id @default(uuid()) @db.Uuid
+  name                 String
+  phone                String                @unique
+  telegramId           String?               @unique
+  email                String?               @unique
+  passwordHash         String
+  createdAt            DateTime              @default(now()) @db.Timestamptz(6)
+  updatedAt            DateTime              @updatedAt @db.Timestamptz(6)
+  refreshTokens        RefreshToken[]
+  channels             SalesChannel[]
+  categories           Category[]
+  transactions         Transaction[]
+  accounts             FinancialAccount[]
+  creditCards          CreditCard[]
+  whatsappConversation WhatsappConversation?
 }
 
 model RefreshToken {
@@ -60,13 +61,13 @@ model RefreshToken {
 }
 
 model SalesChannel {
-  id         String        @id @default(uuid()) @db.Uuid
-  name       String
-  feePercent Decimal  @db.Decimal(15, 4)
-  isActive   Boolean       @default(true)
-  userId     String        @db.Uuid
-  createdAt  DateTime      @default(now()) @db.Timestamptz(6)
-  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id           String        @id @default(uuid()) @db.Uuid
+  name         String
+  feePercent   Decimal       @db.Decimal(15, 4)
+  isActive     Boolean       @default(true)
+  userId       String        @db.Uuid
+  createdAt    DateTime      @default(now()) @db.Timestamptz(6)
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   transactions Transaction[]
 
   @@index([userId])
@@ -101,44 +102,43 @@ model FinancialAccount {
 }
 
 model CreditCard {
-  id           String        @id @default(uuid()) @db.Uuid
+  id           String         @id @default(uuid()) @db.Uuid
   name         String
-  limit        Decimal       @default(0) @db.Decimal(15, 4)
+  limit        Decimal        @default(0) @db.Decimal(15, 4)
   closingDay   Int?
   dueDay       Int?
   scope        FinancialScope @default(PERSONAL)
-  isActive     Boolean       @default(true)
-  userId       String        @db.Uuid
-  createdAt    DateTime      @default(now()) @db.Timestamptz(6)
-  updatedAt    DateTime      @updatedAt @db.Timestamptz(6)
-  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  isActive     Boolean        @default(true)
+  userId       String         @db.Uuid
+  createdAt    DateTime       @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime       @updatedAt @db.Timestamptz(6)
+  user         User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   transactions Transaction[]
 
   @@index([userId, scope])
 }
 
 model Transaction {
-  id          String            @id @default(uuid()) @db.Uuid
-  description String
-  amount      Decimal           @db.Decimal(15, 4)
-  netAmount   Decimal           @db.Decimal(15, 4)
-  type        TransactionType
-  source      TransactionSource @default(TELEGRAM)
-  scope       FinancialScope    @default(PERSONAL)
-  categoryId  String            @db.Uuid
-  channelId   String?           @db.Uuid
-  accountId   String?           @db.Uuid
-  creditCardId String?          @db.Uuid
-  date        DateTime          @default(now()) @db.Timestamptz(6)
-  userId      String            @db.Uuid
-  createdAt   DateTime          @default(now()) @db.Timestamptz(6)
+  id           String            @id @default(uuid()) @db.Uuid
+  description  String
+  amount       Decimal           @db.Decimal(15, 4)
+  netAmount    Decimal           @db.Decimal(15, 4)
+  type         TransactionType
+  source       TransactionSource @default(TELEGRAM)
+  scope        FinancialScope    @default(PERSONAL)
+  categoryId   String            @db.Uuid
+  channelId    String?           @db.Uuid
+  accountId    String?           @db.Uuid
+  creditCardId String?           @db.Uuid
+  date         DateTime          @default(now()) @db.Timestamptz(6)
+  userId       String            @db.Uuid
+  createdAt    DateTime          @default(now()) @db.Timestamptz(6)
 
-
-  user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  category Category      @relation(fields: [categoryId], references: [id], onDelete: Restrict)
-  channel  SalesChannel? @relation(fields: [channelId], references: [id], onDelete: SetNull)
-  account  FinancialAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
-  creditCard CreditCard? @relation(fields: [creditCardId], references: [id], onDelete: SetNull)
+  user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category   Category          @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  channel    SalesChannel?     @relation(fields: [channelId], references: [id], onDelete: SetNull)
+  account    FinancialAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  creditCard CreditCard?       @relation(fields: [creditCardId], references: [id], onDelete: SetNull)
 
   @@index([userId, date])
   @@index([userId, scope])
@@ -146,4 +146,18 @@ model Transaction {
   @@index([channelId])
   @@index([accountId])
   @@index([creditCardId])
+}
+
+model WhatsappConversation {
+  id             String   @id @default(uuid()) @db.Uuid
+  userId         String   @unique @db.Uuid
+  phone          String   @unique
+  recentMessages Json     @default("[]")
+  pendingText    String?
+  createdAt      DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([phone])
 }

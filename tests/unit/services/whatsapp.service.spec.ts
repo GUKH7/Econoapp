@@ -19,10 +19,27 @@ describe('WhatsappService', () => {
   let prismaMock: {
     user: { findFirst: ReturnType<typeof vi.fn> };
     salesChannel: { findMany: ReturnType<typeof vi.fn>; findFirst: ReturnType<typeof vi.fn>; create: ReturnType<typeof vi.fn> };
-    category: { findMany: ReturnType<typeof vi.fn>; findFirst: ReturnType<typeof vi.fn>; create: ReturnType<typeof vi.fn> };
-    transaction: { aggregate: ReturnType<typeof vi.fn>; groupBy: ReturnType<typeof vi.fn>; findFirst: ReturnType<typeof vi.fn> };
+    category: {
+      findMany: ReturnType<typeof vi.fn>;
+      findFirst: ReturnType<typeof vi.fn>;
+      findUnique: ReturnType<typeof vi.fn>;
+      create: ReturnType<typeof vi.fn>;
+    };
+    transaction: {
+      aggregate: ReturnType<typeof vi.fn>;
+      groupBy: ReturnType<typeof vi.fn>;
+      findFirst: ReturnType<typeof vi.fn>;
+      findMany: ReturnType<typeof vi.fn>;
+    };
+    financialAccount: { findMany: ReturnType<typeof vi.fn> };
+    creditCard: { findMany: ReturnType<typeof vi.fn> };
+    whatsappConversation: { upsert: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn> };
   };
-  let geminiMock: { extractFinancialData: ReturnType<typeof vi.fn> };
+  let geminiMock: {
+    extractFinancialData: ReturnType<typeof vi.fn>;
+    classifyWhatsappMessage: ReturnType<typeof vi.fn>;
+    generateWhatsappReply: ReturnType<typeof vi.fn>;
+  };
   let transactionServiceMock: { create: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
@@ -31,10 +48,21 @@ describe('WhatsappService', () => {
     prismaMock = {
       user: { findFirst: vi.fn() },
       salesChannel: { findMany: vi.fn(), findFirst: vi.fn(), create: vi.fn() },
-      category: { findMany: vi.fn(), findFirst: vi.fn(), create: vi.fn() },
-      transaction: { aggregate: vi.fn(), groupBy: vi.fn(), findFirst: vi.fn() },
+      category: { findMany: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn(), create: vi.fn() },
+      transaction: { aggregate: vi.fn(), groupBy: vi.fn(), findFirst: vi.fn(), findMany: vi.fn() },
+      financialAccount: { findMany: vi.fn() },
+      creditCard: { findMany: vi.fn() },
+      whatsappConversation: { upsert: vi.fn(), update: vi.fn() },
     };
-    geminiMock = { extractFinancialData: vi.fn() };
+    prismaMock.whatsappConversation.upsert.mockResolvedValue({
+      recentMessages: [],
+      pendingText: null,
+    });
+    geminiMock = {
+      extractFinancialData: vi.fn(),
+      classifyWhatsappMessage: vi.fn(),
+      generateWhatsappReply: vi.fn(),
+    };
     transactionServiceMock = { create: vi.fn() };
     service = new WhatsappService(prismaMock as never, geminiMock as never, transactionServiceMock as never);
   });
@@ -131,6 +159,7 @@ describe('WhatsappService', () => {
       });
     prismaMock.user.findFirst.mockResolvedValue({
       id: 'user-1',
+      name: 'Usuario',
       phone: '11999999999',
     });
     prismaMock.salesChannel.findMany.mockResolvedValue([]);
@@ -173,5 +202,99 @@ describe('WhatsappService', () => {
       scope: FinancialScope.PERSONAL,
       categoryId: 'category-1',
     });
+  });
+
+  it('responde conversa livre usando IA sem consultar ou alterar transacoes', async () => {
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: true,
+        json: vi.fn().mockResolvedValue({ status: 'conectado' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: vi.fn().mockResolvedValue({ success: true }),
+      });
+    prismaMock.user.findFirst.mockResolvedValue({
+      id: 'user-1',
+      name: 'Gustavo',
+      phone: '11999999999',
+    });
+    geminiMock.classifyWhatsappMessage.mockResolvedValue({
+      intent: 'GENERAL_CONVERSATION',
+      confidence: 0.98,
+    });
+    geminiMock.generateWhatsappReply.mockResolvedValue(
+      'Olá, Gustavo. Como posso ajudar com suas finanças hoje?',
+    );
+
+    const result = await service.handleWebhook({
+      from: '5511999999999',
+      text: 'Bom dia, tudo bem?',
+    });
+
+    expect(result.reply).toContain('Olá, Gustavo');
+    expect(geminiMock.generateWhatsappReply).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'Bom dia, tudo bem?',
+        userName: 'Gustavo',
+        financialContext: 'Nenhuma consulta financeira foi solicitada nesta mensagem.',
+      }),
+    );
+    expect(transactionServiceMock.create).not.toHaveBeenCalled();
+  });
+
+  it('responde pergunta financeira aberta usando somente contexto calculado pelo backend', async () => {
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: true,
+        json: vi.fn().mockResolvedValue({ status: 'conectado' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: vi.fn().mockResolvedValue({ success: true }),
+      });
+    prismaMock.user.findFirst.mockResolvedValue({
+      id: 'user-1',
+      name: 'Gustavo',
+      phone: '11999999999',
+    });
+    geminiMock.classifyWhatsappMessage.mockResolvedValue({
+      intent: 'FINANCIAL_QUERY',
+      confidence: 0.96,
+    });
+    geminiMock.generateWhatsappReply.mockResolvedValue(
+      'Seus gastos aumentaram neste mês, principalmente em alimentação.',
+    );
+    prismaMock.transaction.aggregate
+      .mockResolvedValueOnce({ _sum: { netAmount: 2000 } })
+      .mockResolvedValueOnce({ _sum: { netAmount: 900 } })
+      .mockResolvedValueOnce({ _sum: { netAmount: 1800 } })
+      .mockResolvedValueOnce({ _sum: { netAmount: 600 } })
+      .mockResolvedValueOnce({ _sum: { netAmount: 1200 } })
+      .mockResolvedValueOnce({ _sum: { netAmount: 500 } })
+      .mockResolvedValueOnce({ _sum: { netAmount: 800 } })
+      .mockResolvedValueOnce({ _sum: { netAmount: 400 } });
+    prismaMock.transaction.groupBy.mockResolvedValue([
+      { categoryId: 'category-1', _sum: { amount: 500 } },
+    ]);
+    prismaMock.category.findMany.mockResolvedValue([
+      { id: 'category-1', name: 'Alimentação' },
+    ]);
+    prismaMock.transaction.findMany.mockResolvedValue([]);
+    prismaMock.financialAccount.findMany.mockResolvedValue([]);
+    prismaMock.creditCard.findMany.mockResolvedValue([]);
+
+    const result = await service.handleWebhook({
+      from: '5511999999999',
+      text: 'O que mudou nas minhas finanças em relação ao mês passado?',
+    });
+
+    expect(result.reply).toContain('gastos aumentaram');
+    expect(geminiMock.generateWhatsappReply).toHaveBeenCalledWith(
+      expect.objectContaining({
+        financialContext: expect.stringContaining('Mês anterior'),
+      }),
+    );
+    expect(transactionServiceMock.create).not.toHaveBeenCalled();
   });
 });
