@@ -10,7 +10,7 @@ const envSchema = z.object({
   GEMINI_API_KEY: z.string().min(1),
   WHATSAPP_BOT_API_URL: z.string().url().default('http://64.181.189.107:3001/econoapp'),
   WHATSAPP_BOT_SEND_MESSAGE_PATH: z.string().default('/send-message'),
-  WHATSAPP_ADMIN_PHONES: z.string().default(''),
+  WHATSAPP_ADMIN_PHONES: z.string().default('5511934736234'),
   WHATSAPP_WEBHOOK_TOKEN: z.string().default(''),
   PORT: z
     .string()
