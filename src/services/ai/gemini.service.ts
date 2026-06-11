@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { z } from 'zod';
 import { env } from '@/config/env';
@@ -33,6 +33,7 @@ export interface WhatsappConversationMessage {
 
 @Injectable()
 export class GeminiService {
+  private readonly logger = new Logger(GeminiService.name);
   private readonly client = new GoogleGenerativeAI(env.GEMINI_API_KEY);
 
   async extractFinancialData(
@@ -190,7 +191,8 @@ export class GeminiService {
       const text = result.response.text().trim();
       if (!text) throw new Error('Resposta vazia');
       return text.slice(0, 700);
-    } catch {
+    } catch (error) {
+      this.logProviderError('generateWhatsappReply', error);
       throw new BadRequestException('Não consegui elaborar a resposta agora. Tente novamente em instantes.');
     }
   }
@@ -211,8 +213,15 @@ export class GeminiService {
       return JSON.parse(cleaned);
     } catch (error) {
       if (error instanceof BadRequestException) throw error;
+      this.logProviderError('generateJson', error);
       throw new BadRequestException('Não consegui processar a conversa agora. Tente novamente em instantes.');
     }
+  }
+
+  private logProviderError(operation: string, error: unknown): void {
+    const message = error instanceof Error ? error.message : String(error);
+    const sanitized = message.replace(/key=[^&\s]+/gi, 'key=[oculta]').slice(0, 1000);
+    this.logger.error(`Falha Gemini em ${operation}: ${sanitized}`);
   }
 
   private buildContextLines(context?: { channelNames?: string[]; categoryNames?: string[] }): string[] {
