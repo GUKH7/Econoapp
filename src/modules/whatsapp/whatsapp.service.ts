@@ -101,6 +101,9 @@ export class WhatsappService {
     message: string,
     recentMessages: WhatsappConversationMessage[],
   ): Promise<string> {
+    if (this.isHelpRequest(message)) {
+      return this.helpReply();
+    }
     if (this.isKnownFinancialQuestion(message)) {
       return this.answerQuestion(userId, message);
     }
@@ -141,9 +144,10 @@ export class WhatsappService {
         });
       }
     } catch {
-      if (this.isQuestion(message)) {
-        return this.answerQuestion(userId, message);
+      if (this.isGreeting(message)) {
+        return `Olá, ${userName.split(/\s+/)[0]}. Como posso ajudar com suas finanças hoje?`;
       }
+      return 'Não consegui analisar essa pergunta agora. Você ainda pode consultar saldo, gastos, receitas ou registrar um lançamento.';
     }
 
     return 'Posso registrar receitas e gastos ou responder perguntas sobre suas finanças. O que você quer consultar?';
@@ -547,6 +551,20 @@ export class WhatsappService {
       lower.includes('meu negocio esta no lucro') ||
       lower.includes('como esta meu negocio')
     );
+  }
+
+  private isHelpRequest(message: string): boolean {
+    const lower = this.normalizeText(message);
+    return (
+      lower.includes('o que voce consegue fazer') ||
+      lower.includes('como voce pode me ajudar') ||
+      lower === 'ajuda' ||
+      lower === 'menu'
+    );
+  }
+
+  private isGreeting(message: string): boolean {
+    return /^(oi|ola|bom dia|boa tarde|boa noite|tudo bem)[!,. ]*$/.test(this.normalizeText(message));
   }
 
   private looksLikeTransaction(message: string): boolean {
