@@ -43,4 +43,4 @@ COPY register-paths.cjs ./register-paths.cjs
 
 EXPOSE 3001
 
-CMD ["sh", "-c", "npx prisma migrate deploy && npm start"]
+CMD ["sh", "-c", "npm run prisma:deploy && npm start"]
