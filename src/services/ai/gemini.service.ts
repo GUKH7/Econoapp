@@ -7,6 +7,7 @@ import { BadRequestException } from '@/common/errors/app.exception';
 export const geminiOutputSchema = z.object({
   amount: z.number().positive(),
   type: z.enum(['INCOME', 'EXPENSE']),
+  description: z.string().min(1).max(80).optional(),
   categoryHint: z.string().min(1),
   channelHint: z.string().nullable().optional(),
   confidence: z.number().min(0).max(1),
@@ -48,9 +49,10 @@ export class GeminiService {
       'Você é um extrator de dados financeiros para vendedores de marketplace brasileiros.',
       ...contextLines,
       'Responda SOMENTE JSON válido, sem markdown e sem texto adicional.',
+      'Crie description como um título curto, natural e objetivo para o lançamento, sem valor, data ou frases do usuário. Exemplos: "Venda de relógio", "Compra de relógio", "Salário", "Almoço no restaurante".',
       'Se a mensagem NÃO for uma transação financeira (ex: "oi", "bom dia"), retorne amount: 0 e confidence: 0.',
       'Formato obrigatório:',
-      '{"amount": number, "type": "INCOME"|"EXPENSE", "categoryHint": string, "channelHint": string|null, "confidence": number}',
+      '{"amount": number, "type": "INCOME"|"EXPENSE", "description": string, "categoryHint": string, "channelHint": string|null, "confidence": number}',
       `Mensagem: ${message}`,
     ].join('\n');
 
@@ -99,8 +101,9 @@ export class GeminiService {
       'REGRA DE TRANSCRIÇÃO: Na chave "transcription", escreva os valores monetários sempre com a palavra (exemplo: "20 reais") e NUNCA use o símbolo matemático "R$".',
       ...contextLines,
       'Responda SOMENTE JSON válido, sem markdown e sem texto adicional.',
+      'Crie description como um título curto, natural e objetivo para o lançamento, sem valor, data ou frases do usuário.',
       'Formato obrigatório:',
-      '{"transcription": string, "amount": number, "type": "INCOME"|"EXPENSE", "categoryHint": string, "channelHint": string|null, "confidence": number}',
+      '{"transcription": string, "amount": number, "type": "INCOME"|"EXPENSE", "description": string, "categoryHint": string, "channelHint": string|null, "confidence": number}',
     ].join('\n');
 
     const result = await model.generateContent([

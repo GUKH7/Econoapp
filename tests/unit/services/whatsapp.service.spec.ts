@@ -172,6 +172,7 @@ describe('WhatsappService', () => {
     geminiMock.extractFinancialData.mockResolvedValue({
       amount: 35,
       type: 'EXPENSE',
+      description: 'Compra no mercado',
       categoryHint: 'Alimentacao',
       channelHint: null,
       confidence: 0.95,
@@ -195,7 +196,7 @@ describe('WhatsappService', () => {
       },
     });
     expect(transactionServiceMock.create).toHaveBeenCalledWith('user-1', {
-      description: 'Gastei R$ 35 no mercado',
+      description: 'Compra no mercado',
       amount: 35,
       type: TransactionType.EXPENSE,
       source: TransactionSource.WHATSAPP,
@@ -279,6 +280,7 @@ describe('WhatsappService', () => {
       .mockResolvedValueOnce({
         amount: 200,
         type: 'INCOME',
+        description: 'Venda de relógio',
         categoryHint: 'Relogio',
         channelHint: 'Venda direta',
         confidence: 0.99,
@@ -328,6 +330,7 @@ describe('WhatsappService', () => {
     expect(transactionServiceMock.create).toHaveBeenCalledWith(
       'user-1',
       expect.objectContaining({
+        description: 'Venda de relógio',
         amount: 200,
         type: TransactionType.INCOME,
         source: TransactionSource.WHATSAPP,
@@ -404,6 +407,7 @@ describe('WhatsappService', () => {
     expect(transactionServiceMock.create).toHaveBeenCalledWith(
       'user-1',
       expect.objectContaining({
+        description: 'Venda de relogio',
         amount: 200,
         type: TransactionType.INCOME,
         source: TransactionSource.WHATSAPP,

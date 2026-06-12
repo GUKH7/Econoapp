@@ -203,9 +203,15 @@ export class WhatsappService {
         ? await this.resolveChannel(userId, extracted.channelHint)
         : undefined;
     const category = await this.resolveCategory(userId, categoryHint, extracted.type);
+    const description = this.buildTransactionDescription(
+      extracted.description,
+      category.name,
+      extracted.type as TransactionType,
+      isSale,
+    );
 
     const transaction = await this.transactionService.create(userId, {
-      description: message,
+      description,
       amount: extracted.amount,
       type: extracted.type as TransactionType,
       source: TransactionSource.WHATSAPP,
@@ -664,6 +670,28 @@ export class WhatsappService {
 
   private isSaleMessage(message: string): boolean {
     return /\b(vendi|venda|vendeu|comercializei|comercializacao)\b/.test(this.normalizeText(message));
+  }
+
+  private buildTransactionDescription(
+    extractedDescription: string | undefined,
+    categoryName: string,
+    type: TransactionType,
+    isSale: boolean,
+  ): string {
+    const description = String(extractedDescription || '')
+      .replace(/\s+/g, ' ')
+      .replace(/[.!?]+$/g, '')
+      .trim();
+
+    if (description) {
+      return description.charAt(0).toUpperCase() + description.slice(1);
+    }
+
+    const category = categoryName.trim().toLocaleLowerCase('pt-BR');
+    if (type === TransactionType.INCOME) {
+      return isSale ? `Venda de ${category}` : `Receita de ${category}`;
+    }
+    return `Gasto com ${category}`;
   }
 
   private currentMonthRange(): { start: Date; end: Date } {
