@@ -8,6 +8,16 @@ import { SendWhatsappMessageDto } from './dto/send-whatsapp-message.dto';
 import { WhatsappWebhookDto } from './dto/whatsapp-webhook.dto';
 
 type WhatsappStatus = 'aguardando_qr' | 'conectado' | 'iniciando' | 'reconectando';
+type WhatsappTransactionDraft = {
+  description: string;
+  amount: number;
+  type: TransactionType;
+  scope: FinancialScope;
+  categoryHint: string;
+  channelHint?: string;
+};
+
+const TRANSACTION_CONFIRMATION_PREFIX = '__TRANSACTION_CONFIRMATION__:';
 
 export interface WhatsappStatusResponse {
   status: WhatsappStatus;
@@ -74,6 +84,18 @@ export class WhatsappService {
 
     const conversation = await this.getConversation(user.id, phone);
     const recentMessages = this.parseRecentMessages(conversation.recentMessages);
+    const transactionDraft = this.parseTransactionDraft(conversation.pendingText);
+    if (transactionDraft) {
+      const reply = await this.handleTransactionConfirmation(
+        user.id,
+        message,
+        transactionDraft,
+      );
+      await this.appendConversation(user.id, phone, recentMessages, message, reply);
+      await this.safeReply(phone, reply);
+      return { phone, reply };
+    }
+
     const textToProcess = conversation.pendingText ? `${conversation.pendingText}. ${message}` : message;
     if (conversation.pendingText) {
       await this.prisma.whatsappConversation.update({
@@ -204,29 +226,25 @@ export class WhatsappService {
 
     const scope =
       explicitScope ?? this.inferScope(message, Boolean(extracted.channelHint));
-    const channel =
-      scope === FinancialScope.BUSINESS
-        ? await this.resolveChannel(userId, extracted.channelHint)
-        : undefined;
-    const category = await this.resolveCategory(userId, categoryHint, extracted.type);
     const description = this.buildTransactionDescription(
       extracted.description,
-      category.name,
+      categoryHint,
       extracted.type as TransactionType,
       isSale,
     );
-
-    const transaction = await this.transactionService.create(userId, {
+    const draft: WhatsappTransactionDraft = {
       description,
       amount: extracted.amount,
       type: extracted.type as TransactionType,
-      source: TransactionSource.WHATSAPP,
       scope,
-      categoryId: category.id,
-      ...(channel ? { channelId: channel.id } : {}),
-    });
+      categoryHint,
+      ...(scope === FinancialScope.BUSINESS && extracted.channelHint
+        ? { channelHint: extracted.channelHint }
+        : {}),
+    };
 
-    return this.transactionConfirmation(transaction, category.name, channel?.name, scope);
+    await this.setPendingTransactionDraft(userId, phone, draft);
+    return this.transactionDraftConfirmation(draft);
   }
 
   private async buildFinancialContext(userId: string): Promise<string> {
@@ -483,6 +501,68 @@ export class WhatsappService {
       .join('\n');
   }
 
+  private transactionDraftConfirmation(draft: WhatsappTransactionDraft): string {
+    const type = draft.type === TransactionType.EXPENSE ? 'Despesa' : 'Receita';
+    return [
+      'Confirme o lançamento:',
+      '',
+      `Tipo: ${type}`,
+      `Título: ${draft.description}`,
+      `Valor: ${this.formatMoney(draft.amount)}`,
+      `Categoria: ${draft.categoryHint}`,
+      draft.channelHint ? `Canal: ${draft.channelHint}` : '',
+      `Modo: ${draft.scope === FinancialScope.BUSINESS ? 'Negócio' : 'Pessoal'}`,
+      '',
+      'Responda: Confirmar, Editar ou Cancelar.',
+    ]
+      .filter(Boolean)
+      .join('\n');
+  }
+
+  private async handleTransactionConfirmation(
+    userId: string,
+    message: string,
+    draft: WhatsappTransactionDraft,
+  ): Promise<string> {
+    const command = this.normalizeText(message);
+
+    if (/^(cancelar|cancela|nao|não)$/.test(command)) {
+      await this.clearPendingMessage(userId);
+      return 'Lançamento cancelado. Nenhuma informação foi salva.';
+    }
+
+    if (/^(editar|edita|corrigir|corrija)$/.test(command)) {
+      await this.clearPendingMessage(userId);
+      return 'Certo. Envie novamente o lançamento com as informações corrigidas, incluindo valor e descrição.';
+    }
+
+    if (!/^(confirmar|confirmo|sim|salvar|pode salvar)$/.test(command)) {
+      return `${this.transactionDraftConfirmation(draft)}\n\nNão reconheci sua escolha.`;
+    }
+
+    const category = await this.resolveCategory(userId, draft.categoryHint, draft.type);
+    const channel =
+      draft.scope === FinancialScope.BUSINESS
+        ? await this.resolveChannel(userId, draft.channelHint)
+        : undefined;
+    const transaction = await this.transactionService.create(userId, {
+      description: draft.description,
+      amount: draft.amount,
+      type: draft.type,
+      source: TransactionSource.WHATSAPP,
+      scope: draft.scope,
+      categoryId: category.id,
+      ...(channel ? { channelId: channel.id } : {}),
+    });
+    await this.clearPendingMessage(userId);
+    return this.transactionConfirmation(
+      transaction,
+      category.name,
+      channel?.name,
+      draft.scope,
+    );
+  }
+
   private async getConversation(userId: string, phone: string) {
     return this.prisma.whatsappConversation.upsert({
       where: { userId },
@@ -497,6 +577,47 @@ export class WhatsappService {
       create: { userId, phone, pendingText, recentMessages: [] },
       update: { phone, pendingText },
     });
+  }
+
+  private async setPendingTransactionDraft(
+    userId: string,
+    phone: string,
+    draft: WhatsappTransactionDraft,
+  ): Promise<void> {
+    await this.setPendingMessage(
+      userId,
+      phone,
+      `${TRANSACTION_CONFIRMATION_PREFIX}${JSON.stringify(draft)}`,
+    );
+  }
+
+  private async clearPendingMessage(userId: string): Promise<void> {
+    await this.prisma.whatsappConversation.update({
+      where: { userId },
+      data: { pendingText: null },
+    });
+  }
+
+  private parseTransactionDraft(value: string | null | undefined): WhatsappTransactionDraft | null {
+    if (!value?.startsWith(TRANSACTION_CONFIRMATION_PREFIX)) {
+      return null;
+    }
+
+    try {
+      const draft = JSON.parse(value.slice(TRANSACTION_CONFIRMATION_PREFIX.length)) as Partial<WhatsappTransactionDraft>;
+      if (
+        typeof draft.description !== 'string' ||
+        typeof draft.amount !== 'number' ||
+        !Object.values(TransactionType).includes(draft.type as TransactionType) ||
+        !Object.values(FinancialScope).includes(draft.scope as FinancialScope) ||
+        typeof draft.categoryHint !== 'string'
+      ) {
+        return null;
+      }
+      return draft as WhatsappTransactionDraft;
+    } catch {
+      return null;
+    }
   }
 
   private async appendConversation(
