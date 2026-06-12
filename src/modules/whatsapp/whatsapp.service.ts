@@ -183,14 +183,26 @@ export class WhatsappService {
         : 'Com o que foi esse gasto? Por exemplo: mercado, restaurante, transporte ou conta.';
     }
 
-    if (extracted.type === 'INCOME' && this.isSaleMessage(message) && !extracted.channelHint) {
+    const explicitScope = this.inferExplicitScope(message);
+    const isSale = extracted.type === 'INCOME' && this.isSaleMessage(message);
+
+    if (isSale && !explicitScope) {
+      await this.setPendingMessage(userId, phone, message);
+      return 'Essa venda foi uma renda pessoal ou pertence ao seu negócio? Responda: Pessoal ou Negócio.';
+    }
+
+    if (isSale && explicitScope === FinancialScope.BUSINESS && !extracted.channelHint) {
       await this.setPendingMessage(userId, phone, message);
       return 'Por qual canal você fez essa venda? Por exemplo: Shopee, Instagram, loja física ou venda direta.';
     }
 
-    const channel = await this.resolveChannel(userId, extracted.channelHint);
+    const scope =
+      explicitScope ?? this.inferScope(message, Boolean(extracted.channelHint));
+    const channel =
+      scope === FinancialScope.BUSINESS
+        ? await this.resolveChannel(userId, extracted.channelHint)
+        : undefined;
     const category = await this.resolveCategory(userId, categoryHint, extracted.type);
-    const scope = this.inferScope(message, Boolean(channel));
 
     const transaction = await this.transactionService.create(userId, {
       description: message,
@@ -629,10 +641,25 @@ export class WhatsappService {
 
   private inferScope(message: string, hasChannel: boolean): FinancialScope {
     const lower = this.normalizeText(message);
-    if (hasChannel || this.isSaleMessage(lower) || lower.includes('loja') || lower.includes('frete')) {
+    const explicitScope = this.inferExplicitScope(lower);
+    if (explicitScope) {
+      return explicitScope;
+    }
+    if (hasChannel || lower.includes('loja') || lower.includes('frete')) {
       return FinancialScope.BUSINESS;
     }
     return FinancialScope.PERSONAL;
+  }
+
+  private inferExplicitScope(message: string): FinancialScope | null {
+    const lower = this.normalizeText(message);
+    if (/\b(negocio|empresa|empresarial|comercial)\b/.test(lower)) {
+      return FinancialScope.BUSINESS;
+    }
+    if (/\b(pessoal|particular|renda extra)\b/.test(lower)) {
+      return FinancialScope.PERSONAL;
+    }
+    return null;
   }
 
   private isSaleMessage(message: string): boolean {

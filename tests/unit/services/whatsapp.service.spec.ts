@@ -204,7 +204,7 @@ describe('WhatsappService', () => {
     });
   });
 
-  it('coleta valor, origem e canal antes de registrar uma venda como negocio', async () => {
+  it('pergunta se a venda e pessoal ou do negocio antes de solicitar o canal', async () => {
     fetchMock.mockImplementation(async (url: string) => ({
       ok: true,
       json: vi.fn().mockResolvedValue(
@@ -237,6 +237,12 @@ describe('WhatsappService', () => {
         recentMessages: [],
         pendingText: 'Eu ganhei mais dinheiro hj. 200. Foi uma venda de um relogio',
       })
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({
+        recentMessages: [],
+        pendingText: 'Eu ganhei mais dinheiro hj. 200. Foi uma venda de um relogio. Negocio',
+      })
       .mockResolvedValueOnce({});
     prismaMock.salesChannel.findMany.mockResolvedValue([]);
     prismaMock.category.findMany.mockResolvedValue([{ name: 'Relogio' }]);
@@ -267,12 +273,20 @@ describe('WhatsappService', () => {
         amount: 200,
         type: 'INCOME',
         categoryHint: 'Relogio',
+        channelHint: null,
+        confidence: 0.99,
+      })
+      .mockResolvedValueOnce({
+        amount: 200,
+        type: 'INCOME',
+        categoryHint: 'Relogio',
         channelHint: 'Venda direta',
         confidence: 0.99,
       });
     transactionServiceMock.create.mockResolvedValue({
       id: 'tx-income',
-      description: 'Eu ganhei mais dinheiro hj. 200. Foi uma venda de um relogio. Venda direta',
+      description:
+        'Eu ganhei mais dinheiro hj. 200. Foi uma venda de um relogio. Negocio. Venda direta',
       amount: 200,
       type: TransactionType.INCOME,
     });
@@ -291,9 +305,16 @@ describe('WhatsappService', () => {
     expect(sourceQuestion.reply).toContain('De onde veio esse dinheiro?');
     expect(transactionServiceMock.create).not.toHaveBeenCalled();
 
-    const channelQuestion = await service.handleWebhook({
+    const scopeQuestion = await service.handleWebhook({
       from: '5511999999999',
       text: 'Foi uma venda de um relógio',
+    });
+    expect(scopeQuestion.reply).toContain('Pessoal ou Negócio');
+    expect(transactionServiceMock.create).not.toHaveBeenCalled();
+
+    const channelQuestion = await service.handleWebhook({
+      from: '5511999999999',
+      text: 'Negócio',
     });
     expect(channelQuestion.reply).toContain('Por qual canal');
     expect(transactionServiceMock.create).not.toHaveBeenCalled();
@@ -313,6 +334,81 @@ describe('WhatsappService', () => {
         scope: FinancialScope.BUSINESS,
         categoryId: 'category-income',
         channelId: 'channel-direct',
+      }),
+    );
+  });
+
+  it('registra venda pessoal sem solicitar canal de venda', async () => {
+    fetchMock.mockImplementation(async (url: string) => ({
+      ok: true,
+      json: vi.fn().mockResolvedValue(
+        url.endsWith('/status') ? { status: 'conectado' } : { success: true },
+      ),
+    }));
+    prismaMock.user.findFirst.mockResolvedValue({
+      id: 'user-1',
+      name: 'Gustavo',
+      phone: '11999999999',
+    });
+    prismaMock.whatsappConversation.upsert.mockReset();
+    prismaMock.whatsappConversation.upsert
+      .mockResolvedValueOnce({ recentMessages: [], pendingText: null })
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({
+        recentMessages: [],
+        pendingText: 'Vendi um relogio por 200',
+      })
+      .mockResolvedValueOnce({});
+    prismaMock.salesChannel.findMany.mockResolvedValue([]);
+    prismaMock.category.findMany.mockResolvedValue([{ name: 'Relogio' }]);
+    prismaMock.category.findFirst.mockResolvedValue({
+      id: 'category-income',
+      name: 'Relogio',
+    });
+    geminiMock.extractFinancialData
+      .mockResolvedValueOnce({
+        amount: 200,
+        type: 'INCOME',
+        categoryHint: 'Relogio',
+        channelHint: null,
+        confidence: 0.98,
+      })
+      .mockResolvedValueOnce({
+        amount: 200,
+        type: 'INCOME',
+        categoryHint: 'Relogio',
+        channelHint: null,
+        confidence: 0.99,
+      });
+    transactionServiceMock.create.mockResolvedValue({
+      id: 'tx-income-personal',
+      description: 'Vendi um relogio por 200. Pessoal',
+      amount: 200,
+      type: TransactionType.INCOME,
+    });
+
+    const scopeQuestion = await service.handleWebhook({
+      from: '5511999999999',
+      text: 'Vendi um relógio por 200',
+    });
+    expect(scopeQuestion.reply).toContain('Pessoal ou Negócio');
+
+    const confirmation = await service.handleWebhook({
+      from: '5511999999999',
+      text: 'Pessoal',
+    });
+    expect(confirmation.reply).toContain('Lancamento registrado');
+    expect(confirmation.reply).toContain('Modo: Pessoal');
+    expect(prismaMock.salesChannel.findFirst).not.toHaveBeenCalled();
+    expect(transactionServiceMock.create).toHaveBeenCalledWith(
+      'user-1',
+      expect.objectContaining({
+        amount: 200,
+        type: TransactionType.INCOME,
+        source: TransactionSource.WHATSAPP,
+        scope: FinancialScope.PERSONAL,
+        categoryId: 'category-income',
       }),
     );
   });
