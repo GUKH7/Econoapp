@@ -586,4 +586,54 @@ describe('WhatsappService', () => {
     );
     expect(transactionServiceMock.create).not.toHaveBeenCalled();
   });
+
+  it('lista os gastos do mes com categoria, valor e total', async () => {
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: true,
+        json: vi.fn().mockResolvedValue({ status: 'conectado' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: vi.fn().mockResolvedValue({ success: true }),
+      });
+    prismaMock.user.findFirst.mockResolvedValue({
+      id: 'user-1',
+      name: 'Gustavo',
+      phone: '11999999999',
+    });
+    prismaMock.transaction.findMany.mockResolvedValue([
+      {
+        id: 'expense-1',
+        description: 'Compra de relógio',
+        amount: 20,
+        netAmount: 20,
+        type: TransactionType.EXPENSE,
+        date: new Date(),
+        category: { id: 'category-watch', name: 'Relógio' },
+      },
+      {
+        id: 'expense-2',
+        description: 'Almoço no restaurante',
+        amount: 40,
+        netAmount: 40,
+        type: TransactionType.EXPENSE,
+        date: new Date(),
+        category: { id: 'category-food', name: 'Alimentação' },
+      },
+    ]);
+
+    const result = await service.handleWebhook({
+      from: '5511999999999',
+      text: 'Quais foram meus gastos do mês?',
+    });
+
+    const normalizedReply = result.reply.replace(/\u00a0/g, ' ');
+    expect(normalizedReply).toContain('Seus gastos deste mês:');
+    expect(normalizedReply).toContain('Compra de relógio — Relógio: R$ 20,00');
+    expect(normalizedReply).toContain('Almoço no restaurante — Alimentação: R$ 40,00');
+    expect(normalizedReply).toContain('Total: R$ 60,00');
+    expect(geminiMock.classifyWhatsappMessage).not.toHaveBeenCalled();
+    expect(transactionServiceMock.create).not.toHaveBeenCalled();
+  });
 });

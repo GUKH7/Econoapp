@@ -317,6 +317,39 @@ export class WhatsappService {
       return `Sua maior despesa do mes foi ${largest.description}: ${this.formatMoney(Number(largest.amount))} em ${largest.category.name}.`;
     }
 
+    if (this.isExpenseListQuestion(lower)) {
+      const expenses = await this.prisma.transaction.findMany({
+        where: {
+          userId,
+          type: 'EXPENSE',
+          date: { gte: start, lt: end },
+          ...(scope ? { scope } : {}),
+        },
+        orderBy: { date: 'desc' },
+        take: 15,
+        include: { category: true },
+      });
+
+      if (!expenses.length) {
+        return 'Você ainda não tem gastos registrados neste mês.';
+      }
+
+      const total = expenses.reduce((sum, item) => sum + Number(item.netAmount ?? item.amount), 0);
+      const lines = expenses.map(
+        (item, index) =>
+          `${index + 1}. ${item.description} — ${item.category.name}: ${this.formatMoney(Number(item.netAmount ?? item.amount))}`,
+      );
+      return [
+        'Seus gastos deste mês:',
+        ...lines,
+        '',
+        `Total: ${this.formatMoney(total)}`,
+        expenses.length === 15 ? 'Mostrando os 15 gastos mais recentes.' : '',
+      ]
+        .filter(Boolean)
+        .join('\n');
+    }
+
     if (lower.includes('lucro') || lower.includes('negocio')) {
       const totals = await this.monthTotals(userId, start, end, FinancialScope.BUSINESS);
       return `Seu negocio esta com saldo de ${this.formatMoney(totals.balance)} neste mes.\nReceitas: ${this.formatMoney(totals.income)}\nGastos: ${this.formatMoney(totals.expense)}.`;
@@ -576,12 +609,21 @@ export class WhatsappService {
     const lower = this.normalizeText(message);
     return (
       lower.includes('quanto gastei') ||
+      this.isExpenseListQuestion(lower) ||
       lower.includes('quanto vendi') ||
       lower.includes('maior despesa') ||
       lower.includes('resumo do mes') ||
       lower.includes('saldo atual') ||
       lower.includes('meu negocio esta no lucro') ||
       lower.includes('como esta meu negocio')
+    );
+  }
+
+  private isExpenseListQuestion(message: string): boolean {
+    const lower = this.normalizeText(message);
+    return (
+      /\b(quais|liste|listar|mostre|mostrar|detalhe|detalhar)\b.*\b(gastos|despesas)\b/.test(lower) ||
+      /\b(meus gastos|minhas despesas|gastos do mes|despesas do mes)\b/.test(lower)
     );
   }
 
