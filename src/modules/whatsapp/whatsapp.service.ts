@@ -108,11 +108,14 @@ export class WhatsappService {
       return this.answerQuestion(userId, message);
     }
 
+    if (this.isTransactionWithoutAmount(message)) {
+      await this.setPendingMessage(userId, phone, message);
+      return this.missingAmountQuestion(message);
+    }
+
     if (this.needsMoreDescription(message)) {
       await this.setPendingMessage(userId, phone, message);
-      return message.toLowerCase().includes('vendi')
-        ? 'Foi venda de qual produto ou canal?'
-        : 'Esse gasto foi com o que?';
+      return this.missingDescriptionQuestion(message);
     }
 
     if (this.looksLikeTransaction(message)) {
@@ -176,8 +179,8 @@ export class WhatsappService {
     if (!categoryHint || this.normalizeText(categoryHint) === 'nao_especificado') {
       await this.setPendingMessage(userId, phone, message);
       return extracted.type === 'INCOME'
-        ? 'Essa receita foi de que produto, serviço ou origem?'
-        : 'Esse gasto foi com o que?';
+        ? 'De onde veio esse dinheiro? Por exemplo: salário, venda, serviço ou transferência.'
+        : 'Com o que foi esse gasto? Por exemplo: mercado, restaurante, transporte ou conta.';
     }
 
     const channel = await this.resolveChannel(userId, extracted.channelHint);
@@ -569,15 +572,54 @@ export class WhatsappService {
 
   private looksLikeTransaction(message: string): boolean {
     const lower = this.normalizeText(message);
-    const hasAmount = /(?:r\$ ?)?\d+([\.,]\d{1,2})?/.test(lower);
-    return hasAmount && /\b(gastei|paguei|comprei|recebi|vendi|ganhei|entrou|saiu)\b/.test(lower);
+    return this.hasAmount(lower) && this.hasTransactionVerb(lower);
+  }
+
+  private isTransactionWithoutAmount(message: string): boolean {
+    const lower = this.normalizeText(message);
+    return this.hasTransactionVerb(lower) && !this.hasAmount(lower);
+  }
+
+  private missingAmountQuestion(message: string): string {
+    const lower = this.normalizeText(message);
+    if (/\b(gastei|paguei|comprei|saiu)\b/.test(lower)) {
+      return lower.includes('hoje')
+        ? 'Quanto você gastou hoje?'
+        : 'Qual foi o valor desse gasto?';
+    }
+    if (lower.includes('vendi')) {
+      return lower.includes('hoje')
+        ? 'Quanto você recebeu com essa venda hoje?'
+        : 'Qual foi o valor dessa venda?';
+    }
+    return lower.includes('hoje') || /\bhj\b/.test(lower)
+      ? 'Quanto você ganhou hoje?'
+      : 'Qual foi o valor que você recebeu?';
+  }
+
+  private missingDescriptionQuestion(message: string): string {
+    const lower = this.normalizeText(message);
+    if (lower.includes('vendi')) {
+      return 'O que você vendeu e por qual canal?';
+    }
+    if (/\b(recebi|ganhei|entrou)\b/.test(lower)) {
+      return 'De onde veio esse dinheiro? Por exemplo: salário, venda, serviço ou transferência.';
+    }
+    return 'Com o que foi esse gasto? Por exemplo: mercado, restaurante, transporte ou conta.';
+  }
+
+  private hasAmount(message: string): boolean {
+    return /(?:r\$ ?)?\d+([\.,]\d{1,2})?/.test(message);
+  }
+
+  private hasTransactionVerb(message: string): boolean {
+    return /\b(gastei|paguei|comprei|recebi|vendi|ganhei|entrou|saiu)\b/.test(message);
   }
 
   private needsMoreDescription(message: string): boolean {
     const lower = this.normalizeText(message);
-    const hasAmount = /(?:r\$ ?)?\d+([\.,]\d{1,2})?/.test(lower);
-    if (!hasAmount) return false;
-    return /^(gastei|paguei|recebi|vendi) (?:r\$ ?)?\d+([\.,]\d{1,2})?$/.test(lower);
+    if (!this.hasAmount(lower)) return false;
+    return /^(gastei|paguei|recebi|vendi|ganhei|entrou) (?:r\$ ?)?\d+([\.,]\d{1,2})?$/.test(lower);
   }
 
   private inferScope(message: string, hasChannel: boolean): FinancialScope {

@@ -244,6 +244,9 @@ export class GeminiService {
     } else {
       lines.push('REGRA DE OBRIGAÇÃO: Se o usuário mencionar uma venda mas NÃO citar o produto/categoria (ex: apenas "vendi 50 reais na shopee" ou "entrou 100 reais"), você DEVE obrigatoriamente retornar "NÃO_ESPECIFICADO" no categoryHint. Caso contrário, use o nome do produto vendido como categoryHint.');
     }
+    lines.push(
+      'REGRA PARA RECEITAS: Se a mensagem disser apenas que recebeu ou ganhou dinheiro e informar o valor, mas NÃO explicar a origem (salário, venda, serviço, transferência etc.), retorne obrigatoriamente "NÃO_ESPECIFICADO" no categoryHint.',
+    );
 
     return lines;
   }

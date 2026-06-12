@@ -204,6 +204,97 @@ describe('WhatsappService', () => {
     });
   });
 
+  it('coleta valor e origem antes de registrar uma receita incompleta', async () => {
+    fetchMock.mockImplementation(async (url: string) => ({
+      ok: true,
+      json: vi.fn().mockResolvedValue(
+        url.endsWith('/status') ? { status: 'conectado' } : { success: true },
+      ),
+    }));
+    prismaMock.user.findFirst.mockResolvedValue({
+      id: 'user-1',
+      name: 'Gustavo',
+      phone: '11999999999',
+    });
+    prismaMock.whatsappConversation.upsert.mockReset();
+    prismaMock.whatsappConversation.upsert
+      .mockResolvedValueOnce({ recentMessages: [], pendingText: null })
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({
+        recentMessages: [
+          { role: 'user', text: 'Eu ganhei mais dinheiro hj' },
+          { role: 'assistant', text: 'Quanto você ganhou hoje?' },
+        ],
+        pendingText: 'Eu ganhei mais dinheiro hj',
+      })
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({
+        recentMessages: [],
+        pendingText: 'Eu ganhei mais dinheiro hj. 200',
+      })
+      .mockResolvedValueOnce({});
+    prismaMock.salesChannel.findMany.mockResolvedValue([]);
+    prismaMock.category.findMany.mockResolvedValue([{ name: 'Salário' }]);
+    prismaMock.salesChannel.findFirst.mockResolvedValue(null);
+    prismaMock.category.findFirst.mockResolvedValue({
+      id: 'category-income',
+      name: 'Salário',
+    });
+    geminiMock.extractFinancialData
+      .mockResolvedValueOnce({
+        amount: 200,
+        type: 'INCOME',
+        categoryHint: 'NÃO_ESPECIFICADO',
+        channelHint: null,
+        confidence: 0.95,
+      })
+      .mockResolvedValueOnce({
+        amount: 200,
+        type: 'INCOME',
+        categoryHint: 'Salário',
+        channelHint: null,
+        confidence: 0.98,
+      });
+    transactionServiceMock.create.mockResolvedValue({
+      id: 'tx-income',
+      description: 'Eu ganhei mais dinheiro hj. 200. salário',
+      amount: 200,
+      type: TransactionType.INCOME,
+    });
+
+    const amountQuestion = await service.handleWebhook({
+      from: '5511999999999',
+      text: 'Eu ganhei mais dinheiro hj',
+    });
+    expect(amountQuestion.reply).toBe('Quanto você ganhou hoje?');
+    expect(transactionServiceMock.create).not.toHaveBeenCalled();
+
+    const sourceQuestion = await service.handleWebhook({
+      from: '5511999999999',
+      text: '200',
+    });
+    expect(sourceQuestion.reply).toContain('De onde veio esse dinheiro?');
+    expect(transactionServiceMock.create).not.toHaveBeenCalled();
+
+    const confirmation = await service.handleWebhook({
+      from: '5511999999999',
+      text: 'Salário',
+    });
+    expect(confirmation.reply).toContain('Lancamento registrado');
+    expect(transactionServiceMock.create).toHaveBeenCalledTimes(1);
+    expect(transactionServiceMock.create).toHaveBeenCalledWith(
+      'user-1',
+      expect.objectContaining({
+        amount: 200,
+        type: TransactionType.INCOME,
+        source: TransactionSource.WHATSAPP,
+        categoryId: 'category-income',
+      }),
+    );
+  });
+
   it('responde conversa livre usando IA sem consultar ou alterar transacoes', async () => {
     fetchMock
       .mockResolvedValueOnce({
