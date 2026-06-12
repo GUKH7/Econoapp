@@ -228,6 +228,7 @@ export class GeminiService {
     const lines: string[] = [];
 
     lines.push('Se a mensagem mencionar uma plataforma ou canal de venda (ex: Shopee, Mercado Livre, OLX, Magalu, Amazon, Shein, etc.), SEMPRE retorne o nome no campo channelHint.');
+    lines.push('Se o usuário disser que foi uma venda direta, presencial ou para um cliente sem plataforma, retorne "Venda direta" no campo channelHint.');
     lines.push('REGRA PARA VALORES: O campo "amount" deve representar SEMPRE o valor TOTAL da transação. Se o usuário disser "vendi 50 bolas a 10 reais cada", o amount é 500. Se disser "vendi 50 bolas e deu 10 reais", o amount é 10. Preste atenção no contexto da frase.');
 
     if (context?.channelNames?.length) {

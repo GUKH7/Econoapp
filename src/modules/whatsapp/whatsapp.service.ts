@@ -183,6 +183,11 @@ export class WhatsappService {
         : 'Com o que foi esse gasto? Por exemplo: mercado, restaurante, transporte ou conta.';
     }
 
+    if (extracted.type === 'INCOME' && this.isSaleMessage(message) && !extracted.channelHint) {
+      await this.setPendingMessage(userId, phone, message);
+      return 'Por qual canal você fez essa venda? Por exemplo: Shopee, Instagram, loja física ou venda direta.';
+    }
+
     const channel = await this.resolveChannel(userId, extracted.channelHint);
     const category = await this.resolveCategory(userId, categoryHint, extracted.type);
     const scope = this.inferScope(message, Boolean(channel));
@@ -624,10 +629,14 @@ export class WhatsappService {
 
   private inferScope(message: string, hasChannel: boolean): FinancialScope {
     const lower = this.normalizeText(message);
-    if (hasChannel || lower.includes('vendi') || lower.includes('loja') || lower.includes('frete')) {
+    if (hasChannel || this.isSaleMessage(lower) || lower.includes('loja') || lower.includes('frete')) {
       return FinancialScope.BUSINESS;
     }
     return FinancialScope.PERSONAL;
+  }
+
+  private isSaleMessage(message: string): boolean {
+    return /\b(vendi|venda|vendeu|comercializei|comercializacao)\b/.test(this.normalizeText(message));
   }
 
   private currentMonthRange(): { start: Date; end: Date } {

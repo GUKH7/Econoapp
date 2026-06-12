@@ -204,7 +204,7 @@ describe('WhatsappService', () => {
     });
   });
 
-  it('coleta valor e origem antes de registrar uma receita incompleta', async () => {
+  it('coleta valor, origem e canal antes de registrar uma venda como negocio', async () => {
     fetchMock.mockImplementation(async (url: string) => ({
       ok: true,
       json: vi.fn().mockResolvedValue(
@@ -222,10 +222,7 @@ describe('WhatsappService', () => {
       .mockResolvedValueOnce({})
       .mockResolvedValueOnce({})
       .mockResolvedValueOnce({
-        recentMessages: [
-          { role: 'user', text: 'Eu ganhei mais dinheiro hj' },
-          { role: 'assistant', text: 'Quanto você ganhou hoje?' },
-        ],
+        recentMessages: [],
         pendingText: 'Eu ganhei mais dinheiro hj',
       })
       .mockResolvedValueOnce({})
@@ -234,32 +231,48 @@ describe('WhatsappService', () => {
         recentMessages: [],
         pendingText: 'Eu ganhei mais dinheiro hj. 200',
       })
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({
+        recentMessages: [],
+        pendingText: 'Eu ganhei mais dinheiro hj. 200. Foi uma venda de um relogio',
+      })
       .mockResolvedValueOnce({});
     prismaMock.salesChannel.findMany.mockResolvedValue([]);
-    prismaMock.category.findMany.mockResolvedValue([{ name: 'Salário' }]);
-    prismaMock.salesChannel.findFirst.mockResolvedValue(null);
+    prismaMock.category.findMany.mockResolvedValue([{ name: 'Relogio' }]);
+    prismaMock.salesChannel.findFirst.mockResolvedValue({
+      id: 'channel-direct',
+      name: 'Venda direta',
+    });
     prismaMock.category.findFirst.mockResolvedValue({
       id: 'category-income',
-      name: 'Salário',
+      name: 'Relogio',
     });
     geminiMock.extractFinancialData
       .mockResolvedValueOnce({
         amount: 200,
         type: 'INCOME',
-        categoryHint: 'NÃO_ESPECIFICADO',
+        categoryHint: 'NAO_ESPECIFICADO',
         channelHint: null,
         confidence: 0.95,
       })
       .mockResolvedValueOnce({
         amount: 200,
         type: 'INCOME',
-        categoryHint: 'Salário',
+        categoryHint: 'Relogio',
         channelHint: null,
         confidence: 0.98,
+      })
+      .mockResolvedValueOnce({
+        amount: 200,
+        type: 'INCOME',
+        categoryHint: 'Relogio',
+        channelHint: 'Venda direta',
+        confidence: 0.99,
       });
     transactionServiceMock.create.mockResolvedValue({
       id: 'tx-income',
-      description: 'Eu ganhei mais dinheiro hj. 200. salário',
+      description: 'Eu ganhei mais dinheiro hj. 200. Foi uma venda de um relogio. Venda direta',
       amount: 200,
       type: TransactionType.INCOME,
     });
@@ -278,9 +291,16 @@ describe('WhatsappService', () => {
     expect(sourceQuestion.reply).toContain('De onde veio esse dinheiro?');
     expect(transactionServiceMock.create).not.toHaveBeenCalled();
 
+    const channelQuestion = await service.handleWebhook({
+      from: '5511999999999',
+      text: 'Foi uma venda de um relógio',
+    });
+    expect(channelQuestion.reply).toContain('Por qual canal');
+    expect(transactionServiceMock.create).not.toHaveBeenCalled();
+
     const confirmation = await service.handleWebhook({
       from: '5511999999999',
-      text: 'Salário',
+      text: 'Venda direta',
     });
     expect(confirmation.reply).toContain('Lancamento registrado');
     expect(transactionServiceMock.create).toHaveBeenCalledTimes(1);
@@ -290,7 +310,9 @@ describe('WhatsappService', () => {
         amount: 200,
         type: TransactionType.INCOME,
         source: TransactionSource.WHATSAPP,
+        scope: FinancialScope.BUSINESS,
         categoryId: 'category-income',
+        channelId: 'channel-direct',
       }),
     );
   });
