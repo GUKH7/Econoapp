@@ -175,7 +175,13 @@ export class WhatsappService {
       return 'Nao entendi se isso e uma receita, gasto, venda ou pergunta. Pode mandar com valor e descricao?';
     }
 
-    const categoryHint = String(extracted.categoryHint || '').trim();
+    const extractedCategoryHint = String(extracted.categoryHint || '').trim();
+    const categoryHint =
+      extracted.type === 'INCOME' &&
+      (!extractedCategoryHint ||
+        this.normalizeText(extractedCategoryHint) === 'nao_especificado')
+        ? this.inferIncomeCategory(message) ?? extractedCategoryHint
+        : extractedCategoryHint;
     if (!categoryHint || this.normalizeText(categoryHint) === 'nao_especificado') {
       await this.setPendingMessage(userId, phone, message);
       return extracted.type === 'INCOME'
@@ -670,6 +676,22 @@ export class WhatsappService {
 
   private isSaleMessage(message: string): boolean {
     return /\b(vendi|venda|vendeu|comercializei|comercializacao)\b/.test(this.normalizeText(message));
+  }
+
+  private inferIncomeCategory(message: string): string | null {
+    const lower = this.normalizeText(message);
+    const categories: Array<[RegExp, string]> = [
+      [/\b(servico|freelance|freela|bico)\b/, 'Serviços'],
+      [/\b(salario|ordenado|pagamento da empresa)\b/, 'Salário'],
+      [/\b(transferencia|pix recebido)\b/, 'Transferência'],
+      [/\b(comissao|comissionamento)\b/, 'Comissão'],
+      [/\b(aluguel|locacao)\b/, 'Aluguel'],
+      [/\b(juros|rendimento|dividendo)\b/, 'Rendimentos'],
+      [/\b(premio|bonificacao|bonus)\b/, 'Bonificação'],
+      [/\b(reembolso|devolucao)\b/, 'Reembolso'],
+    ];
+
+    return categories.find(([pattern]) => pattern.test(lower))?.[1] ?? null;
   }
 
   private buildTransactionDescription(

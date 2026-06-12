@@ -251,6 +251,9 @@ export class GeminiService {
     lines.push(
       'REGRA PARA RECEITAS: Se a mensagem disser apenas que recebeu ou ganhou dinheiro e informar o valor, mas NÃO explicar a origem (salário, venda, serviço, transferência etc.), retorne obrigatoriamente "NÃO_ESPECIFICADO" no categoryHint.',
     );
+    lines.push(
+      'Se a mensagem completa informar a origem em qualquer trecho posterior, inclusive "foi um serviço que fiz", "veio de um salário" ou "foi uma transferência", use essa origem no categoryHint e NÃO retorne "NÃO_ESPECIFICADO".',
+    );
 
     return lines;
   }

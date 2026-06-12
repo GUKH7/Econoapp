@@ -417,6 +417,82 @@ describe('WhatsappService', () => {
     );
   });
 
+  it('reconhece servico informado em resposta sem repetir a pergunta de origem', async () => {
+    fetchMock.mockImplementation(async (url: string) => ({
+      ok: true,
+      json: vi.fn().mockResolvedValue(
+        url.endsWith('/status') ? { status: 'conectado' } : { success: true },
+      ),
+    }));
+    prismaMock.user.findFirst.mockResolvedValue({
+      id: 'user-1',
+      name: 'Gustavo',
+      phone: '11999999999',
+    });
+    prismaMock.whatsappConversation.upsert.mockReset();
+    prismaMock.whatsappConversation.upsert
+      .mockResolvedValueOnce({ recentMessages: [], pendingText: null })
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({
+        recentMessages: [],
+        pendingText: 'Ganhei 30 reais',
+      })
+      .mockResolvedValueOnce({});
+    prismaMock.salesChannel.findMany.mockResolvedValue([]);
+    prismaMock.category.findMany.mockResolvedValue([]);
+    prismaMock.category.findFirst.mockResolvedValue(null);
+    prismaMock.category.findUnique.mockResolvedValue(null);
+    prismaMock.category.create.mockResolvedValue({
+      id: 'category-service',
+      name: 'Serviços',
+    });
+    geminiMock.extractFinancialData
+      .mockResolvedValueOnce({
+        amount: 30,
+        type: 'INCOME',
+        categoryHint: 'NAO_ESPECIFICADO',
+        channelHint: null,
+        confidence: 0.98,
+      })
+      .mockResolvedValueOnce({
+        amount: 30,
+        type: 'INCOME',
+        categoryHint: 'NAO_ESPECIFICADO',
+        channelHint: null,
+        confidence: 0.98,
+      });
+    transactionServiceMock.create.mockResolvedValue({
+      id: 'tx-service',
+      description: 'Receita de serviços',
+      amount: 30,
+      type: TransactionType.INCOME,
+    });
+
+    const sourceQuestion = await service.handleWebhook({
+      from: '5511999999999',
+      text: 'Ganhei 30 reais',
+    });
+    expect(sourceQuestion.reply).toContain('De onde veio esse dinheiro?');
+
+    const confirmation = await service.handleWebhook({
+      from: '5511999999999',
+      text: 'Foi um serviço que eu fiz',
+    });
+    expect(confirmation.reply).toContain('Lancamento registrado');
+    expect(confirmation.reply).toContain('Categoria: Serviços');
+    expect(transactionServiceMock.create).toHaveBeenCalledWith(
+      'user-1',
+      expect.objectContaining({
+        description: 'Receita de serviços',
+        amount: 30,
+        type: TransactionType.INCOME,
+        scope: FinancialScope.PERSONAL,
+        categoryId: 'category-service',
+      }),
+    );
+  });
+
   it('responde conversa livre usando IA sem consultar ou alterar transacoes', async () => {
     fetchMock
       .mockResolvedValueOnce({
