@@ -154,6 +154,9 @@ model WhatsappConversation {
   phone          String   @unique
   recentMessages Json     @default("[]")
   pendingText    String?
+  pendingType    String?
+  pendingStep    String?
+  pendingData    Json?
   createdAt      DateTime @default(now()) @db.Timestamptz(6)
   updatedAt      DateTime @updatedAt @db.Timestamptz(6)
 

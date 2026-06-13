@@ -56,6 +56,12 @@ type WhatsappMutationDraft =
       amount: number;
       type: TransactionType;
     };
+type WhatsappConversationState = {
+  pendingText?: string | null;
+  pendingType?: string | null;
+  pendingStep?: string | null;
+  pendingData?: unknown;
+};
 
 const TRANSACTION_CONFIRMATION_PREFIX = '__TRANSACTION_CONFIRMATION__:';
 const TRANSACTION_MUTATION_PREFIX = '__TRANSACTION_MUTATION__:';
@@ -126,7 +132,17 @@ export class WhatsappService {
 
     const conversation = await this.getConversation(user.id, phone);
     const recentMessages = this.parseRecentMessages(conversation.recentMessages);
-    const paymentDraft = this.parsePaymentDraft(conversation.pendingText);
+    const pendingValue = this.conversationPendingValue(conversation);
+
+    if (this.isMenuCommand(message)) {
+      await this.clearPendingMessage(user.id);
+      const reply = this.helpReply();
+      await this.appendConversation(user.id, phone, recentMessages, message, reply);
+      await this.safeReply(phone, reply);
+      return { phone, reply };
+    }
+
+    const paymentDraft = this.parsePaymentDraft(pendingValue);
     if (paymentDraft) {
       const reply = await this.handlePaymentSelection(user.id, phone, message, paymentDraft);
       await this.appendConversation(user.id, phone, recentMessages, message, reply);
@@ -134,7 +150,7 @@ export class WhatsappService {
       return { phone, reply };
     }
 
-    const mutationDraft = this.parseMutationDraft(conversation.pendingText);
+    const mutationDraft = this.parseMutationDraft(pendingValue);
     if (mutationDraft) {
       const reply = await this.handleMutationConfirmation(user.id, message, mutationDraft);
       await this.appendConversation(user.id, phone, recentMessages, message, reply);
@@ -142,7 +158,7 @@ export class WhatsappService {
       return { phone, reply };
     }
 
-    const transactionDraft = this.parseTransactionDraft(conversation.pendingText);
+    const transactionDraft = this.parseTransactionDraft(pendingValue);
     if (transactionDraft) {
       const reply = await this.handleTransactionConfirmation(
         user.id,
@@ -154,12 +170,20 @@ export class WhatsappService {
       return { phone, reply };
     }
 
-    const textToProcess = conversation.pendingText ? `${conversation.pendingText}. ${message}` : message;
-    if (conversation.pendingText) {
-      await this.prisma.whatsappConversation.update({
-        where: { userId: user.id },
-        data: { pendingText: null },
-      });
+    if (this.isCancelCommand(message)) {
+      await this.clearPendingMessage(user.id);
+      const reply = pendingValue || this.pendingDetailsText(conversation)
+        ? 'Conversa cancelada. Nenhuma informação pendente foi salva.'
+        : 'Não há nenhuma conversa pendente para cancelar.';
+      await this.appendConversation(user.id, phone, recentMessages, message, reply);
+      await this.safeReply(phone, reply);
+      return { phone, reply };
+    }
+
+    const pendingDetails = this.pendingDetailsText(conversation);
+    const textToProcess = pendingDetails ? `${pendingDetails}. ${message}` : message;
+    if (pendingValue || pendingDetails) {
+      await this.clearPendingMessage(user.id);
     }
 
     const reply = await this.processUserMessage(
@@ -194,12 +218,24 @@ export class WhatsappService {
     }
 
     if (this.isTransactionWithoutAmount(message)) {
-      await this.setPendingMessage(userId, phone, message);
+      await this.setPendingMessage(
+        userId,
+        phone,
+        message,
+        'TRANSACTION_DETAILS',
+        'WAITING_AMOUNT',
+      );
       return this.missingAmountQuestion(message);
     }
 
     if (this.needsMoreDescription(message)) {
-      await this.setPendingMessage(userId, phone, message);
+      await this.setPendingMessage(
+        userId,
+        phone,
+        message,
+        'TRANSACTION_DETAILS',
+        'WAITING_DESCRIPTION',
+      );
       return this.missingDescriptionQuestion(message);
     }
 
@@ -268,7 +304,13 @@ export class WhatsappService {
         ? this.inferIncomeCategory(message) ?? extractedCategoryHint
         : extractedCategoryHint;
     if (!categoryHint || this.normalizeText(categoryHint) === 'nao_especificado') {
-      await this.setPendingMessage(userId, phone, message);
+      await this.setPendingMessage(
+        userId,
+        phone,
+        message,
+        'TRANSACTION_DETAILS',
+        extracted.type === 'INCOME' ? 'WAITING_ORIGIN' : 'WAITING_CATEGORY',
+      );
       return extracted.type === 'INCOME'
         ? 'De onde veio esse dinheiro? Por exemplo: salário, venda, serviço ou transferência.'
         : 'Com o que foi esse gasto? Por exemplo: mercado, restaurante, transporte ou conta.';
@@ -278,12 +320,24 @@ export class WhatsappService {
     const isSale = extracted.type === 'INCOME' && this.isSaleMessage(message);
 
     if (isSale && !explicitScope) {
-      await this.setPendingMessage(userId, phone, message);
+      await this.setPendingMessage(
+        userId,
+        phone,
+        message,
+        'TRANSACTION_DETAILS',
+        'WAITING_SCOPE',
+      );
       return 'Essa venda foi uma renda pessoal ou pertence ao seu negócio? Responda: Pessoal ou Negócio.';
     }
 
     if (isSale && explicitScope === FinancialScope.BUSINESS && !extracted.channelHint) {
-      await this.setPendingMessage(userId, phone, message);
+      await this.setPendingMessage(
+        userId,
+        phone,
+        message,
+        'TRANSACTION_DETAILS',
+        'WAITING_CHANNEL',
+      );
       return 'Por qual canal você fez essa venda? Por exemplo: Shopee, Instagram, loja física ou venda direta.';
     }
 
@@ -392,6 +446,26 @@ export class WhatsappService {
     const period = this.resolveFinancialPeriod(lower);
     const { start, end } = period;
 
+    if (this.isCompleteSummaryQuestion(lower)) {
+      return this.answerCompleteSummary(userId, period);
+    }
+
+    if (this.isScopeComparisonQuestion(lower)) {
+      return this.answerScopeComparison(userId, period);
+    }
+
+    if (this.isCategoryExpenseQuestion(lower)) {
+      return this.answerExpenseCategories(userId, period, scope);
+    }
+
+    if (this.isIncomeOriginQuestion(lower)) {
+      return this.answerIncomeOrigins(userId, period, scope);
+    }
+
+    if (this.isLargestIncreaseQuestion(lower)) {
+      return this.answerLargestExpenseIncreases(userId, scope);
+    }
+
     if (this.isMonthComparisonQuestion(lower)) {
       return this.answerMonthComparison(userId, scope);
     }
@@ -490,6 +564,100 @@ export class WhatsappService {
     ].join('\n');
   }
 
+  private async answerCompleteSummary(
+    userId: string,
+    period: FinancialPeriod,
+  ): Promise<string> {
+    const [totals, categories, origins, personal, business, increases] = await Promise.all([
+      this.monthTotals(userId, period.start, period.end),
+      this.expenseCategories(userId, period.start, period.end),
+      this.incomeOrigins(userId, period.start, period.end),
+      this.monthTotals(userId, period.start, period.end, FinancialScope.PERSONAL),
+      this.monthTotals(userId, period.start, period.end, FinancialScope.BUSINESS),
+      this.largestExpenseIncreases(userId),
+    ]);
+    return [
+      `Resumo completo ${this.periodOf(period.label)}`,
+      '',
+      `Receitas: ${this.formatMoney(totals.income)}`,
+      `Gastos: ${this.formatMoney(totals.expense)}`,
+      `Saldo: ${this.formatMoney(totals.balance)}`,
+      '',
+      this.formatDistribution('Gastos por categoria', categories),
+      '',
+      this.formatDistribution('Receitas por origem', origins),
+      '',
+      `Pessoal: ${this.formatMoney(personal.balance)} de saldo`,
+      `Negócio: ${this.formatMoney(business.balance)} de saldo`,
+      '',
+      increases.length
+        ? `Maiores aumentos: ${increases
+            .slice(0, 3)
+            .map((item) => `${item.name} +${this.formatMoney(item.increase)}`)
+            .join(', ')}.`
+        : 'Nenhum aumento de gasto relevante contra o mês anterior.',
+    ].join('\n');
+  }
+
+  private async answerExpenseCategories(
+    userId: string,
+    period: FinancialPeriod,
+    scope?: FinancialScope,
+  ): Promise<string> {
+    const categories = await this.expenseCategories(userId, period.start, period.end, scope);
+    return categories.length
+      ? `${this.formatDistribution(`Gastos por categoria ${this.periodOf(period.label)}`, categories)}`
+      : `Você ainda não tem gastos registrados ${this.periodAt(period.label).toLocaleLowerCase('pt-BR')}.`;
+  }
+
+  private async answerIncomeOrigins(
+    userId: string,
+    period: FinancialPeriod,
+    scope?: FinancialScope,
+  ): Promise<string> {
+    const origins = await this.incomeOrigins(userId, period.start, period.end, scope);
+    return origins.length
+      ? this.formatDistribution(`Receitas por origem ${this.periodOf(period.label)}`, origins)
+      : `Você ainda não tem receitas registradas ${this.periodAt(period.label).toLocaleLowerCase('pt-BR')}.`;
+  }
+
+  private async answerScopeComparison(
+    userId: string,
+    period: FinancialPeriod,
+  ): Promise<string> {
+    const [personal, business] = await Promise.all([
+      this.monthTotals(userId, period.start, period.end, FinancialScope.PERSONAL),
+      this.monthTotals(userId, period.start, period.end, FinancialScope.BUSINESS),
+    ]);
+    return [
+      `Pessoal x Negócio ${this.periodOf(period.label)}`,
+      '',
+      `Pessoal — receitas ${this.formatMoney(personal.income)}, gastos ${this.formatMoney(personal.expense)}, saldo ${this.formatMoney(personal.balance)}.`,
+      `Negócio — receitas ${this.formatMoney(business.income)}, gastos ${this.formatMoney(business.expense)}, saldo ${this.formatMoney(business.balance)}.`,
+      '',
+      personal.balance === business.balance
+        ? 'Os dois modos tiveram o mesmo resultado.'
+        : `${personal.balance > business.balance ? 'Pessoal' : 'Negócio'} teve o melhor resultado, com diferença de ${this.formatMoney(Math.abs(personal.balance - business.balance))}.`,
+    ].join('\n');
+  }
+
+  private async answerLargestExpenseIncreases(
+    userId: string,
+    scope?: FinancialScope,
+  ): Promise<string> {
+    const increases = await this.largestExpenseIncreases(userId, scope);
+    if (!increases.length) {
+      return 'Nenhuma categoria de gasto aumentou em relação ao mês anterior.';
+    }
+    return [
+      'Maiores aumentos de gastos neste mês:',
+      ...increases.slice(0, 5).map(
+        (item, index) =>
+          `${index + 1}. ${item.name}: +${this.formatMoney(item.increase)} (${this.formatMoney(item.previous)} → ${this.formatMoney(item.current)})`,
+      ),
+    ].join('\n');
+  }
+
   private async findUserByPhone(phone: string) {
     const normalized = phone.replace(/\D/g, '');
     const withoutBrazilCode = normalized.startsWith('55') ? normalized.slice(2) : normalized;
@@ -569,6 +737,117 @@ export class WhatsappService {
       name: namesById.get(item.categoryId) ?? 'Sem categoria',
       total: Number(item._sum.amount ?? 0),
     }));
+  }
+
+  private async expenseCategories(
+    userId: string,
+    start: Date,
+    end: Date,
+    scope?: FinancialScope,
+  ) {
+    return this.categoryDistribution(userId, TransactionType.EXPENSE, start, end, scope);
+  }
+
+  private async incomeOrigins(
+    userId: string,
+    start: Date,
+    end: Date,
+    scope?: FinancialScope,
+  ) {
+    return this.categoryDistribution(userId, TransactionType.INCOME, start, end, scope);
+  }
+
+  private async categoryDistribution(
+    userId: string,
+    type: TransactionType,
+    start: Date,
+    end: Date,
+    scope?: FinancialScope,
+  ) {
+    const groups = await this.prisma.transaction.groupBy({
+      by: ['categoryId'],
+      where: { userId, type, date: { gte: start, lt: end }, ...(scope ? { scope } : {}) },
+      _sum: { netAmount: true },
+      orderBy: { _sum: { netAmount: 'desc' } },
+    });
+    if (!groups.length) return [];
+    const categories = await this.prisma.category.findMany({
+      where: { userId, id: { in: groups.map((item) => item.categoryId) } },
+      select: { id: true, name: true },
+    });
+    const namesById = new Map(categories.map((item) => [item.id, item.name]));
+    return groups.map((item) => ({
+      name: namesById.get(item.categoryId) ?? 'Sem categoria',
+      total: Number(item._sum.netAmount ?? 0),
+    }));
+  }
+
+  private async largestExpenseIncreases(userId: string, scope?: FinancialScope) {
+    const current = this.currentMonthRange();
+    const previous = this.previousMonthRange();
+    const [currentGroups, previousGroups] = await Promise.all([
+      this.prisma.transaction.groupBy({
+        by: ['categoryId'],
+        where: {
+          userId,
+          type: TransactionType.EXPENSE,
+          date: { gte: current.start, lt: current.end },
+          ...(scope ? { scope } : {}),
+        },
+        _sum: { netAmount: true },
+      }),
+      this.prisma.transaction.groupBy({
+        by: ['categoryId'],
+        where: {
+          userId,
+          type: TransactionType.EXPENSE,
+          date: { gte: previous.start, lt: previous.end },
+          ...(scope ? { scope } : {}),
+        },
+        _sum: { netAmount: true },
+      }),
+    ]);
+    const previousByCategory = new Map(
+      previousGroups.map((item) => [item.categoryId, Number(item._sum.netAmount ?? 0)]),
+    );
+    const increases = currentGroups
+      .map((item) => {
+        const currentTotal = Number(item._sum.netAmount ?? 0);
+        const previousTotal = previousByCategory.get(item.categoryId) ?? 0;
+        return {
+          categoryId: item.categoryId,
+          current: currentTotal,
+          previous: previousTotal,
+          increase: currentTotal - previousTotal,
+        };
+      })
+      .filter((item) => item.increase > 0)
+      .sort((a, b) => b.increase - a.increase);
+    if (!increases.length) return [];
+    const categories = await this.prisma.category.findMany({
+      where: { userId, id: { in: increases.map((item) => item.categoryId) } },
+      select: { id: true, name: true },
+    });
+    const namesById = new Map(categories.map((item) => [item.id, item.name]));
+    return increases.map((item) => ({
+      ...item,
+      name: namesById.get(item.categoryId) ?? 'Sem categoria',
+    }));
+  }
+
+  private formatDistribution(
+    title: string,
+    items: Array<{ name: string; total: number }>,
+  ): string {
+    const total = items.reduce((sum, item) => sum + item.total, 0);
+    return [
+      `${title}:`,
+      ...items.map((item, index) => {
+        const percentage = total > 0 ? Math.round((item.total / total) * 100) : 0;
+        return `${index + 1}. ${item.name}: ${this.formatMoney(item.total)} (${percentage}%)`;
+      }),
+      `Total: ${this.formatMoney(total)}`,
+    ].join('\n');
   }
 
   private async totalByChannel(userId: string, channelName: string, start: Date, end: Date): Promise<number> {
@@ -791,6 +1070,10 @@ export class WhatsappService {
     draft: WhatsappPaymentDraft,
   ): Promise<string> {
     const normalized = this.normalizeText(message);
+    if (/^(cancelar|cancela|nao|não)$/.test(normalized)) {
+      await this.clearPendingMessage(userId);
+      return 'Lançamento cancelado. Nenhuma informação foi salva.';
+    }
     const numericIndex = Number.parseInt(normalized, 10);
     let selected =
       Number.isInteger(numericIndex) && String(numericIndex) === normalized
@@ -991,11 +1274,26 @@ export class WhatsappService {
     });
   }
 
-  private async setPendingMessage(userId: string, phone: string, pendingText: string): Promise<void> {
+  private async setPendingMessage(
+    userId: string,
+    phone: string,
+    pendingText: string,
+    pendingType = 'DETAILS',
+    pendingStep = 'WAITING_INPUT',
+    pendingData: Prisma.InputJsonValue = { text: pendingText },
+  ): Promise<void> {
     await this.prisma.whatsappConversation.upsert({
       where: { userId },
-      create: { userId, phone, pendingText, recentMessages: [] },
-      update: { phone, pendingText },
+      create: {
+        userId,
+        phone,
+        pendingText,
+        pendingType,
+        pendingStep,
+        pendingData,
+        recentMessages: [],
+      },
+      update: { phone, pendingText, pendingType, pendingStep, pendingData },
     });
   }
 
@@ -1008,6 +1306,9 @@ export class WhatsappService {
       userId,
       phone,
       `${TRANSACTION_CONFIRMATION_PREFIX}${JSON.stringify(draft)}`,
+      'TRANSACTION',
+      'WAITING_CONFIRMATION',
+      draft as unknown as Prisma.InputJsonValue,
     );
   }
 
@@ -1020,6 +1321,9 @@ export class WhatsappService {
       userId,
       phone,
       `${TRANSACTION_MUTATION_PREFIX}${JSON.stringify(draft)}`,
+      'MUTATION',
+      'WAITING_CONFIRMATION',
+      draft as unknown as Prisma.InputJsonValue,
     );
   }
 
@@ -1032,14 +1336,63 @@ export class WhatsappService {
       userId,
       phone,
       `${PAYMENT_SELECTION_PREFIX}${JSON.stringify(draft)}`,
+      'PAYMENT',
+      'WAITING_SELECTION',
+      draft as unknown as Prisma.InputJsonValue,
     );
   }
 
   private async clearPendingMessage(userId: string): Promise<void> {
     await this.prisma.whatsappConversation.update({
       where: { userId },
-      data: { pendingText: null },
+      data: {
+        pendingText: null,
+        pendingType: null,
+        pendingStep: null,
+        pendingData: Prisma.JsonNull,
+      },
     });
+  }
+
+  private conversationPendingValue(conversation: WhatsappConversationState): string | null {
+    const data = conversation.pendingData;
+    if (conversation.pendingType && data && typeof data === 'object') {
+      const serialized = JSON.stringify(data);
+      if (conversation.pendingType === 'TRANSACTION') {
+        return `${TRANSACTION_CONFIRMATION_PREFIX}${serialized}`;
+      }
+      if (conversation.pendingType === 'MUTATION') {
+        return `${TRANSACTION_MUTATION_PREFIX}${serialized}`;
+      }
+      if (conversation.pendingType === 'PAYMENT') {
+        return `${PAYMENT_SELECTION_PREFIX}${serialized}`;
+      }
+    }
+    return conversation.pendingText ?? null;
+  }
+
+  private pendingDetailsText(conversation: WhatsappConversationState): string | null {
+    if (
+      conversation.pendingType === 'DETAILS' ||
+      conversation.pendingType === 'TRANSACTION_DETAILS'
+    ) {
+      const data = conversation.pendingData;
+      if (
+        data &&
+        typeof data === 'object' &&
+        'text' in data &&
+        typeof data.text === 'string'
+      ) {
+        return data.text;
+      }
+    }
+    const pendingText = conversation.pendingText;
+    return pendingText &&
+      !pendingText.startsWith(TRANSACTION_CONFIRMATION_PREFIX) &&
+      !pendingText.startsWith(TRANSACTION_MUTATION_PREFIX) &&
+      !pendingText.startsWith(PAYMENT_SELECTION_PREFIX)
+      ? pendingText
+      : null;
   }
 
   private parseTransactionDraft(value: string | null | undefined): WhatsappTransactionDraft | null {
@@ -1229,6 +1582,11 @@ export class WhatsappService {
   private isKnownFinancialQuestion(message: string): boolean {
     const lower = this.normalizeText(message);
     return (
+      this.isCompleteSummaryQuestion(lower) ||
+      this.isCategoryExpenseQuestion(lower) ||
+      this.isIncomeOriginQuestion(lower) ||
+      this.isScopeComparisonQuestion(lower) ||
+      this.isLargestIncreaseQuestion(lower) ||
       lower.includes('quanto gastei') ||
       this.isExpenseListQuestion(lower) ||
       this.isExpensePeriodQuestion(lower) ||
@@ -1239,6 +1597,44 @@ export class WhatsappService {
       lower.includes('saldo atual') ||
       lower.includes('meu negocio esta no lucro') ||
       lower.includes('como esta meu negocio')
+    );
+  }
+
+  private isCompleteSummaryQuestion(message: string): boolean {
+    const lower = this.normalizeText(message);
+    return /\b(resumo|relatorio)\b.*\b(completo|detalhado|geral)\b/.test(lower);
+  }
+
+  private isCategoryExpenseQuestion(message: string): boolean {
+    const lower = this.normalizeText(message);
+    return (
+      /\b(gastos|despesas)\b.*\b(categoria|categorias)\b/.test(lower) ||
+      /\b(categoria|categorias)\b.*\b(gastos|despesas)\b/.test(lower)
+    );
+  }
+
+  private isIncomeOriginQuestion(message: string): boolean {
+    const lower = this.normalizeText(message);
+    return (
+      /\b(receitas|ganhos|entradas)\b.*\b(origem|fonte|categoria)\b/.test(lower) ||
+      /\b(origem|fonte)\b.*\b(receitas|ganhos|entradas)\b/.test(lower)
+    );
+  }
+
+  private isScopeComparisonQuestion(message: string): boolean {
+    const lower = this.normalizeText(message);
+    return (
+      /\b(compare|comparar|comparacao|versus|x)\b/.test(lower) &&
+      lower.includes('pessoal') &&
+      lower.includes('negocio')
+    );
+  }
+
+  private isLargestIncreaseQuestion(message: string): boolean {
+    const lower = this.normalizeText(message);
+    return (
+      /\b(aumento|aumentos|cresceu|cresceram)\b/.test(lower) &&
+      /\b(gasto|gastos|despesa|despesas|categoria|categorias|mes)\b/.test(lower)
     );
   }
 
@@ -1278,6 +1674,14 @@ export class WhatsappService {
       lower === 'ajuda' ||
       lower === 'menu'
     );
+  }
+
+  private isCancelCommand(message: string): boolean {
+    return /^(cancelar|cancela)$/i.test(message.trim());
+  }
+
+  private isMenuCommand(message: string): boolean {
+    return /^(menu|reiniciar|recomecar|recomeçar)$/i.test(message.trim());
   }
 
   private isGreeting(message: string): boolean {

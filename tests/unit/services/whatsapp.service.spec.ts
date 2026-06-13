@@ -341,7 +341,7 @@ describe('WhatsappService', () => {
     expect(transactionServiceMock.create).not.toHaveBeenCalled();
     expect(prismaMock.whatsappConversation.update).toHaveBeenCalledWith({
       where: { userId: 'user-1' },
-      data: { pendingText: null },
+      data: expect.objectContaining({ pendingText: null, pendingType: null, pendingStep: null }),
     });
   });
 
@@ -533,7 +533,7 @@ describe('WhatsappService', () => {
     expect(transactionServiceMock.create).not.toHaveBeenCalled();
     expect(prismaMock.whatsappConversation.update).toHaveBeenCalledWith({
       where: { userId: 'user-1' },
-      data: { pendingText: null },
+      data: expect.objectContaining({ pendingText: null, pendingType: null, pendingStep: null }),
     });
   });
 
@@ -1152,7 +1152,7 @@ describe('WhatsappService', () => {
     expect(transactionServiceMock.delete).not.toHaveBeenCalled();
     expect(prismaMock.whatsappConversation.update).toHaveBeenCalledWith({
       where: { userId: 'user-1' },
-      data: { pendingText: null },
+      data: expect.objectContaining({ pendingText: null, pendingType: null, pendingStep: null }),
     });
   });
 
@@ -1275,6 +1275,265 @@ describe('WhatsappService', () => {
       expect(reply).toContain('Gastos: R$ 800,00 (queda de 20,0%)');
       expect(reply).toContain('Saldo: R$ 1.200,00 (antes R$ 500,00)');
       expect(geminiMock.classifyWhatsappMessage).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('retoma uma confirmacao salva em estado estruturado', async () => {
+    fetchMock.mockImplementation(async (url: string) => ({
+      ok: true,
+      json: vi.fn().mockResolvedValue(
+        url.endsWith('/status') ? { status: 'conectado' } : { success: true },
+      ),
+    }));
+    prismaMock.user.findFirst.mockResolvedValue({
+      id: 'user-1',
+      name: 'Gustavo',
+      phone: '11999999999',
+    });
+    prismaMock.whatsappConversation.upsert.mockResolvedValue({
+      recentMessages: [],
+      pendingText: null,
+      pendingType: 'TRANSACTION',
+      pendingStep: 'WAITING_CONFIRMATION',
+      pendingData: {
+        description: 'Recebimento de serviço',
+        amount: 150,
+        type: 'INCOME',
+        scope: 'PERSONAL',
+        categoryHint: 'Serviços',
+      },
+    });
+    prismaMock.category.findFirst.mockResolvedValue({
+      id: 'category-service',
+      name: 'Serviços',
+    });
+    transactionServiceMock.create.mockResolvedValue({
+      id: 'income-1',
+      description: 'Recebimento de serviço',
+      amount: 150,
+      type: TransactionType.INCOME,
+    });
+
+    const result = await service.handleWebhook({
+      from: '5511999999999',
+      text: 'Confirmar',
+    });
+
+    expect(result.reply).toContain('Lancamento registrado');
+    expect(transactionServiceMock.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('reinicia qualquer conversa pendente com Menu', async () => {
+    fetchMock.mockImplementation(async (url: string) => ({
+      ok: true,
+      json: vi.fn().mockResolvedValue(
+        url.endsWith('/status') ? { status: 'conectado' } : { success: true },
+      ),
+    }));
+    prismaMock.user.findFirst.mockResolvedValue({
+      id: 'user-1',
+      name: 'Gustavo',
+      phone: '11999999999',
+    });
+    prismaMock.whatsappConversation.upsert.mockResolvedValue({
+      recentMessages: [],
+      pendingText: 'Ganhei dinheiro hoje',
+      pendingType: 'DETAILS',
+      pendingStep: 'WAITING_INPUT',
+      pendingData: { text: 'Ganhei dinheiro hoje' },
+    });
+
+    const result = await service.handleWebhook({
+      from: '5511999999999',
+      text: 'Menu',
+    });
+
+    expect(result.reply).toContain('Posso ajudar');
+    expect(prismaMock.whatsappConversation.update).toHaveBeenCalledWith({
+      where: { userId: 'user-1' },
+      data: expect.objectContaining({
+        pendingText: null,
+        pendingType: null,
+        pendingStep: null,
+      }),
+    });
+  });
+
+  it('persiste a etapa de coleta e permite cancelar a conversa', async () => {
+    fetchMock.mockImplementation(async (url: string) => ({
+      ok: true,
+      json: vi.fn().mockResolvedValue(
+        url.endsWith('/status') ? { status: 'conectado' } : { success: true },
+      ),
+    }));
+    prismaMock.user.findFirst.mockResolvedValue({
+      id: 'user-1',
+      name: 'Gustavo',
+      phone: '11999999999',
+    });
+
+    const question = await service.handleWebhook({
+      from: '5511999999999',
+      text: 'Gastei no mercado',
+    });
+
+    expect(question.reply).toContain('Qual foi o valor');
+    expect(prismaMock.whatsappConversation.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        update: expect.objectContaining({
+          pendingType: 'TRANSACTION_DETAILS',
+          pendingStep: 'WAITING_AMOUNT',
+          pendingData: { text: 'Gastei no mercado' },
+        }),
+      }),
+    );
+
+    prismaMock.whatsappConversation.upsert.mockReset();
+    prismaMock.whatsappConversation.upsert.mockResolvedValue({
+      recentMessages: [],
+      pendingText: 'Gastei no mercado',
+      pendingType: 'TRANSACTION_DETAILS',
+      pendingStep: 'WAITING_AMOUNT',
+      pendingData: { text: 'Gastei no mercado' },
+    });
+
+    const cancellation = await service.handleWebhook({
+      from: '5511999999999',
+      text: 'Cancelar',
+    });
+
+    expect(cancellation.reply).toContain('Conversa cancelada');
+    expect(prismaMock.whatsappConversation.update).toHaveBeenLastCalledWith({
+      where: { userId: 'user-1' },
+      data: expect.objectContaining({
+        pendingText: null,
+        pendingType: null,
+        pendingStep: null,
+      }),
+    });
+  });
+
+  it('resume os gastos por categoria sem depender da IA', async () => {
+    fetchMock.mockImplementation(async (url: string) => ({
+      ok: true,
+      json: vi.fn().mockResolvedValue(
+        url.endsWith('/status') ? { status: 'conectado' } : { success: true },
+      ),
+    }));
+    prismaMock.user.findFirst.mockResolvedValue({
+      id: 'user-1',
+      name: 'Gustavo',
+      phone: '11999999999',
+    });
+    prismaMock.transaction.groupBy.mockResolvedValue([
+      { categoryId: 'food', _sum: { netAmount: 300 } },
+      { categoryId: 'transport', _sum: { netAmount: 100 } },
+    ]);
+    prismaMock.category.findMany.mockResolvedValue([
+      { id: 'food', name: 'Alimentação' },
+      { id: 'transport', name: 'Transporte' },
+    ]);
+
+    const result = await service.handleWebhook({
+      from: '5511999999999',
+      text: 'Quais são meus gastos por categoria?',
+    });
+
+    const reply = result.reply.replace(/\u00a0/g, ' ');
+    expect(reply).toContain('Alimentação: R$ 300,00 (75%)');
+    expect(reply).toContain('Transporte: R$ 100,00 (25%)');
+    expect(reply).toContain('Total: R$ 400,00');
+    expect(geminiMock.classifyWhatsappMessage).not.toHaveBeenCalled();
+  });
+
+  it('resume receitas por origem sem depender da IA', async () => {
+    fetchMock.mockImplementation(async (url: string) => ({
+      ok: true,
+      json: vi.fn().mockResolvedValue(
+        url.endsWith('/status') ? { status: 'conectado' } : { success: true },
+      ),
+    }));
+    prismaMock.user.findFirst.mockResolvedValue({
+      id: 'user-1',
+      name: 'Gustavo',
+      phone: '11999999999',
+    });
+    prismaMock.transaction.groupBy.mockResolvedValue([
+      { categoryId: 'salary', _sum: { netAmount: 2000 } },
+      { categoryId: 'services', _sum: { netAmount: 500 } },
+    ]);
+    prismaMock.category.findMany.mockResolvedValue([
+      { id: 'salary', name: 'Salário' },
+      { id: 'services', name: 'Serviços' },
+    ]);
+
+    const result = await service.handleWebhook({
+      from: '5511999999999',
+      text: 'Mostre minhas receitas por origem',
+    });
+
+    const reply = result.reply.replace(/\u00a0/g, ' ');
+    expect(reply).toContain('Salário: R$ 2.000,00 (80%)');
+    expect(reply).toContain('Serviços: R$ 500,00 (20%)');
+  });
+
+  it('compara pessoal e negocio e mostra os maiores aumentos', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-06-13T12:00:00Z'));
+    try {
+      fetchMock.mockImplementation(async (url: string) => ({
+        ok: true,
+        json: vi.fn().mockResolvedValue(
+          url.endsWith('/status') ? { status: 'conectado' } : { success: true },
+        ),
+      }));
+      prismaMock.user.findFirst.mockResolvedValue({
+        id: 'user-1',
+        name: 'Gustavo',
+        phone: '11999999999',
+      });
+      prismaMock.transaction.aggregate
+        .mockResolvedValueOnce({ _sum: { netAmount: 1000 } })
+        .mockResolvedValueOnce({ _sum: { netAmount: 400 } })
+        .mockResolvedValueOnce({ _sum: { netAmount: 3000 } })
+        .mockResolvedValueOnce({ _sum: { netAmount: 1200 } });
+
+      const comparison = await service.handleWebhook({
+        from: '5511999999999',
+        text: 'Compare pessoal versus negócio',
+      });
+      const comparisonReply = comparison.reply.replace(/\u00a0/g, ' ');
+      expect(comparisonReply).toContain('Pessoal x Negócio');
+      expect(comparisonReply).toContain('Pessoal — receitas R$ 1.000,00');
+      expect(comparisonReply).toContain('Negócio — receitas R$ 3.000,00');
+
+      prismaMock.whatsappConversation.upsert.mockResolvedValue({
+        recentMessages: [],
+        pendingText: null,
+      });
+      prismaMock.transaction.groupBy
+        .mockResolvedValueOnce([
+          { categoryId: 'food', _sum: { netAmount: 500 } },
+          { categoryId: 'transport', _sum: { netAmount: 200 } },
+        ])
+        .mockResolvedValueOnce([
+          { categoryId: 'food', _sum: { netAmount: 200 } },
+          { categoryId: 'transport', _sum: { netAmount: 180 } },
+        ]);
+      prismaMock.category.findMany.mockResolvedValue([
+        { id: 'food', name: 'Alimentação' },
+        { id: 'transport', name: 'Transporte' },
+      ]);
+
+      const increases = await service.handleWebhook({
+        from: '5511999999999',
+        text: 'Quais foram os maiores aumentos de gastos do mês?',
+      });
+      const increasesReply = increases.reply.replace(/\u00a0/g, ' ');
+      expect(increasesReply).toContain('Alimentação: +R$ 300,00');
+      expect(increasesReply).toContain('Transporte: +R$ 20,00');
     } finally {
       vi.useRealTimers();
     }
