@@ -222,6 +222,98 @@ describe('WhatsappService', () => {
     });
   });
 
+  it('alerta sobre duplicidade e exige salvar novamente', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-06-13T12:00:00Z'));
+    try {
+      fetchMock.mockImplementation(async (url: string) => ({
+        ok: true,
+        json: vi.fn().mockResolvedValue(
+          url.endsWith('/status') ? { status: 'conectado' } : { success: true },
+        ),
+      }));
+      prismaMock.user.findFirst.mockResolvedValue({
+        id: 'user-1',
+        name: 'Gustavo',
+        phone: '11999999999',
+      });
+      prismaMock.salesChannel.findMany.mockResolvedValue([]);
+      prismaMock.category.findMany.mockResolvedValue([{ name: 'Alimentação' }]);
+      prismaMock.financialAccount.findMany.mockResolvedValue([]);
+      prismaMock.creditCard.findMany.mockResolvedValue([]);
+      prismaMock.transaction.findMany.mockResolvedValue([
+        {
+          id: 'expense-existing',
+          description: 'Compra no mercado',
+          amount: 35,
+          netAmount: 35,
+          type: TransactionType.EXPENSE,
+          scope: FinancialScope.PERSONAL,
+          date: new Date('2026-06-13T11:30:00Z'),
+          category: { id: 'category-food', name: 'Alimentação' },
+        },
+      ]);
+      prismaMock.category.findFirst.mockResolvedValue({
+        id: 'category-food',
+        name: 'Alimentação',
+      });
+      geminiMock.extractFinancialData.mockResolvedValue({
+        amount: 35,
+        type: 'EXPENSE',
+        description: 'Compra no mercado',
+        categoryHint: 'Alimentação',
+        channelHint: null,
+        confidence: 0.99,
+      });
+      transactionServiceMock.create.mockResolvedValue({
+        id: 'expense-duplicate',
+        description: 'Compra no mercado',
+        amount: 35,
+        type: TransactionType.EXPENSE,
+      });
+
+      const warning = await service.handleWebhook({
+        from: '5511999999999',
+        text: 'Gastei R$ 35 no mercado',
+      });
+      expect(warning.reply).toContain('Possível lançamento duplicado');
+      expect(warning.reply).toContain('Salvar novamente');
+      expect(transactionServiceMock.create).not.toHaveBeenCalled();
+
+      const pendingText = prismaMock.whatsappConversation.upsert.mock.calls
+        .map(([input]) => input.update?.pendingText)
+        .find(
+          (value) =>
+            typeof value === 'string' && value.startsWith('__TRANSACTION_CONFIRMATION__:'),
+        );
+      prismaMock.whatsappConversation.upsert.mockReset();
+      prismaMock.whatsappConversation.upsert
+        .mockResolvedValueOnce({ recentMessages: [], pendingText })
+        .mockResolvedValue({});
+
+      const normalConfirmation = await service.handleWebhook({
+        from: '5511999999999',
+        text: 'Confirmar',
+      });
+      expect(normalConfirmation.reply).toContain('preciso que você escreva “Salvar novamente”');
+      expect(transactionServiceMock.create).not.toHaveBeenCalled();
+
+      prismaMock.whatsappConversation.upsert.mockReset();
+      prismaMock.whatsappConversation.upsert
+        .mockResolvedValueOnce({ recentMessages: [], pendingText })
+        .mockResolvedValue({});
+
+      const explicitConfirmation = await service.handleWebhook({
+        from: '5511999999999',
+        text: 'Salvar novamente',
+      });
+      expect(explicitConfirmation.reply).toContain('Lancamento registrado');
+      expect(transactionServiceMock.create).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('cancela um rascunho sem salvar a transacao', async () => {
     fetchMock.mockImplementation(async (url: string) => ({
       ok: true,

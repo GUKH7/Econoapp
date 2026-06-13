@@ -23,6 +23,11 @@ type WhatsappTransactionDraft = {
   accountId?: string;
   creditCardId?: string;
   paymentLabel?: string;
+  possibleDuplicate?: {
+    description: string;
+    amount: number;
+    date: string;
+  };
 };
 type WhatsappPaymentOption = {
   id: string;
@@ -300,6 +305,10 @@ export class WhatsappService {
         ? { channelHint: extracted.channelHint }
         : {}),
     };
+    const possibleDuplicate = await this.findPossibleDuplicate(userId, draft);
+    if (possibleDuplicate) {
+      draft.possibleDuplicate = possibleDuplicate;
+    }
 
     const paymentOptions = await this.findPaymentOptions(userId, scope, draft.type);
     if (paymentOptions.length) {
@@ -601,6 +610,10 @@ export class WhatsappService {
   private transactionDraftConfirmation(draft: WhatsappTransactionDraft): string {
     const type = draft.type === TransactionType.EXPENSE ? 'Despesa' : 'Receita';
     return [
+      draft.possibleDuplicate ? '⚠️ Possível lançamento duplicado' : '',
+      draft.possibleDuplicate
+        ? `Já existe: ${draft.possibleDuplicate.description} — ${this.formatMoney(draft.possibleDuplicate.amount)} em ${this.formatDateTime(draft.possibleDuplicate.date)}.`
+        : '',
       'Confirme o lançamento:',
       '',
       `Tipo: ${type}`,
@@ -613,7 +626,9 @@ export class WhatsappService {
         : 'Conta/forma de pagamento: não informada',
       `Modo: ${draft.scope === FinancialScope.BUSINESS ? 'Negócio' : 'Pessoal'}`,
       '',
-      'Responda: Confirmar, Editar ou Cancelar.',
+      draft.possibleDuplicate
+        ? 'Para criar mesmo assim, responda: Salvar novamente. Ou responda: Cancelar.'
+        : 'Responda: Confirmar, Editar ou Cancelar.',
     ]
       .filter(Boolean)
       .join('\n');
@@ -625,6 +640,7 @@ export class WhatsappService {
     draft: WhatsappTransactionDraft,
   ): Promise<string> {
     const command = this.normalizeText(message);
+    const confirmsDuplicate = /^(salvar novamente|criar novamente)$/.test(command);
 
     if (/^(cancelar|cancela|nao|não)$/.test(command)) {
       await this.clearPendingMessage(userId);
@@ -636,7 +652,13 @@ export class WhatsappService {
       return 'Certo. Envie novamente o lançamento com as informações corrigidas, incluindo valor e descrição.';
     }
 
-    if (!/^(confirmar|confirmo|sim|salvar|pode salvar)$/.test(command)) {
+    if (draft.possibleDuplicate && !confirmsDuplicate) {
+      return `${this.transactionDraftConfirmation(draft)}\n\nPara evitar duplicidade, preciso que você escreva “Salvar novamente”.`;
+    }
+
+    const confirmsTransaction =
+      /^(confirmar|confirmo|sim|salvar|pode salvar)$/.test(command) || confirmsDuplicate;
+    if (!confirmsTransaction) {
       return `${this.transactionDraftConfirmation(draft)}\n\nNão reconheci sua escolha.`;
     }
 
@@ -664,6 +686,52 @@ export class WhatsappService {
       draft.scope,
       draft.paymentLabel,
     );
+  }
+
+  private async findPossibleDuplicate(
+    userId: string,
+    draft: WhatsappTransactionDraft,
+  ): Promise<WhatsappTransactionDraft['possibleDuplicate'] | null> {
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const candidates =
+      (await this.prisma.transaction.findMany({
+        where: {
+          userId,
+          type: draft.type,
+          scope: draft.scope,
+          amount: draft.amount,
+          date: { gte: since },
+        },
+        orderBy: { date: 'desc' },
+        take: 10,
+        include: { category: true },
+      })) ?? [];
+    const normalizedDescription = this.normalizeText(draft.description);
+    const normalizedCategory = this.normalizeText(draft.categoryHint);
+    const duplicate = candidates.find((candidate) => {
+      const candidateDescription = this.normalizeText(candidate.description);
+      const candidateCategory = this.normalizeText(candidate.category?.name ?? '');
+      return (
+        candidateDescription === normalizedDescription ||
+        (candidateCategory && candidateCategory === normalizedCategory)
+      );
+    });
+    if (!duplicate) return null;
+    return {
+      description: duplicate.description,
+      amount: Number(duplicate.amount),
+      date: duplicate.date.toISOString(),
+    };
+  }
+
+  private formatDateTime(value: string): string {
+    return new Intl.DateTimeFormat('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: 'America/Sao_Paulo',
+    }).format(new Date(value));
   }
 
   private async findPaymentOptions(
