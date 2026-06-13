@@ -1,0 +1,35 @@
+name: E2E production
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_outbound:
+        description: Enviar uma mensagem real pelo WhatsApp
+        required: false
+        type: boolean
+        default: false
+  schedule:
+    - cron: '20 11 * * *'
+
+permissions:
+  contents: read
+
+jobs:
+  whatsapp-production:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      E2E_BACKEND_URL: https://econoapp-backend.onrender.com
+      E2E_ORACLE_URL: http://64.181.189.107:3001/econoapp
+      E2E_WEBHOOK_TOKEN: ${{ secrets.E2E_WEBHOOK_TOKEN }}
+      E2E_USER_PHONE: ${{ secrets.E2E_USER_PHONE }}
+      E2E_USER_PASSWORD: ${{ secrets.E2E_USER_PASSWORD }}
+      E2E_WHATSAPP_RECIPIENT: ${{ inputs.run_outbound && secrets.E2E_WHATSAPP_RECIPIENT || '' }}
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Run production E2E
+        run: npm run test:e2e:production
