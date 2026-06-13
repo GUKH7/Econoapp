@@ -106,6 +106,38 @@ const apiFixtures = {
   '/api/v1/accounts/cards': {
     data: [{ id: 'card-main', name: 'Nubank', limit: 5000, scope: 'PERSONAL' }],
   },
+  '/api/v1/budgets': {
+    data: {
+      scope: 'PERSONAL',
+      month: '2026-06-01T00:00:00.000Z',
+      totalLimit: 2300,
+      totalSpent: 1599.4,
+      items: [
+        {
+          id: 'budget-food',
+          categoryId: 'cat-food',
+          categoryName: 'Alimentacao',
+          categoryColor: '#22C55E',
+          scope: 'PERSONAL',
+          month: '2026-06-01T00:00:00.000Z',
+          amount: 800,
+          spent: 312.9,
+          percentage: 39,
+        },
+        {
+          id: 'budget-home',
+          categoryId: 'cat-home',
+          categoryName: 'Moradia',
+          categoryColor: '#3B82F6',
+          scope: 'PERSONAL',
+          month: '2026-06-01T00:00:00.000Z',
+          amount: 1500,
+          spent: 1200,
+          percentage: 80,
+        },
+      ],
+    },
+  },
 };
 
 const contentTypes = {
@@ -309,6 +341,19 @@ async function runViewport(browser, baseUrl, name, viewport) {
   const categoryRows = await page.locator('.category-row').count();
   if (categoryRows < 1) {
     throw new Error(`Nenhuma categoria renderizada em ${name}`);
+  }
+
+  await page.locator('nav.tabs [data-tab="more"]').click();
+  await page.locator('[data-tab-jump="budget"]').click();
+  await assertText(page, 'Limite Pessoal');
+  await assertText(page, 'Alimentacao');
+  await assertText(page, 'Moradia');
+  await assertVisible(page, '[data-budget-form]', 'formulario de orcamento');
+  await screenshot(page, `${name}-budgets`);
+
+  const budgetRows = await page.locator('[data-budget-delete]').count();
+  if (budgetRows !== 2) {
+    throw new Error(`Quantidade inesperada de orcamentos em ${name}: ${budgetRows}`);
   }
 
   await context.close();

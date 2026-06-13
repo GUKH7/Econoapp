@@ -49,7 +49,8 @@ function assistantInsight() {
   const topExpense = expenses[0];
   const topPercent = topExpense && totals.expense > 0 ? Math.round((topExpense.total / totals.expense) * 100) : 0;
   const budget = Number(state.budgets[state.scope] || 0);
-  const budgetUsed = budget > 0 ? Math.round((totals.expense / budget) * 100) : 0;
+  const budgetSpent = Number(state.budgetSummary?.totalSpent ?? totals.expense);
+  const budgetUsed = budget > 0 ? Math.round((budgetSpent / budget) * 100) : 0;
   const scopedWallets = state.wallets.filter((wallet) => !wallet.scope || wallet.scope === state.scope);
   const scopedCards = state.cards.filter((card) => !card.scope || card.scope === state.scope);
 
@@ -149,7 +150,8 @@ function dashboardInsights() {
   const expenses = totalsByCategory('EXPENSE').sort((a, b) => b.total - a.total);
   const topExpense = expenses[0];
   const budget = Number(state.budgets[state.scope] || 0);
-  const budgetUsed = budget > 0 ? Math.min(100, Math.round((totals.expense / budget) * 100)) : 0;
+  const budgetSpent = Number(state.budgetSummary?.totalSpent ?? totals.expense);
+  const budgetUsed = budget > 0 ? Math.min(100, Math.round((budgetSpent / budget) * 100)) : 0;
   const scopedWallets = state.wallets.filter((wallet) => !wallet.scope || wallet.scope === state.scope);
   const walletBalance = scopedWallets.reduce((sum, wallet) => sum + Number(wallet.balance || 0), 0);
   const insight =

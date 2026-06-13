@@ -2,7 +2,6 @@ import { api, loadData } from './api.js';
 import {
   app,
   clearSession,
-  saveBudgets,
   saveCategoryKinds,
   saveOnboardingDismissed,
   savePaymentData,
@@ -389,6 +388,9 @@ function bindViewEvents() {
   document.querySelector('[data-wallet-form]')?.addEventListener('submit', handleWalletSubmit);
   document.querySelector('[data-card-form]')?.addEventListener('submit', handleCardSubmit);
   document.querySelector('[data-budget-form]')?.addEventListener('submit', handleBudgetSubmit);
+  document.querySelectorAll('[data-budget-delete]').forEach((button) => {
+    button.addEventListener('click', () => handleBudgetDelete(button.dataset.budgetDelete));
+  });
   document.querySelector('[data-whatsapp-refresh]')?.addEventListener('click', () => {
     refreshWhatsappStatus();
   });
@@ -694,12 +696,32 @@ function handleCardSubmit(event) {
     .catch((error) => alert(error.message));
 }
 
-function handleBudgetSubmit(event) {
+async function handleBudgetSubmit(event) {
   event.preventDefault();
   const data = Object.fromEntries(new FormData(event.currentTarget));
-  state.budgets[state.scope] = parseAmount(data.budget);
-  saveBudgets();
-  renderApp();
+  try {
+    await api().upsertBudget({
+      categoryId: data.categoryId,
+      scope: state.scope,
+      amount: parseAmount(data.budget),
+    });
+    localStorage.removeItem('econoapp.budgets');
+    await loadData();
+    renderApp();
+  } catch (error) {
+    alert(error.message);
+  }
+}
+
+async function handleBudgetDelete(id) {
+  if (!id) return;
+  try {
+    await api().deleteBudget(id);
+    await loadData();
+    renderApp();
+  } catch (error) {
+    alert(error.message);
+  }
 }
 
 async function refreshWhatsappStatus() {

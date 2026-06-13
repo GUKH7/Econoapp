@@ -277,6 +277,31 @@ textarea:focus {
   border-top: 0;
 }
 
+.budget-list {
+  margin-top: 16px;
+}
+
+.budget-list .row {
+  align-items: flex-start;
+}
+
+.budget-list .row-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.budget-list .category-dot {
+  border-radius: 999px;
+  flex: 0 0 10px;
+  height: 10px;
+  margin-top: 5px;
+  width: 10px;
+}
+
+.budget-list .budget-progress {
+  margin-top: 8px;
+}
+
 .row-title {
   color: var(--text);
   font-weight: 850;

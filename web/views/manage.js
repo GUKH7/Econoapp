@@ -1,13 +1,31 @@
 import { colors, money, state } from '../state.js';
 import { escapeHtml } from '../utils.js';
-import { scopedTotals, scopeLabel } from '../finance.js';
+import { scopeLabel } from '../finance.js';
 import { currentMonth, emptyState, icon } from './shared.js';
 
 export function budgetView() {
   const key = state.scope;
   const currentBudget = Number(state.budgets[key] || 0);
-  const totals = scopedTotals();
-  const used = currentBudget > 0 ? Math.min(100, (totals.expense / currentBudget) * 100) : 0;
+  const spent = Number(state.budgetSummary?.totalSpent || 0);
+  const used = currentBudget > 0 ? Math.min(100, (spent / currentBudget) * 100) : 0;
+  const categoryOptions = state.categories
+    .map((category) => `<option value="${category.id}">${escapeHtml(category.name)}</option>`)
+    .join('');
+  const budgetRows = state.categoryBudgets
+    .map(
+      (budget) => `
+        <div class="row">
+          <span class="category-dot" style="background:${escapeHtml(budget.categoryColor || '#22C55E')}"></span>
+          <div class="row-main">
+            <div class="row-title">${escapeHtml(budget.categoryName)}</div>
+            <div class="row-meta">${money.format(Number(budget.spent || 0))} de ${money.format(Number(budget.amount || 0))} · ${Number(budget.percentage || 0)}%</div>
+            <div class="budget-progress"><span style="width:${Math.min(100, Number(budget.percentage || 0))}%"></span></div>
+          </div>
+          <button class="button secondary compact-action" type="button" data-budget-delete="${budget.id}">Remover</button>
+        </div>
+      `,
+    )
+    .join('');
   return `
     <div class="period-switch">
       <button type="button">Abril</button>
@@ -19,11 +37,18 @@ export function budgetView() {
         currentBudget
           ? `<div class="panel-title"><h2>Limite ${scopeLabel()}</h2><strong>${money.format(currentBudget)}</strong></div>
              <div class="budget-progress"><span style="width:${used}%"></span></div>
-             <p class="muted">${money.format(totals.expense)} usados de ${money.format(currentBudget)}</p>`
+             <p class="muted">${money.format(spent)} usados de ${money.format(currentBudget)}</p>
+             <div class="menu-list budget-list">${budgetRows}</div>`
           : emptyState('Nenhum limite definido', 'Defina um teto de gastos para acompanhar o mês.', 'O')
       }
       <form class="form" data-budget-form style="margin-top:18px">
-        <label class="field">Novo limite<input name="budget" inputmode="decimal" placeholder="0,00" /></label>
+        <label class="field">Categoria
+          <select name="categoryId" required>
+            <option value="">Selecione uma categoria</option>
+            ${categoryOptions}
+          </select>
+        </label>
+        <label class="field">Limite mensal<input name="budget" inputmode="decimal" placeholder="0,00" required /></label>
         <button class="button" type="submit">Definir limite</button>
       </form>
     </article>

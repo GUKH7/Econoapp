@@ -22,7 +22,9 @@ export const state = {
   categoryKinds: JSON.parse(localStorage.getItem('econoapp.categoryKinds') || '{}'),
   wallets: [],
   cards: [],
-  budgets: JSON.parse(localStorage.getItem('econoapp.budgets') || '{}'),
+  budgets: {},
+  budgetSummary: null,
+  categoryBudgets: [],
   categoryColor: '#22C55E',
   onboardingDismissed: localStorage.getItem('econoapp.onboardingDismissed') === 'true',
   transactionFilter: 'ALL',
@@ -52,10 +54,6 @@ export function saveSession(tokens) {
 export function saveScopes() {
   localStorage.setItem('econoapp.transactionScopes', JSON.stringify(state.scopes));
   localStorage.setItem('econoapp.scope', state.scope);
-}
-
-export function saveBudgets() {
-  localStorage.setItem('econoapp.budgets', JSON.stringify(state.budgets));
 }
 
 export function savePaymentData() {

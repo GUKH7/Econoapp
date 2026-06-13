@@ -43,6 +43,10 @@ export function api() {
     channels: () => request('/channels'),
     accounts: () => request('/accounts'),
     cards: () => request('/accounts/cards'),
+    budgets: () => request(`/budgets?scope=${state.scope}`),
+    upsertBudget: (payload) =>
+      request('/budgets', { method: 'POST', body: JSON.stringify(payload) }),
+    deleteBudget: (id) => request(`/budgets/${id}`, { method: 'DELETE' }),
     createTransaction: (payload) =>
       request('/transactions', { method: 'POST', body: JSON.stringify(payload) }),
     createCategory: (payload) =>
@@ -62,7 +66,7 @@ export function api() {
 
 export async function loadData() {
   const client = api();
-  const [me, dashboard, transactions, categories, channels, accounts, cards] = await Promise.all([
+  const [me, dashboard, transactions, categories, channels, accounts, cards, budgets] = await Promise.all([
     client.me(),
     client.dashboard(),
     client.transactions(),
@@ -70,6 +74,7 @@ export async function loadData() {
     client.channels(),
     client.accounts(),
     client.cards(),
+    client.budgets(),
   ]);
   state.user = me.data;
   state.dashboard = dashboard.data;
@@ -78,4 +83,8 @@ export async function loadData() {
   state.channels = channels.data;
   state.wallets = accounts.data;
   state.cards = cards.data;
+  state.budgetSummary = budgets.data;
+  state.categoryBudgets = budgets.data.items || [];
+  state.budgets[state.scope] = Number(budgets.data.totalLimit || 0);
+  localStorage.removeItem('econoapp.budgets');
 }
