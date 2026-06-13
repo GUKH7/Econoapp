@@ -253,6 +253,167 @@ describe('WhatsappService', () => {
     });
   });
 
+  it('permite escolher cartao como forma de pagamento antes de confirmar', async () => {
+    fetchMock.mockImplementation(async (url: string) => ({
+      ok: true,
+      json: vi.fn().mockResolvedValue(
+        url.endsWith('/status') ? { status: 'conectado' } : { success: true },
+      ),
+    }));
+    prismaMock.user.findFirst.mockResolvedValue({
+      id: 'user-1',
+      name: 'Gustavo',
+      phone: '11999999999',
+    });
+    prismaMock.salesChannel.findMany.mockResolvedValue([]);
+    prismaMock.category.findMany.mockResolvedValue([{ name: 'Alimentação' }]);
+    prismaMock.financialAccount.findMany.mockResolvedValue([
+      { id: 'account-wallet', name: 'Carteira', type: 'WALLET' },
+    ]);
+    prismaMock.creditCard.findMany.mockResolvedValue([
+      { id: 'card-nubank', name: 'Nubank' },
+    ]);
+    prismaMock.category.findFirst.mockResolvedValue({
+      id: 'category-food',
+      name: 'Alimentação',
+    });
+    geminiMock.extractFinancialData.mockResolvedValue({
+      amount: 40,
+      type: 'EXPENSE',
+      description: 'Almoço no restaurante',
+      categoryHint: 'Alimentação',
+      channelHint: null,
+      confidence: 0.99,
+    });
+    transactionServiceMock.create.mockResolvedValue({
+      id: 'expense-card',
+      description: 'Almoço no restaurante',
+      amount: 40,
+      type: TransactionType.EXPENSE,
+    });
+
+    const paymentQuestion = await service.handleWebhook({
+      from: '5511999999999',
+      text: 'Gastei R$ 40 no restaurante',
+    });
+    expect(paymentQuestion.reply).toContain('Como você pagou');
+    expect(paymentQuestion.reply).toContain('Cartão - Nubank');
+
+    const paymentPending = prismaMock.whatsappConversation.upsert.mock.calls
+      .map(([input]) => input.update?.pendingText)
+      .find((value) => typeof value === 'string' && value.startsWith('__PAYMENT_SELECTION__:'));
+    prismaMock.whatsappConversation.upsert.mockReset();
+    prismaMock.whatsappConversation.upsert
+      .mockResolvedValueOnce({ recentMessages: [], pendingText: paymentPending })
+      .mockResolvedValue({});
+
+    const draftReply = await service.handleWebhook({
+      from: '5511999999999',
+      text: 'Cartão Nubank',
+    });
+    expect(draftReply.reply).toContain('Forma de pagamento: Cartão - Nubank');
+
+    const transactionPending = prismaMock.whatsappConversation.upsert.mock.calls
+      .map(([input]) => input.update?.pendingText)
+      .find((value) => typeof value === 'string' && value.startsWith('__TRANSACTION_CONFIRMATION__:'));
+    prismaMock.whatsappConversation.upsert.mockReset();
+    prismaMock.whatsappConversation.upsert
+      .mockResolvedValueOnce({ recentMessages: [], pendingText: transactionPending })
+      .mockResolvedValue({});
+
+    const confirmation = await service.handleWebhook({
+      from: '5511999999999',
+      text: 'Confirmar',
+    });
+    expect(confirmation.reply).toContain('Pagamento: Cartão - Nubank');
+    expect(transactionServiceMock.create).toHaveBeenCalledWith(
+      'user-1',
+      expect.objectContaining({
+        creditCardId: 'card-nubank',
+        amount: 40,
+        type: TransactionType.EXPENSE,
+      }),
+    );
+  });
+
+  it('seleciona o unico banco ao receber por Pix', async () => {
+    fetchMock.mockImplementation(async (url: string) => ({
+      ok: true,
+      json: vi.fn().mockResolvedValue(
+        url.endsWith('/status') ? { status: 'conectado' } : { success: true },
+      ),
+    }));
+    prismaMock.user.findFirst.mockResolvedValue({
+      id: 'user-1',
+      name: 'Gustavo',
+      phone: '11999999999',
+    });
+    prismaMock.salesChannel.findMany.mockResolvedValue([]);
+    prismaMock.category.findMany.mockResolvedValue([{ name: 'Serviços' }]);
+    prismaMock.financialAccount.findMany.mockResolvedValue([
+      { id: 'account-bank', name: 'Nubank', type: 'BANK' },
+    ]);
+    prismaMock.category.findFirst.mockResolvedValue({
+      id: 'category-service',
+      name: 'Serviços',
+    });
+    geminiMock.extractFinancialData.mockResolvedValue({
+      amount: 100,
+      type: 'INCOME',
+      description: 'Recebimento de serviço',
+      categoryHint: 'Serviços',
+      channelHint: null,
+      confidence: 0.99,
+    });
+    transactionServiceMock.create.mockResolvedValue({
+      id: 'income-pix',
+      description: 'Recebimento de serviço',
+      amount: 100,
+      type: TransactionType.INCOME,
+    });
+
+    const paymentQuestion = await service.handleWebhook({
+      from: '5511999999999',
+      text: 'Recebi R$ 100 por um serviço',
+    });
+    expect(paymentQuestion.reply).toContain('Em qual conta você recebeu');
+
+    const paymentPending = prismaMock.whatsappConversation.upsert.mock.calls
+      .map(([input]) => input.update?.pendingText)
+      .find((value) => typeof value === 'string' && value.startsWith('__PAYMENT_SELECTION__:'));
+    prismaMock.whatsappConversation.upsert.mockReset();
+    prismaMock.whatsappConversation.upsert
+      .mockResolvedValueOnce({ recentMessages: [], pendingText: paymentPending })
+      .mockResolvedValue({});
+
+    const draftReply = await service.handleWebhook({
+      from: '5511999999999',
+      text: 'Pix',
+    });
+    expect(draftReply.reply).toContain('Receber em: Banco/Pix - Nubank');
+
+    const transactionPending = prismaMock.whatsappConversation.upsert.mock.calls
+      .map(([input]) => input.update?.pendingText)
+      .find((value) => typeof value === 'string' && value.startsWith('__TRANSACTION_CONFIRMATION__:'));
+    prismaMock.whatsappConversation.upsert.mockReset();
+    prismaMock.whatsappConversation.upsert
+      .mockResolvedValueOnce({ recentMessages: [], pendingText: transactionPending })
+      .mockResolvedValue({});
+
+    await service.handleWebhook({
+      from: '5511999999999',
+      text: 'Confirmar',
+    });
+    expect(transactionServiceMock.create).toHaveBeenCalledWith(
+      'user-1',
+      expect.objectContaining({
+        accountId: 'account-bank',
+        amount: 100,
+        type: TransactionType.INCOME,
+      }),
+    );
+  });
+
   it('libera o fluxo para o usuario enviar um lancamento corrigido', async () => {
     fetchMock.mockImplementation(async (url: string) => ({
       ok: true,

@@ -24,8 +24,8 @@ export class TransactionRepository {
   constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
 
   async create(input: CreateTransactionInput): Promise<Transaction> {
-    return this.prisma.$transaction((trx) =>
-      trx.transaction.create({
+    return this.prisma.$transaction(async (trx) => {
+      const transaction = await trx.transaction.create({
         data: {
           ...input,
           scope: input.scope ?? 'PERSONAL',
@@ -34,8 +34,19 @@ export class TransactionRepository {
           creditCardId: input.creditCardId ?? null,
           date: input.date ?? new Date(),
         },
-      }),
-    );
+      });
+      if (transaction.accountId) {
+        await trx.financialAccount.update({
+          where: { id: transaction.accountId },
+          data: {
+            balance: {
+              increment: this.accountBalanceEffect(transaction.type, Number(transaction.netAmount)),
+            },
+          },
+        });
+      }
+      return transaction;
+    });
   }
 
   async findById(id: string): Promise<Transaction | null> {
@@ -90,10 +101,52 @@ export class TransactionRepository {
   }
 
   async update(id: string, data: Prisma.TransactionUncheckedUpdateInput): Promise<Transaction> {
-    return this.prisma.transaction.update({ where: { id }, data });
+    return this.prisma.$transaction(async (trx) => {
+      const current = await trx.transaction.findUniqueOrThrow({ where: { id } });
+      const updated = await trx.transaction.update({ where: { id }, data });
+
+      if (current.accountId) {
+        await trx.financialAccount.update({
+          where: { id: current.accountId },
+          data: {
+            balance: {
+              decrement: this.accountBalanceEffect(current.type, Number(current.netAmount)),
+            },
+          },
+        });
+      }
+      if (updated.accountId) {
+        await trx.financialAccount.update({
+          where: { id: updated.accountId },
+          data: {
+            balance: {
+              increment: this.accountBalanceEffect(updated.type, Number(updated.netAmount)),
+            },
+          },
+        });
+      }
+      return updated;
+    });
   }
 
   async delete(id: string): Promise<void> {
-    await this.prisma.transaction.delete({ where: { id } });
+    await this.prisma.$transaction(async (trx) => {
+      const current = await trx.transaction.findUniqueOrThrow({ where: { id } });
+      await trx.transaction.delete({ where: { id } });
+      if (current.accountId) {
+        await trx.financialAccount.update({
+          where: { id: current.accountId },
+          data: {
+            balance: {
+              decrement: this.accountBalanceEffect(current.type, Number(current.netAmount)),
+            },
+          },
+        });
+      }
+    });
+  }
+
+  private accountBalanceEffect(type: 'INCOME' | 'EXPENSE', amount: number): number {
+    return type === 'INCOME' ? amount : -amount;
   }
 }

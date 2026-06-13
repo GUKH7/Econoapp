@@ -15,6 +15,20 @@ type WhatsappTransactionDraft = {
   scope: FinancialScope;
   categoryHint: string;
   channelHint?: string;
+  accountId?: string;
+  creditCardId?: string;
+  paymentLabel?: string;
+};
+type WhatsappPaymentOption = {
+  id: string;
+  kind: 'ACCOUNT' | 'CARD';
+  name: string;
+  label: string;
+  accountType?: 'BANK' | 'WALLET';
+};
+type WhatsappPaymentDraft = {
+  transaction: WhatsappTransactionDraft;
+  options: WhatsappPaymentOption[];
 };
 type WhatsappMutationDraft =
   | {
@@ -35,6 +49,7 @@ type WhatsappMutationDraft =
 
 const TRANSACTION_CONFIRMATION_PREFIX = '__TRANSACTION_CONFIRMATION__:';
 const TRANSACTION_MUTATION_PREFIX = '__TRANSACTION_MUTATION__:';
+const PAYMENT_SELECTION_PREFIX = '__PAYMENT_SELECTION__:';
 
 export interface WhatsappStatusResponse {
   status: WhatsappStatus;
@@ -101,6 +116,14 @@ export class WhatsappService {
 
     const conversation = await this.getConversation(user.id, phone);
     const recentMessages = this.parseRecentMessages(conversation.recentMessages);
+    const paymentDraft = this.parsePaymentDraft(conversation.pendingText);
+    if (paymentDraft) {
+      const reply = await this.handlePaymentSelection(user.id, phone, message, paymentDraft);
+      await this.appendConversation(user.id, phone, recentMessages, message, reply);
+      await this.safeReply(phone, reply);
+      return { phone, reply };
+    }
+
     const mutationDraft = this.parseMutationDraft(conversation.pendingText);
     if (mutationDraft) {
       const reply = await this.handleMutationConfirmation(user.id, message, mutationDraft);
@@ -272,6 +295,15 @@ export class WhatsappService {
         ? { channelHint: extracted.channelHint }
         : {}),
     };
+
+    const paymentOptions = await this.findPaymentOptions(userId, scope, draft.type);
+    if (paymentOptions.length) {
+      await this.setPendingPaymentDraft(userId, phone, {
+        transaction: draft,
+        options: paymentOptions,
+      });
+      return this.paymentSelectionQuestion(draft.type, paymentOptions);
+    }
 
     await this.setPendingTransactionDraft(userId, phone, draft);
     return this.transactionDraftConfirmation(draft);
@@ -516,6 +548,7 @@ export class WhatsappService {
     categoryName: string,
     channelName: string | undefined,
     scope: FinancialScope,
+    paymentLabel?: string,
   ): string {
     const type = transaction.type === 'EXPENSE' ? 'Despesa' : 'Receita';
     return [
@@ -525,6 +558,9 @@ export class WhatsappService {
       `Valor: ${this.formatMoney(Number(transaction.amount))}`,
       `Categoria: ${categoryName}`,
       channelName ? `Canal: ${channelName}` : '',
+      paymentLabel
+        ? `${transaction.type === TransactionType.INCOME ? 'Recebido em' : 'Pagamento'}: ${paymentLabel}`
+        : '',
       `Modo: ${scope === 'BUSINESS' ? 'Negocio' : 'Pessoal'}`,
     ]
       .filter(Boolean)
@@ -541,6 +577,9 @@ export class WhatsappService {
       `Valor: ${this.formatMoney(draft.amount)}`,
       `Categoria: ${draft.categoryHint}`,
       draft.channelHint ? `Canal: ${draft.channelHint}` : '',
+      draft.paymentLabel
+        ? `${draft.type === TransactionType.INCOME ? 'Receber em' : 'Forma de pagamento'}: ${draft.paymentLabel}`
+        : 'Conta/forma de pagamento: não informada',
       `Modo: ${draft.scope === FinancialScope.BUSINESS ? 'Negócio' : 'Pessoal'}`,
       '',
       'Responda: Confirmar, Editar ou Cancelar.',
@@ -583,6 +622,8 @@ export class WhatsappService {
       scope: draft.scope,
       categoryId: category.id,
       ...(channel ? { channelId: channel.id } : {}),
+      ...(draft.accountId ? { accountId: draft.accountId } : {}),
+      ...(draft.creditCardId ? { creditCardId: draft.creditCardId } : {}),
     });
     await this.clearPendingMessage(userId);
     return this.transactionConfirmation(
@@ -590,7 +631,113 @@ export class WhatsappService {
       category.name,
       channel?.name,
       draft.scope,
+      draft.paymentLabel,
     );
+  }
+
+  private async findPaymentOptions(
+    userId: string,
+    scope: FinancialScope,
+    type: TransactionType,
+  ): Promise<WhatsappPaymentOption[]> {
+    const [accounts, cards] = await Promise.all([
+      this.prisma.financialAccount.findMany({
+        where: { userId, scope, isActive: true },
+        orderBy: { createdAt: 'desc' },
+        select: { id: true, name: true, type: true },
+      }),
+      type === TransactionType.EXPENSE
+        ? this.prisma.creditCard.findMany({
+            where: { userId, scope, isActive: true },
+            orderBy: { createdAt: 'desc' },
+            select: { id: true, name: true },
+          })
+        : Promise.resolve([]),
+    ]);
+    const accountOptions = (accounts ?? []).map((account) => ({
+      id: account.id,
+      kind: 'ACCOUNT' as const,
+      name: account.name,
+      accountType: account.type,
+      label: `${account.type === 'BANK' ? 'Banco/Pix' : 'Carteira'} - ${account.name}`,
+    }));
+    const cardOptions = (cards ?? []).map((card) => ({
+      id: card.id,
+      kind: 'CARD' as const,
+      name: card.name,
+      label: `Cartão - ${card.name}`,
+    }));
+    return [...accountOptions, ...cardOptions];
+  }
+
+  private paymentSelectionQuestion(
+    type: TransactionType,
+    options: WhatsappPaymentOption[],
+  ): string {
+    return [
+      type === TransactionType.INCOME
+        ? 'Em qual conta você recebeu esse dinheiro?'
+        : 'Como você pagou esse gasto?',
+      '',
+      ...options.map((option, index) => `${index + 1}. ${option.label}`),
+      '',
+      'Responda com o número ou nome da opção.',
+    ].join('\n');
+  }
+
+  private async handlePaymentSelection(
+    userId: string,
+    phone: string,
+    message: string,
+    draft: WhatsappPaymentDraft,
+  ): Promise<string> {
+    const normalized = this.normalizeText(message);
+    const numericIndex = Number.parseInt(normalized, 10);
+    let selected =
+      Number.isInteger(numericIndex) && String(numericIndex) === normalized
+        ? draft.options[numericIndex - 1]
+        : draft.options.find((option) => {
+            const name = this.normalizeText(option.name);
+            const label = this.normalizeText(option.label);
+            return name === normalized || label.includes(normalized) || normalized.includes(name);
+          });
+
+    if (!selected && normalized === 'pix') {
+      const bankAccounts = draft.options.filter(
+        (option) => option.kind === 'ACCOUNT' && option.accountType === 'BANK',
+      );
+      if (bankAccounts.length === 1) {
+        selected = bankAccounts[0];
+      }
+    }
+    if (!selected && normalized === 'carteira') {
+      const wallets = draft.options.filter(
+        (option) => option.kind === 'ACCOUNT' && option.accountType === 'WALLET',
+      );
+      if (wallets.length === 1) {
+        selected = wallets[0];
+      }
+    }
+    if (!selected && /^(cartao|cartao de credito)$/.test(normalized)) {
+      const cards = draft.options.filter((option) => option.kind === 'CARD');
+      if (cards.length === 1) {
+        selected = cards[0];
+      }
+    }
+
+    if (!selected) {
+      return `${this.paymentSelectionQuestion(draft.transaction.type, draft.options)}\n\nNão reconheci essa opção.`;
+    }
+
+    const transaction: WhatsappTransactionDraft = {
+      ...draft.transaction,
+      paymentLabel: selected.label,
+      ...(selected.kind === 'ACCOUNT'
+        ? { accountId: selected.id }
+        : { creditCardId: selected.id }),
+    };
+    await this.setPendingTransactionDraft(userId, phone, transaction);
+    return this.transactionDraftConfirmation(transaction);
   }
 
   private async tryCreateMutationDraft(
@@ -777,6 +924,18 @@ export class WhatsappService {
     );
   }
 
+  private async setPendingPaymentDraft(
+    userId: string,
+    phone: string,
+    draft: WhatsappPaymentDraft,
+  ): Promise<void> {
+    await this.setPendingMessage(
+      userId,
+      phone,
+      `${PAYMENT_SELECTION_PREFIX}${JSON.stringify(draft)}`,
+    );
+  }
+
   private async clearPendingMessage(userId: string): Promise<void> {
     await this.prisma.whatsappConversation.update({
       where: { userId },
@@ -832,6 +991,29 @@ export class WhatsappService {
         return null;
       }
       return draft as WhatsappMutationDraft;
+    } catch {
+      return null;
+    }
+  }
+
+  private parsePaymentDraft(value: string | null | undefined): WhatsappPaymentDraft | null {
+    if (!value?.startsWith(PAYMENT_SELECTION_PREFIX)) {
+      return null;
+    }
+    try {
+      const draft = JSON.parse(
+        value.slice(PAYMENT_SELECTION_PREFIX.length),
+      ) as Partial<WhatsappPaymentDraft>;
+      if (
+        !draft.transaction ||
+        !Array.isArray(draft.options) ||
+        !draft.options.length ||
+        typeof draft.transaction.description !== 'string' ||
+        typeof draft.transaction.amount !== 'number'
+      ) {
+        return null;
+      }
+      return draft as WhatsappPaymentDraft;
     } catch {
       return null;
     }
