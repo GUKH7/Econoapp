@@ -1063,4 +1063,128 @@ describe('WhatsappService', () => {
       data: { pendingText: null },
     });
   });
+
+  it('consulta os gastos da semana atual', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-06-13T12:00:00Z'));
+    try {
+      fetchMock.mockImplementation(async (url: string) => ({
+        ok: true,
+        json: vi.fn().mockResolvedValue(
+          url.endsWith('/status') ? { status: 'conectado' } : { success: true },
+        ),
+      }));
+      prismaMock.user.findFirst.mockResolvedValue({
+        id: 'user-1',
+        name: 'Gustavo',
+        phone: '11999999999',
+      });
+      prismaMock.transaction.aggregate
+        .mockResolvedValueOnce({ _sum: { netAmount: 500 } })
+        .mockResolvedValueOnce({ _sum: { netAmount: 120 } });
+      prismaMock.transaction.groupBy.mockResolvedValue([]);
+
+      const result = await service.handleWebhook({
+        from: '5511999999999',
+        text: 'Gastos da semana',
+      });
+
+      expect(result.reply.replace(/\u00a0/g, ' ')).toContain(
+        'Nesta semana, você gastou R$ 120,00.',
+      );
+      expect(prismaMock.transaction.aggregate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            type: 'EXPENSE',
+            date: {
+              gte: new Date('2026-06-08T00:00:00.000Z'),
+              lt: new Date('2026-06-14T00:00:00.000Z'),
+            },
+          }),
+        }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('consulta despesas de um mes informado pelo nome', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-06-13T12:00:00Z'));
+    try {
+      fetchMock.mockImplementation(async (url: string) => ({
+        ok: true,
+        json: vi.fn().mockResolvedValue(
+          url.endsWith('/status') ? { status: 'conectado' } : { success: true },
+        ),
+      }));
+      prismaMock.user.findFirst.mockResolvedValue({
+        id: 'user-1',
+        name: 'Gustavo',
+        phone: '11999999999',
+      });
+      prismaMock.transaction.aggregate
+        .mockResolvedValueOnce({ _sum: { netAmount: 1000 } })
+        .mockResolvedValueOnce({ _sum: { netAmount: 350 } });
+      prismaMock.transaction.groupBy.mockResolvedValue([]);
+
+      const result = await service.handleWebhook({
+        from: '5511999999999',
+        text: 'Despesas de maio',
+      });
+
+      const reply = result.reply.replace(/\u00a0/g, ' ');
+      expect(reply).toContain('Em maio de 2026, você gastou R$ 350,00.');
+      expect(prismaMock.transaction.aggregate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            type: 'EXPENSE',
+            date: {
+              gte: new Date('2026-05-01T00:00:00.000Z'),
+              lt: new Date('2026-06-01T00:00:00.000Z'),
+            },
+          }),
+        }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('compara o mes atual com o anterior sem depender da IA', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-06-13T12:00:00Z'));
+    try {
+      fetchMock.mockImplementation(async (url: string) => ({
+        ok: true,
+        json: vi.fn().mockResolvedValue(
+          url.endsWith('/status') ? { status: 'conectado' } : { success: true },
+        ),
+      }));
+      prismaMock.user.findFirst.mockResolvedValue({
+        id: 'user-1',
+        name: 'Gustavo',
+        phone: '11999999999',
+      });
+      prismaMock.transaction.aggregate
+        .mockResolvedValueOnce({ _sum: { netAmount: 2000 } })
+        .mockResolvedValueOnce({ _sum: { netAmount: 800 } })
+        .mockResolvedValueOnce({ _sum: { netAmount: 1500 } })
+        .mockResolvedValueOnce({ _sum: { netAmount: 1000 } });
+
+      const result = await service.handleWebhook({
+        from: '5511999999999',
+        text: 'Compare este mês com o anterior',
+      });
+
+      const reply = result.reply.replace(/\u00a0/g, ' ');
+      expect(reply).toContain('Comparação: junho de 2026 x maio de 2026');
+      expect(reply).toContain('Receitas: R$ 2.000,00 (aumento de 33,3%)');
+      expect(reply).toContain('Gastos: R$ 800,00 (queda de 20,0%)');
+      expect(reply).toContain('Saldo: R$ 1.200,00 (antes R$ 500,00)');
+      expect(geminiMock.classifyWhatsappMessage).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

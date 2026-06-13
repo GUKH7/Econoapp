@@ -8,6 +8,11 @@ import { SendWhatsappMessageDto } from './dto/send-whatsapp-message.dto';
 import { WhatsappWebhookDto } from './dto/whatsapp-webhook.dto';
 
 type WhatsappStatus = 'aguardando_qr' | 'conectado' | 'iniciando' | 'reconectando';
+type FinancialPeriod = {
+  start: Date;
+  end: Date;
+  label: string;
+};
 type WhatsappTransactionDraft = {
   description: string;
   amount: number;
@@ -375,7 +380,12 @@ export class WhatsappService {
   private async answerQuestion(userId: string, message: string): Promise<string> {
     const lower = this.normalizeText(message);
     const scope = lower.includes('negocio') || lower.includes('loja') ? FinancialScope.BUSINESS : undefined;
-    const { start, end } = this.currentMonthRange();
+    const period = this.resolveFinancialPeriod(lower);
+    const { start, end } = period;
+
+    if (this.isMonthComparisonQuestion(lower)) {
+      return this.answerMonthComparison(userId, scope);
+    }
 
     if (lower.includes('shopee') || lower.includes('instagram') || lower.includes('mercado livre')) {
       const channelName = lower.includes('shopee')
@@ -384,17 +394,17 @@ export class WhatsappService {
           ? 'Instagram'
           : 'Mercado Livre';
       const result = await this.totalByChannel(userId, channelName, start, end);
-      return `Neste mes voce vendeu ${this.formatMoney(result)} em ${channelName}.`;
+      return `${this.periodAt(period.label)}, você vendeu ${this.formatMoney(result)} em ${channelName}.`;
     }
 
     if (lower.includes('maior despesa')) {
       const largest = await this.prisma.transaction.findFirst({
-        where: { userId, type: 'EXPENSE', date: { gte: start, lte: end }, ...(scope ? { scope } : {}) },
+        where: { userId, type: 'EXPENSE', date: { gte: start, lt: end }, ...(scope ? { scope } : {}) },
         orderBy: { amount: 'desc' },
         include: { category: true },
       });
-      if (!largest) return 'Voce ainda nao tem despesas registradas neste mes.';
-      return `Sua maior despesa do mes foi ${largest.description}: ${this.formatMoney(Number(largest.amount))} em ${largest.category.name}.`;
+      if (!largest) return `Você ainda não tem despesas registradas ${this.periodAt(period.label).toLocaleLowerCase('pt-BR')}.`;
+      return `Sua maior despesa ${this.periodAt(period.label).toLocaleLowerCase('pt-BR')} foi ${largest.description}: ${this.formatMoney(Number(largest.amount))} em ${largest.category.name}.`;
     }
 
     if (this.isExpenseListQuestion(lower)) {
@@ -411,7 +421,7 @@ export class WhatsappService {
       });
 
       if (!expenses.length) {
-        return 'Você ainda não tem gastos registrados neste mês.';
+        return `Você ainda não tem gastos registrados ${this.periodAt(period.label).toLocaleLowerCase('pt-BR')}.`;
       }
 
       const total = expenses.reduce((sum, item) => sum + Number(item.netAmount ?? item.amount), 0);
@@ -420,7 +430,7 @@ export class WhatsappService {
           `${index + 1}. ${item.description} — ${item.category.name}: ${this.formatMoney(Number(item.netAmount ?? item.amount))}`,
       );
       return [
-        'Seus gastos deste mês:',
+        `Seus gastos ${this.periodOf(period.label)}:`,
         ...lines,
         '',
         `Total: ${this.formatMoney(total)}`,
@@ -432,22 +442,43 @@ export class WhatsappService {
 
     if (lower.includes('lucro') || lower.includes('negocio')) {
       const totals = await this.monthTotals(userId, start, end, FinancialScope.BUSINESS);
-      return `Seu negocio esta com saldo de ${this.formatMoney(totals.balance)} neste mes.\nReceitas: ${this.formatMoney(totals.income)}\nGastos: ${this.formatMoney(totals.expense)}.`;
+      return `Seu negócio está com saldo de ${this.formatMoney(totals.balance)} ${this.periodAt(period.label).toLocaleLowerCase('pt-BR')}.\nReceitas: ${this.formatMoney(totals.income)}\nGastos: ${this.formatMoney(totals.expense)}.`;
     }
 
     const totals = await this.monthTotals(userId, start, end, scope);
     if (lower.includes('gastei') || lower.includes('gasto') || lower.includes('despesa')) {
       const topCategory = await this.topExpenseCategory(userId, start, end, scope);
       return [
-        `Neste mes voce gastou ${this.formatMoney(totals.expense)}.`,
+        `${this.periodAt(period.label)}, você gastou ${this.formatMoney(totals.expense)}.`,
         topCategory ? `Maior categoria: ${topCategory.name} - ${this.formatMoney(topCategory.total)}.` : '',
-        `Saldo atual: ${this.formatMoney(totals.balance)}.`,
+        `Resultado do período: ${this.formatMoney(totals.balance)}.`,
       ]
         .filter(Boolean)
         .join('\n');
     }
 
-    return `Resumo do mes:\nReceitas: ${this.formatMoney(totals.income)}\nGastos: ${this.formatMoney(totals.expense)}\nSaldo: ${this.formatMoney(totals.balance)}.`;
+    return `Resumo ${this.periodOf(period.label)}:\nReceitas: ${this.formatMoney(totals.income)}\nGastos: ${this.formatMoney(totals.expense)}\nSaldo: ${this.formatMoney(totals.balance)}.`;
+  }
+
+  private async answerMonthComparison(
+    userId: string,
+    scope?: FinancialScope,
+  ): Promise<string> {
+    const current = this.currentMonthRange();
+    const previous = this.previousMonthRange();
+    const [currentTotals, previousTotals] = await Promise.all([
+      this.monthTotals(userId, current.start, current.end, scope),
+      this.monthTotals(userId, previous.start, previous.end, scope),
+    ]);
+    const currentLabel = this.monthLabel(current.start);
+    const previousLabel = this.monthLabel(previous.start);
+    return [
+      `Comparação: ${currentLabel} x ${previousLabel}`,
+      '',
+      `Receitas: ${this.formatMoney(currentTotals.income)} (${this.percentageChange(previousTotals.income, currentTotals.income)})`,
+      `Gastos: ${this.formatMoney(currentTotals.expense)} (${this.percentageChange(previousTotals.expense, currentTotals.expense)})`,
+      `Saldo: ${this.formatMoney(currentTotals.balance)} (antes ${this.formatMoney(previousTotals.balance)})`,
+    ].join('\n');
   }
 
   private async findUserByPhone(phone: string) {
@@ -483,11 +514,11 @@ export class WhatsappService {
   private async monthTotals(userId: string, start: Date, end: Date, scope?: FinancialScope) {
     const [income, expense] = await Promise.all([
       this.prisma.transaction.aggregate({
-        where: { userId, type: 'INCOME', date: { gte: start, lte: end }, ...(scope ? { scope } : {}) },
+        where: { userId, type: 'INCOME', date: { gte: start, lt: end }, ...(scope ? { scope } : {}) },
         _sum: { netAmount: true },
       }),
       this.prisma.transaction.aggregate({
-        where: { userId, type: 'EXPENSE', date: { gte: start, lte: end }, ...(scope ? { scope } : {}) },
+        where: { userId, type: 'EXPENSE', date: { gte: start, lt: end }, ...(scope ? { scope } : {}) },
         _sum: { netAmount: true },
       }),
     ]);
@@ -499,7 +530,7 @@ export class WhatsappService {
   private async topExpenseCategory(userId: string, start: Date, end: Date, scope?: FinancialScope) {
     const groups = await this.prisma.transaction.groupBy({
       by: ['categoryId'],
-      where: { userId, type: 'EXPENSE', date: { gte: start, lte: end }, ...(scope ? { scope } : {}) },
+      where: { userId, type: 'EXPENSE', date: { gte: start, lt: end }, ...(scope ? { scope } : {}) },
       _sum: { amount: true },
       orderBy: { _sum: { amount: 'desc' } },
       take: 1,
@@ -513,7 +544,7 @@ export class WhatsappService {
   private async topExpenseCategories(userId: string, start: Date, end: Date) {
     const groups = await this.prisma.transaction.groupBy({
       by: ['categoryId'],
-      where: { userId, type: 'EXPENSE', date: { gte: start, lte: end } },
+      where: { userId, type: 'EXPENSE', date: { gte: start, lt: end } },
       _sum: { amount: true },
       orderBy: { _sum: { amount: 'desc' } },
       take: 3,
@@ -537,7 +568,7 @@ export class WhatsappService {
     });
     if (!channel) return 0;
     const result = await this.prisma.transaction.aggregate({
-      where: { userId, channelId: channel.id, type: 'INCOME', date: { gte: start, lte: end } },
+      where: { userId, channelId: channel.id, type: 'INCOME', date: { gte: start, lt: end } },
       _sum: { netAmount: true },
     });
     return Number(result._sum.netAmount ?? 0);
@@ -1061,11 +1092,12 @@ export class WhatsappService {
       'Posso ajudar você a:',
       '• registrar receitas, gastos e vendas;',
       '• consultar saldo, gastos e receitas;',
+      '• consultar semanas, meses específicos e comparar períodos;',
       '• comparar meses e identificar maiores despesas;',
       '• corrigir e excluir lançamentos com confirmação;',
       '• analisar suas finanças pessoais ou do negócio.',
       '',
-      'Exemplos: “Gastei R$ 40 no mercado”, “Corrija o último gasto para R$ 25” ou “Apague o lançamento do relógio”.',
+      'Exemplos: “Gastos da semana”, “Despesas de maio”, “Compare este mês com o anterior” ou “Gastei R$ 40 no mercado”.',
     ].join('\n');
   }
 
@@ -1131,12 +1163,34 @@ export class WhatsappService {
     return (
       lower.includes('quanto gastei') ||
       this.isExpenseListQuestion(lower) ||
+      this.isExpensePeriodQuestion(lower) ||
+      this.isMonthComparisonQuestion(lower) ||
       lower.includes('quanto vendi') ||
       lower.includes('maior despesa') ||
       lower.includes('resumo do mes') ||
       lower.includes('saldo atual') ||
       lower.includes('meu negocio esta no lucro') ||
       lower.includes('como esta meu negocio')
+    );
+  }
+
+  private isExpensePeriodQuestion(message: string): boolean {
+    const lower = this.normalizeText(message);
+    return (
+      /\b(gastos|despesas)\b.*\b(semana|mes|janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\b/.test(
+        lower,
+      ) ||
+      /\b(semana|mes|janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\b.*\b(gastos|despesas)\b/.test(
+        lower,
+      )
+    );
+  }
+
+  private isMonthComparisonQuestion(message: string): boolean {
+    const lower = this.normalizeText(message);
+    return (
+      /\b(compare|comparar|comparacao|diferenca)\b/.test(lower) &&
+      /\b(mes|meses|anterior|passado)\b/.test(lower)
     );
   }
 
@@ -1284,6 +1338,73 @@ export class WhatsappService {
     const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
     const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
     return { start, end };
+  }
+
+  private resolveFinancialPeriod(message: string): FinancialPeriod {
+    const lower = this.normalizeText(message);
+    if (lower.includes('semana')) {
+      const now = new Date();
+      const day = now.getUTCDay();
+      const daysSinceMonday = day === 0 ? 6 : day - 1;
+      const start = new Date(
+        Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - daysSinceMonday),
+      );
+      const end = new Date(
+        Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1),
+      );
+      return { start, end, label: 'esta semana' };
+    }
+
+    const months = [
+      'janeiro',
+      'fevereiro',
+      'marco',
+      'abril',
+      'maio',
+      'junho',
+      'julho',
+      'agosto',
+      'setembro',
+      'outubro',
+      'novembro',
+      'dezembro',
+    ];
+    const monthIndex = months.findIndex((month) => lower.includes(month));
+    if (monthIndex >= 0) {
+      const now = new Date();
+      const explicitYear = lower.match(/\b(20\d{2})\b/)?.[1];
+      const year = explicitYear
+        ? Number(explicitYear)
+        : monthIndex > now.getUTCMonth()
+          ? now.getUTCFullYear() - 1
+          : now.getUTCFullYear();
+      const start = new Date(Date.UTC(year, monthIndex, 1));
+      const end = new Date(Date.UTC(year, monthIndex + 1, 1));
+      return { start, end, label: this.monthLabel(start) };
+    }
+
+    const current = this.currentMonthRange();
+    return { ...current, label: 'este mês' };
+  }
+
+  private monthLabel(date: Date): string {
+    return new Intl.DateTimeFormat('pt-BR', {
+      month: 'long',
+      year: 'numeric',
+      timeZone: 'UTC',
+    }).format(date);
+  }
+
+  private periodAt(label: string): string {
+    if (label === 'este mês') return 'Neste mês';
+    if (label === 'esta semana') return 'Nesta semana';
+    return `Em ${label}`;
+  }
+
+  private periodOf(label: string): string {
+    if (label === 'este mês') return 'deste mês';
+    if (label === 'esta semana') return 'desta semana';
+    return `de ${label}`;
   }
 
   private previousMonthRange(): { start: Date; end: Date } {
