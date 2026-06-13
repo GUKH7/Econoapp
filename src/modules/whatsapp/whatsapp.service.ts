@@ -16,8 +16,25 @@ type WhatsappTransactionDraft = {
   categoryHint: string;
   channelHint?: string;
 };
+type WhatsappMutationDraft =
+  | {
+      action: 'UPDATE_AMOUNT';
+      transactionId: string;
+      description: string;
+      previousAmount: number;
+      newAmount: number;
+      type: TransactionType;
+    }
+  | {
+      action: 'DELETE';
+      transactionId: string;
+      description: string;
+      amount: number;
+      type: TransactionType;
+    };
 
 const TRANSACTION_CONFIRMATION_PREFIX = '__TRANSACTION_CONFIRMATION__:';
+const TRANSACTION_MUTATION_PREFIX = '__TRANSACTION_MUTATION__:';
 
 export interface WhatsappStatusResponse {
   status: WhatsappStatus;
@@ -84,6 +101,14 @@ export class WhatsappService {
 
     const conversation = await this.getConversation(user.id, phone);
     const recentMessages = this.parseRecentMessages(conversation.recentMessages);
+    const mutationDraft = this.parseMutationDraft(conversation.pendingText);
+    if (mutationDraft) {
+      const reply = await this.handleMutationConfirmation(user.id, message, mutationDraft);
+      await this.appendConversation(user.id, phone, recentMessages, message, reply);
+      await this.safeReply(phone, reply);
+      return { phone, reply };
+    }
+
     const transactionDraft = this.parseTransactionDraft(conversation.pendingText);
     if (transactionDraft) {
       const reply = await this.handleTransactionConfirmation(
@@ -123,6 +148,11 @@ export class WhatsappService {
     message: string,
     recentMessages: WhatsappConversationMessage[],
   ): Promise<string> {
+    const mutationReply = await this.tryCreateMutationDraft(userId, phone, message);
+    if (mutationReply) {
+      return mutationReply;
+    }
+
     if (this.isHelpRequest(message)) {
       return this.helpReply();
     }
@@ -563,6 +593,150 @@ export class WhatsappService {
     );
   }
 
+  private async tryCreateMutationDraft(
+    userId: string,
+    phone: string,
+    message: string,
+  ): Promise<string | null> {
+    const normalized = this.normalizeText(message);
+    const updateMatch = normalized.match(
+      /\b(corrija|corrigir|altere|alterar|mude|mudar)\b.*\b(ultimo|ultima)\b.*\b(gasto|despesa|receita|lancamento)\b.*\b(para|por)\b\s*(?:r\$)?\s*(\d+(?:[.,]\d{1,2})?)/,
+    );
+
+    if (updateMatch) {
+      const type =
+        updateMatch[3] === 'gasto' || updateMatch[3] === 'despesa'
+          ? TransactionType.EXPENSE
+          : updateMatch[3] === 'receita'
+            ? TransactionType.INCOME
+            : undefined;
+      const transaction = await this.prisma.transaction.findFirst({
+        where: { userId, ...(type ? { type } : {}) },
+        orderBy: { date: 'desc' },
+        include: { category: true },
+      });
+      if (!transaction) {
+        return type === TransactionType.EXPENSE
+          ? 'Não encontrei nenhum gasto para corrigir.'
+          : 'Não encontrei nenhum lançamento para corrigir.';
+      }
+
+      const newAmount = Number(updateMatch[5]!.replace(',', '.'));
+      if (!Number.isFinite(newAmount) || newAmount <= 0) {
+        return 'Informe um valor válido para a correção.';
+      }
+
+      const draft: WhatsappMutationDraft = {
+        action: 'UPDATE_AMOUNT',
+        transactionId: transaction.id,
+        description: transaction.description,
+        previousAmount: Number(transaction.amount),
+        newAmount,
+        type: transaction.type,
+      };
+      await this.setPendingMutationDraft(userId, phone, draft);
+      return this.mutationDraftConfirmation(draft);
+    }
+
+    if (!/\b(apague|apagar|exclua|excluir|delete|deletar|remova|remover)\b/.test(normalized)) {
+      return null;
+    }
+
+    const searchTerm = normalized
+      .replace(/\b(apague|apagar|exclua|excluir|delete|deletar|remova|remover)\b/g, '')
+      .replace(/\b(o|a|um|uma|meu|minha|lancamento|transacao|gasto|despesa|receita|do|da|de)\b/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!searchTerm) {
+      return 'Qual lançamento você quer apagar? Informe parte do título ou da categoria.';
+    }
+
+    const recentTransactions = await this.prisma.transaction.findMany({
+      where: { userId },
+      orderBy: { date: 'desc' },
+      take: 30,
+      include: { category: true },
+    });
+    const transaction = recentTransactions.find((item) => {
+      const searchable = this.normalizeText(`${item.description} ${item.category?.name ?? ''}`);
+      return searchTerm.split(' ').every((term) => searchable.includes(term));
+    });
+    if (!transaction) {
+      return `Não encontrei um lançamento relacionado a “${searchTerm}”.`;
+    }
+
+    const draft: WhatsappMutationDraft = {
+      action: 'DELETE',
+      transactionId: transaction.id,
+      description: transaction.description,
+      amount: Number(transaction.amount),
+      type: transaction.type,
+    };
+    await this.setPendingMutationDraft(userId, phone, draft);
+    return this.mutationDraftConfirmation(draft);
+  }
+
+  private mutationDraftConfirmation(draft: WhatsappMutationDraft): string {
+    const type = draft.type === TransactionType.EXPENSE ? 'Despesa' : 'Receita';
+    if (draft.action === 'UPDATE_AMOUNT') {
+      return [
+        'Confirme a correção:',
+        '',
+        `${type}: ${draft.description}`,
+        `Valor atual: ${this.formatMoney(draft.previousAmount)}`,
+        `Novo valor: ${this.formatMoney(draft.newAmount)}`,
+        '',
+        'Responda: Confirmar ou Cancelar.',
+      ].join('\n');
+    }
+    return [
+      'Confirme a exclusão:',
+      '',
+      `${type}: ${draft.description}`,
+      `Valor: ${this.formatMoney(draft.amount)}`,
+      '',
+      'Essa ação não poderá ser desfeita.',
+      'Responda: Confirmar ou Cancelar.',
+    ].join('\n');
+  }
+
+  private async handleMutationConfirmation(
+    userId: string,
+    message: string,
+    draft: WhatsappMutationDraft,
+  ): Promise<string> {
+    const command = this.normalizeText(message);
+    if (/^(cancelar|cancela|nao|não)$/.test(command)) {
+      await this.clearPendingMessage(userId);
+      return draft.action === 'DELETE'
+        ? 'Exclusão cancelada. O lançamento foi mantido.'
+        : 'Correção cancelada. O lançamento não foi alterado.';
+    }
+    if (!/^(confirmar|confirmo|sim|pode|pode fazer)$/.test(command)) {
+      return `${this.mutationDraftConfirmation(draft)}\n\nNão reconheci sua escolha.`;
+    }
+
+    if (draft.action === 'UPDATE_AMOUNT') {
+      await this.transactionService.update(userId, draft.transactionId, {
+        amount: draft.newAmount,
+      });
+      await this.clearPendingMessage(userId);
+      return [
+        'Lançamento corrigido ✅',
+        `${draft.type === TransactionType.EXPENSE ? 'Despesa' : 'Receita'}: ${draft.description}`,
+        `Novo valor: ${this.formatMoney(draft.newAmount)}`,
+      ].join('\n');
+    }
+
+    await this.transactionService.delete(userId, draft.transactionId);
+    await this.clearPendingMessage(userId);
+    return [
+      'Lançamento excluído ✅',
+      `${draft.type === TransactionType.EXPENSE ? 'Despesa' : 'Receita'}: ${draft.description}`,
+      `Valor: ${this.formatMoney(draft.amount)}`,
+    ].join('\n');
+  }
+
   private async getConversation(userId: string, phone: string) {
     return this.prisma.whatsappConversation.upsert({
       where: { userId },
@@ -591,6 +765,18 @@ export class WhatsappService {
     );
   }
 
+  private async setPendingMutationDraft(
+    userId: string,
+    phone: string,
+    draft: WhatsappMutationDraft,
+  ): Promise<void> {
+    await this.setPendingMessage(
+      userId,
+      phone,
+      `${TRANSACTION_MUTATION_PREFIX}${JSON.stringify(draft)}`,
+    );
+  }
+
   private async clearPendingMessage(userId: string): Promise<void> {
     await this.prisma.whatsappConversation.update({
       where: { userId },
@@ -615,6 +801,37 @@ export class WhatsappService {
         return null;
       }
       return draft as WhatsappTransactionDraft;
+    } catch {
+      return null;
+    }
+  }
+
+  private parseMutationDraft(value: string | null | undefined): WhatsappMutationDraft | null {
+    if (!value?.startsWith(TRANSACTION_MUTATION_PREFIX)) {
+      return null;
+    }
+    try {
+      const draft = JSON.parse(
+        value.slice(TRANSACTION_MUTATION_PREFIX.length),
+      ) as Partial<WhatsappMutationDraft>;
+      if (
+        (draft.action !== 'UPDATE_AMOUNT' && draft.action !== 'DELETE') ||
+        typeof draft.transactionId !== 'string' ||
+        typeof draft.description !== 'string' ||
+        !Object.values(TransactionType).includes(draft.type as TransactionType)
+      ) {
+        return null;
+      }
+      if (
+        draft.action === 'UPDATE_AMOUNT' &&
+        (typeof draft.previousAmount !== 'number' || typeof draft.newAmount !== 'number')
+      ) {
+        return null;
+      }
+      if (draft.action === 'DELETE' && typeof draft.amount !== 'number') {
+        return null;
+      }
+      return draft as WhatsappMutationDraft;
     } catch {
       return null;
     }
@@ -663,9 +880,10 @@ export class WhatsappService {
       '• registrar receitas, gastos e vendas;',
       '• consultar saldo, gastos e receitas;',
       '• comparar meses e identificar maiores despesas;',
+      '• corrigir e excluir lançamentos com confirmação;',
       '• analisar suas finanças pessoais ou do negócio.',
       '',
-      'Exemplos: “Gastei R$ 40 no mercado” ou “Onde estou gastando mais?”.',
+      'Exemplos: “Gastei R$ 40 no mercado”, “Corrija o último gasto para R$ 25” ou “Apague o lançamento do relógio”.',
     ].join('\n');
   }
 

@@ -40,7 +40,11 @@ describe('WhatsappService', () => {
     classifyWhatsappMessage: ReturnType<typeof vi.fn>;
     generateWhatsappReply: ReturnType<typeof vi.fn>;
   };
-  let transactionServiceMock: { create: ReturnType<typeof vi.fn> };
+  let transactionServiceMock: {
+    create: ReturnType<typeof vi.fn>;
+    update: ReturnType<typeof vi.fn>;
+    delete: ReturnType<typeof vi.fn>;
+  };
 
   beforeEach(() => {
     fetchMock = vi.fn();
@@ -63,7 +67,7 @@ describe('WhatsappService', () => {
       classifyWhatsappMessage: vi.fn(),
       generateWhatsappReply: vi.fn(),
     };
-    transactionServiceMock = { create: vi.fn() };
+    transactionServiceMock = { create: vi.fn(), update: vi.fn(), delete: vi.fn() };
     service = new WhatsappService(prismaMock as never, geminiMock as never, transactionServiceMock as never);
   });
 
@@ -755,5 +759,147 @@ describe('WhatsappService', () => {
     expect(normalizedReply).toContain('Total: R$ 60,00');
     expect(geminiMock.classifyWhatsappMessage).not.toHaveBeenCalled();
     expect(transactionServiceMock.create).not.toHaveBeenCalled();
+  });
+
+  it('corrige o valor do ultimo gasto somente depois da confirmacao', async () => {
+    fetchMock.mockImplementation(async (url: string) => ({
+      ok: true,
+      json: vi.fn().mockResolvedValue(
+        url.endsWith('/status') ? { status: 'conectado' } : { success: true },
+      ),
+    }));
+    prismaMock.user.findFirst.mockResolvedValue({
+      id: 'user-1',
+      name: 'Gustavo',
+      phone: '11999999999',
+    });
+    prismaMock.transaction.findFirst.mockResolvedValue({
+      id: 'expense-1',
+      userId: 'user-1',
+      description: 'Compra de relógio',
+      amount: 20,
+      netAmount: 20,
+      type: TransactionType.EXPENSE,
+      date: new Date(),
+      category: { id: 'category-watch', name: 'Relógio' },
+    });
+    transactionServiceMock.update.mockResolvedValue({
+      id: 'expense-1',
+      description: 'Compra de relógio',
+      amount: 25,
+      type: TransactionType.EXPENSE,
+    });
+
+    const draftReply = await service.handleWebhook({
+      from: '5511999999999',
+      text: 'Corrija o último gasto para R$ 25',
+    });
+
+    expect(draftReply.reply).toContain('Confirme a correção');
+    expect(draftReply.reply.replace(/\u00a0/g, ' ')).toContain('Novo valor: R$ 25,00');
+    expect(transactionServiceMock.update).not.toHaveBeenCalled();
+
+    const pendingText = prismaMock.whatsappConversation.upsert.mock.calls
+      .map(([input]) => input.update?.pendingText)
+      .find((value) => typeof value === 'string' && value.startsWith('__TRANSACTION_MUTATION__:'));
+    prismaMock.whatsappConversation.upsert.mockReset();
+    prismaMock.whatsappConversation.upsert
+      .mockResolvedValueOnce({ recentMessages: [], pendingText })
+      .mockResolvedValue({});
+
+    const confirmation = await service.handleWebhook({
+      from: '5511999999999',
+      text: 'Confirmar',
+    });
+
+    expect(confirmation.reply).toContain('Lançamento corrigido');
+    expect(transactionServiceMock.update).toHaveBeenCalledWith('user-1', 'expense-1', {
+      amount: 25,
+    });
+    expect(transactionServiceMock.delete).not.toHaveBeenCalled();
+  });
+
+  it('localiza e exclui um lancamento pelo titulo somente depois da confirmacao', async () => {
+    fetchMock.mockImplementation(async (url: string) => ({
+      ok: true,
+      json: vi.fn().mockResolvedValue(
+        url.endsWith('/status') ? { status: 'conectado' } : { success: true },
+      ),
+    }));
+    prismaMock.user.findFirst.mockResolvedValue({
+      id: 'user-1',
+      name: 'Gustavo',
+      phone: '11999999999',
+    });
+    prismaMock.transaction.findMany.mockResolvedValue([
+      {
+        id: 'expense-1',
+        userId: 'user-1',
+        description: 'Compra de relógio',
+        amount: 20,
+        netAmount: 20,
+        type: TransactionType.EXPENSE,
+        date: new Date(),
+        category: { id: 'category-watch', name: 'Relógio' },
+      },
+    ]);
+    transactionServiceMock.delete.mockResolvedValue(undefined);
+
+    const draftReply = await service.handleWebhook({
+      from: '5511999999999',
+      text: 'Apague o lançamento do relógio',
+    });
+
+    expect(draftReply.reply).toContain('Confirme a exclusão');
+    expect(draftReply.reply).toContain('Compra de relógio');
+    expect(transactionServiceMock.delete).not.toHaveBeenCalled();
+
+    const pendingText = prismaMock.whatsappConversation.upsert.mock.calls
+      .map(([input]) => input.update?.pendingText)
+      .find((value) => typeof value === 'string' && value.startsWith('__TRANSACTION_MUTATION__:'));
+    prismaMock.whatsappConversation.upsert.mockReset();
+    prismaMock.whatsappConversation.upsert
+      .mockResolvedValueOnce({ recentMessages: [], pendingText })
+      .mockResolvedValue({});
+
+    const confirmation = await service.handleWebhook({
+      from: '5511999999999',
+      text: 'Confirmar',
+    });
+
+    expect(confirmation.reply).toContain('Lançamento excluído');
+    expect(transactionServiceMock.delete).toHaveBeenCalledWith('user-1', 'expense-1');
+    expect(transactionServiceMock.update).not.toHaveBeenCalled();
+  });
+
+  it('cancela a exclusao e preserva o lancamento', async () => {
+    fetchMock.mockImplementation(async (url: string) => ({
+      ok: true,
+      json: vi.fn().mockResolvedValue(
+        url.endsWith('/status') ? { status: 'conectado' } : { success: true },
+      ),
+    }));
+    prismaMock.user.findFirst.mockResolvedValue({
+      id: 'user-1',
+      name: 'Gustavo',
+      phone: '11999999999',
+    });
+    prismaMock.whatsappConversation.upsert.mockResolvedValue({
+      recentMessages: [],
+      pendingText:
+        '__TRANSACTION_MUTATION__:{"action":"DELETE","transactionId":"expense-1","description":"Compra de relógio","amount":20,"type":"EXPENSE"}',
+    });
+
+    const result = await service.handleWebhook({
+      from: '5511999999999',
+      text: 'Cancelar',
+    });
+
+    expect(result.reply).toContain('Exclusão cancelada');
+    expect(transactionServiceMock.delete).not.toHaveBeenCalled();
+    expect(prismaMock.whatsappConversation.update).toHaveBeenCalledWith({
+      where: { userId: 'user-1' },
+      data: { pendingText: null },
+    });
   });
 });
