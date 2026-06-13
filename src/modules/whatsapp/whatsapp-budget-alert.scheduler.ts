@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { env } from '@/config/env';
+import { WhatsappScheduledNotificationService } from './whatsapp-scheduled-notification.service';
 import { WhatsappService } from './whatsapp.service';
 
 @Injectable()
@@ -8,7 +9,11 @@ export class WhatsappBudgetAlertScheduler implements OnModuleInit, OnModuleDestr
   private initialTimer?: NodeJS.Timeout;
   private intervalTimer?: NodeJS.Timeout;
 
-  constructor(@Inject(WhatsappService) private readonly whatsappService: WhatsappService) {}
+  constructor(
+    @Inject(WhatsappService) private readonly whatsappService: WhatsappService,
+    @Inject(WhatsappScheduledNotificationService)
+    private readonly scheduledNotificationService: WhatsappScheduledNotificationService,
+  ) {}
 
   onModuleInit(): void {
     if (env.NODE_ENV === 'test') return;
@@ -26,15 +31,25 @@ export class WhatsappBudgetAlertScheduler implements OnModuleInit, OnModuleDestr
 
   private async run(): Promise<void> {
     try {
-      const result = await this.whatsappService.runProactiveBudgetAlerts();
-      if (result.sent || result.failed) {
+      const [budgetResult, scheduledResult] = await Promise.all([
+        this.whatsappService.runProactiveBudgetAlerts(),
+        this.scheduledNotificationService.run(),
+      ]);
+
+      if (budgetResult.sent || budgetResult.failed) {
         this.logger.log(
-          `Alertas de orçamento: ${result.sent} enviados, ${result.failed} falharam, ${result.skipped} ignorados.`,
+          `Alertas de orçamento: ${budgetResult.sent} enviados, ${budgetResult.failed} falharam, ${budgetResult.skipped} ignorados.`,
+        );
+      }
+
+      if (scheduledResult.sent || scheduledResult.failed) {
+        this.logger.log(
+          `Lembretes agendados: ${scheduledResult.sent} enviados, ${scheduledResult.failed} falharam, ${scheduledResult.skipped} ignorados.`,
         );
       }
     } catch (error) {
       this.logger.error(
-        'Falha ao verificar alertas proativos de orçamento.',
+        'Falha ao executar notificações financeiras agendadas.',
         error instanceof Error ? error.stack : undefined,
       );
     }

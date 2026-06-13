@@ -19,6 +19,7 @@ import { env } from '@/config/env';
 import { isWhatsappAdminPhone } from '@/modules/auth/auth.service';
 import { SendWhatsappMessageDto } from './dto/send-whatsapp-message.dto';
 import { WhatsappWebhookDto } from './dto/whatsapp-webhook.dto';
+import { WhatsappScheduledNotificationService } from './whatsapp-scheduled-notification.service';
 import { WhatsappService, WhatsappStatusResponse } from './whatsapp.service';
 
 @ApiTags('WhatsApp')
@@ -26,7 +27,11 @@ import { WhatsappService, WhatsappStatusResponse } from './whatsapp.service';
 @UseGuards(AuthGuard)
 @Controller('whatsapp')
 export class WhatsappController {
-  constructor(@Inject(WhatsappService) private readonly whatsappService: WhatsappService) {}
+  constructor(
+    @Inject(WhatsappService) private readonly whatsappService: WhatsappService,
+    @Inject(WhatsappScheduledNotificationService)
+    private readonly scheduledNotificationService: WhatsappScheduledNotificationService,
+  ) {}
 
   @ApiOperation({ summary: 'Consultar status da conexao WhatsApp' })
   @Get('status')
@@ -78,6 +83,18 @@ export class WhatsappController {
   ) {
     this.ensureBudgetAlertToken(headerToken || queryToken);
     const data = await this.whatsappService.runProactiveBudgetAlerts();
+    return { data };
+  }
+
+  @Public()
+  @ApiOperation({ summary: 'Executar lembretes de contas, parcelas e vencimentos' })
+  @Post('scheduled-notifications/run')
+  async runScheduledNotifications(
+    @Headers('x-budget-alert-token') headerToken?: string,
+    @Query('token') queryToken?: string,
+  ) {
+    this.ensureBudgetAlertToken(headerToken || queryToken);
+    const data = await this.scheduledNotificationService.run();
     return { data };
   }
 
