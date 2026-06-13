@@ -75,6 +75,13 @@ export interface WhatsappStatusResponse {
   qrcode?: string;
 }
 
+export interface ProactiveBudgetAlertResult {
+  checked: number;
+  sent: number;
+  skipped: number;
+  failed: number;
+}
+
 @Injectable()
 export class WhatsappService {
   private readonly baseUrl = env.WHATSAPP_BOT_API_URL.replace(/\/+$/, '');
@@ -115,6 +122,73 @@ export class WhatsappService {
       method: 'POST',
       body: JSON.stringify({ phone, message }),
     });
+  }
+
+  async runProactiveBudgetAlerts(): Promise<ProactiveBudgetAlertResult> {
+    const month = this.currentMonthRange().start;
+    const budgets = await this.prisma.categoryBudget.findMany({
+      where: { month },
+      include: {
+        category: true,
+        user: { select: { phone: true } },
+      },
+    });
+    const result: ProactiveBudgetAlertResult = {
+      checked: budgets.length,
+      sent: 0,
+      skipped: 0,
+      failed: 0,
+    };
+
+    for (const budget of budgets) {
+      const limit = Number(budget.amount);
+      const spent = await this.categoryExpenseTotal(
+        budget.userId,
+        budget.categoryId,
+        budget.scope,
+        month,
+      );
+      const percentage = limit > 0 ? Math.round((spent / limit) * 100) : 0;
+      const targetLevel = percentage >= 100 ? 100 : percentage >= 80 ? 80 : 0;
+
+      if (targetLevel === 0) {
+        if (budget.alertLevel > 0) {
+          await this.prisma.categoryBudget.update({
+            where: { id: budget.id },
+            data: { alertLevel: 0, lastAlertAt: null },
+          });
+        }
+        result.skipped += 1;
+        continue;
+      }
+
+      if (budget.alertLevel >= targetLevel) {
+        result.skipped += 1;
+        continue;
+      }
+
+      try {
+        await this.sendMessage({
+          phone: this.normalizeRecipientPhone(budget.user.phone),
+          message: this.proactiveBudgetAlertMessage({
+            categoryName: budget.category.name,
+            scope: budget.scope,
+            limit,
+            spent,
+            percentage,
+          }),
+        });
+        await this.prisma.categoryBudget.update({
+          where: { id: budget.id },
+          data: { alertLevel: targetLevel, lastAlertAt: new Date() },
+        });
+        result.sent += 1;
+      } catch {
+        result.failed += 1;
+      }
+    }
+
+    return result;
   }
 
   async handleWebhook(dto: WhatsappWebhookDto): Promise<{ phone: string; reply: string }> {
@@ -706,7 +780,7 @@ export class WhatsappService {
         },
       },
       create: { userId, categoryId: category.id, scope, month, amount },
-      update: { amount },
+      update: { amount, alertLevel: 0, lastAlertAt: null },
     });
     const spent = await this.categoryExpenseTotal(userId, category.id, scope, month);
     const percentage = amount > 0 ? Math.round((spent / amount) * 100) : 0;
@@ -736,10 +810,56 @@ export class WhatsappService {
     const spent = await this.categoryExpenseTotal(userId, categoryId, scope, month);
     const percentage = limit > 0 ? Math.round((spent / limit) * 100) : 0;
     if (percentage < 80) return null;
+    const targetLevel = percentage >= 100 ? 100 : 80;
+    if (Number(budget.alertLevel || 0) < targetLevel) {
+      await this.prisma.categoryBudget.update({
+        where: { id: budget.id },
+        data: { alertLevel: targetLevel, lastAlertAt: new Date() },
+      });
+    }
     if (spent > limit) {
       return `🚨 Orçamento excedido em ${categoryName}: ${this.formatMoney(spent)} de ${this.formatMoney(limit)} (${percentage}%). Excesso de ${this.formatMoney(spent - limit)}.`;
     }
+    if (spent === limit) {
+      return `🚨 Orçamento atingiu o limite em ${categoryName}: ${this.formatMoney(spent)} de ${this.formatMoney(limit)} (100%).`;
+    }
     return `⚠️ Orçamento próximo do limite em ${categoryName}: ${this.formatMoney(spent)} de ${this.formatMoney(limit)} (${percentage}%).`;
+  }
+
+  private proactiveBudgetAlertMessage(input: {
+    categoryName: string;
+    scope: FinancialScope;
+    limit: number;
+    spent: number;
+    percentage: number;
+  }): string {
+    const mode = input.scope === FinancialScope.BUSINESS ? 'Negócio' : 'Pessoal';
+    if (input.spent > input.limit) {
+      return [
+        `🚨 Orçamento excedido em ${input.categoryName}`,
+        `Você usou ${this.formatMoney(input.spent)} de ${this.formatMoney(input.limit)} (${input.percentage}%).`,
+        `Excesso: ${this.formatMoney(input.spent - input.limit)}.`,
+        `Modo: ${mode}.`,
+      ].join('\n');
+    }
+    if (input.spent === input.limit) {
+      return [
+        `🚨 Orçamento atingiu o limite em ${input.categoryName}`,
+        `Você usou ${this.formatMoney(input.spent)} de ${this.formatMoney(input.limit)} (100%).`,
+        `Modo: ${mode}.`,
+      ].join('\n');
+    }
+    return [
+      `⚠️ Orçamento próximo do limite em ${input.categoryName}`,
+      `Você usou ${this.formatMoney(input.spent)} de ${this.formatMoney(input.limit)} (${input.percentage}%).`,
+      `Restam ${this.formatMoney(input.limit - input.spent)} neste mês.`,
+      `Modo: ${mode}.`,
+    ].join('\n');
+  }
+
+  private normalizeRecipientPhone(phone: string): string {
+    const normalized = phone.replace(/\D/g, '');
+    return normalized.startsWith('55') ? normalized : `55${normalized}`;
   }
 
   private async categoryExpenseTotal(

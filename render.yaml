@@ -29,6 +29,10 @@ services:
         value: 5511934736234
       - key: WHATSAPP_WEBHOOK_TOKEN
         value: ""
+      - key: WHATSAPP_BUDGET_ALERT_TOKEN
+        generateValue: true
+      - key: WHATSAPP_BUDGET_ALERT_INTERVAL_MINUTES
+        value: 60
       - key: PORT
         value: 3001
       - key: NODE_ENV

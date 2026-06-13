@@ -12,6 +12,8 @@ const envSchema = z.object({
   WHATSAPP_BOT_SEND_MESSAGE_PATH: z.string().default('/send-message'),
   WHATSAPP_ADMIN_PHONES: z.string().default('5511934736234'),
   WHATSAPP_WEBHOOK_TOKEN: z.string().default(''),
+  WHATSAPP_BUDGET_ALERT_TOKEN: z.string().default(''),
+  WHATSAPP_BUDGET_ALERT_INTERVAL_MINUTES: z.coerce.number().int().min(5).default(60),
   PORT: z
     .string()
     .default('3001')

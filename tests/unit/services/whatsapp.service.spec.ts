@@ -36,6 +36,8 @@ describe('WhatsappService', () => {
     categoryBudget: {
       upsert: ReturnType<typeof vi.fn>;
       findUnique: ReturnType<typeof vi.fn>;
+      findMany: ReturnType<typeof vi.fn>;
+      update: ReturnType<typeof vi.fn>;
     };
     whatsappConversation: { upsert: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn> };
   };
@@ -60,7 +62,12 @@ describe('WhatsappService', () => {
       transaction: { aggregate: vi.fn(), groupBy: vi.fn(), findFirst: vi.fn(), findMany: vi.fn() },
       financialAccount: { findMany: vi.fn() },
       creditCard: { findMany: vi.fn() },
-      categoryBudget: { upsert: vi.fn(), findUnique: vi.fn() },
+      categoryBudget: {
+        upsert: vi.fn(),
+        findUnique: vi.fn(),
+        findMany: vi.fn(),
+        update: vi.fn(),
+      },
       whatsappConversation: { upsert: vi.fn(), update: vi.fn() },
     };
     prismaMock.categoryBudget.findUnique.mockResolvedValue(null);
@@ -1623,7 +1630,11 @@ describe('WhatsappService', () => {
       amount: 50,
       type: TransactionType.EXPENSE,
     });
-    prismaMock.categoryBudget.findUnique.mockResolvedValue({ amount: 500 });
+    prismaMock.categoryBudget.findUnique.mockResolvedValue({
+      id: 'budget-food',
+      amount: 500,
+      alertLevel: 0,
+    });
     prismaMock.transaction.aggregate.mockResolvedValue({ _sum: { netAmount: 450 } });
 
     const nearLimit = await service.handleWebhook({
@@ -1657,6 +1668,111 @@ describe('WhatsappService', () => {
     const exceededReply = exceeded.reply.replace(/\u00a0/g, ' ');
     expect(exceededReply).toContain('Orçamento excedido em Alimentação');
     expect(exceededReply).toContain('Excesso de R$ 75,00');
+  });
+
+  it('envia alerta proativo ao atingir 80% do orçamento', async () => {
+    fetchMock.mockImplementation(async (url: string) => ({
+      ok: true,
+      json: vi.fn().mockResolvedValue(
+        url.endsWith('/status') ? { status: 'conectado' } : { success: true },
+      ),
+    }));
+    prismaMock.categoryBudget.findMany.mockResolvedValue([
+      {
+        id: 'budget-food',
+        userId: 'user-1',
+        categoryId: 'category-food',
+        scope: FinancialScope.PERSONAL,
+        amount: 500,
+        alertLevel: 0,
+        user: { phone: '11999999999' },
+        category: { name: 'Alimentação' },
+      },
+    ]);
+    prismaMock.transaction.aggregate.mockResolvedValue({ _sum: { netAmount: 425 } });
+
+    const result = await service.runProactiveBudgetAlerts();
+
+    expect(result).toEqual({ checked: 1, sent: 1, skipped: 0, failed: 0 });
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      'http://whatsapp-api.test/econoapp/send-message',
+      expect.objectContaining({
+        body: expect.stringContaining('Orçamento próximo do limite em Alimentação'),
+      }),
+    );
+    expect(prismaMock.categoryBudget.update).toHaveBeenCalledWith({
+      where: { id: 'budget-food' },
+      data: { alertLevel: 80, lastAlertAt: expect.any(Date) },
+    });
+  });
+
+  it('não repete a mesma faixa e escala o alerta quando excede o orçamento', async () => {
+    fetchMock.mockImplementation(async (url: string) => ({
+      ok: true,
+      json: vi.fn().mockResolvedValue(
+        url.endsWith('/status') ? { status: 'conectado' } : { success: true },
+      ),
+    }));
+    prismaMock.categoryBudget.findMany.mockResolvedValue([
+      {
+        id: 'budget-food',
+        userId: 'user-1',
+        categoryId: 'category-food',
+        scope: FinancialScope.PERSONAL,
+        amount: 500,
+        alertLevel: 80,
+        user: { phone: '5511999999999' },
+        category: { name: 'Alimentação' },
+      },
+    ]);
+    prismaMock.transaction.aggregate.mockResolvedValueOnce({ _sum: { netAmount: 450 } });
+
+    await expect(service.runProactiveBudgetAlerts()).resolves.toEqual({
+      checked: 1,
+      sent: 0,
+      skipped: 1,
+      failed: 0,
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    prismaMock.transaction.aggregate.mockResolvedValueOnce({ _sum: { netAmount: 550 } });
+    await expect(service.runProactiveBudgetAlerts()).resolves.toEqual({
+      checked: 1,
+      sent: 1,
+      skipped: 0,
+      failed: 0,
+    });
+    expect(prismaMock.categoryBudget.update).toHaveBeenLastCalledWith({
+      where: { id: 'budget-food' },
+      data: { alertLevel: 100, lastAlertAt: expect.any(Date) },
+    });
+  });
+
+  it('rearma alertas quando o consumo volta a ficar abaixo de 80%', async () => {
+    prismaMock.categoryBudget.findMany.mockResolvedValue([
+      {
+        id: 'budget-food',
+        userId: 'user-1',
+        categoryId: 'category-food',
+        scope: FinancialScope.PERSONAL,
+        amount: 500,
+        alertLevel: 100,
+        user: { phone: '11999999999' },
+        category: { name: 'Alimentação' },
+      },
+    ]);
+    prismaMock.transaction.aggregate.mockResolvedValue({ _sum: { netAmount: 200 } });
+
+    await expect(service.runProactiveBudgetAlerts()).resolves.toEqual({
+      checked: 1,
+      sent: 0,
+      skipped: 1,
+      failed: 0,
+    });
+    expect(prismaMock.categoryBudget.update).toHaveBeenCalledWith({
+      where: { id: 'budget-food' },
+      data: { alertLevel: 0, lastAlertAt: null },
+    });
   });
 
   it('reconhece ontem, sexta-feira e dia 10 como datas do lançamento', async () => {

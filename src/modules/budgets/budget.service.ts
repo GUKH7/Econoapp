@@ -77,7 +77,7 @@ export class BudgetService {
         month,
         amount: input.amount,
       },
-      update: { amount: input.amount },
+      update: { amount: input.amount, alertLevel: 0, lastAlertAt: null },
     });
   }
 

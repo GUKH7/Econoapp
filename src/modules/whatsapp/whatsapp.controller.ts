@@ -69,6 +69,18 @@ export class WhatsappController {
     return { data: { received: true, ...result } };
   }
 
+  @Public()
+  @ApiOperation({ summary: 'Executar verificação proativa de orçamentos' })
+  @Post('budget-alerts/run')
+  async runBudgetAlerts(
+    @Headers('x-budget-alert-token') headerToken?: string,
+    @Query('token') queryToken?: string,
+  ) {
+    this.ensureBudgetAlertToken(headerToken || queryToken);
+    const data = await this.whatsappService.runProactiveBudgetAlerts();
+    return { data };
+  }
+
   private ensureWhatsappAdmin(user: JwtPayload): void {
     if (!isWhatsappAdminPhone(user.phone)) {
       throw new ForbiddenException('A conexao WhatsApp do chatbot e restrita ao administrador.');
@@ -78,6 +90,12 @@ export class WhatsappController {
   private ensureWebhookToken(token?: string): void {
     if (env.WHATSAPP_WEBHOOK_TOKEN && token !== env.WHATSAPP_WEBHOOK_TOKEN) {
       throw new ForbiddenException('Webhook WhatsApp nao autorizado.');
+    }
+  }
+
+  private ensureBudgetAlertToken(token?: string): void {
+    if (!env.WHATSAPP_BUDGET_ALERT_TOKEN || token !== env.WHATSAPP_BUDGET_ALERT_TOKEN) {
+      throw new ForbiddenException('Execução de alertas de orçamento não autorizada.');
     }
   }
 }

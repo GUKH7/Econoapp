@@ -1,0 +1,3 @@
+ALTER TABLE "CategoryBudget"
+  ADD COLUMN "alertLevel" INTEGER NOT NULL DEFAULT 0,
+  ADD COLUMN "lastAlertAt" TIMESTAMPTZ(6);

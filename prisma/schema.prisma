@@ -81,6 +81,8 @@ model CategoryBudget {
   scope      FinancialScope @default(PERSONAL)
   month      DateTime       @db.Timestamptz(6)
   amount     Decimal        @db.Decimal(15, 4)
+  alertLevel Int            @default(0)
+  lastAlertAt DateTime?     @db.Timestamptz(6)
   createdAt  DateTime       @default(now()) @db.Timestamptz(6)
   updatedAt  DateTime       @updatedAt @db.Timestamptz(6)
 

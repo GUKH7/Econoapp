@@ -98,7 +98,7 @@ describe('BudgetService', () => {
     expect(prismaMock.categoryBudget.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
         create: expect.objectContaining({ userId: 'user-1', categoryId: 'food', amount: 500 }),
-        update: { amount: 500 },
+        update: { amount: 500, alertLevel: 0, lastAlertAt: null },
       }),
     );
   });
