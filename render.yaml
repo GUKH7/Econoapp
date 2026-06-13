@@ -28,7 +28,7 @@ services:
       - key: WHATSAPP_ADMIN_PHONES
         value: 5511934736234
       - key: WHATSAPP_WEBHOOK_TOKEN
-        value: ""
+        sync: false
       - key: WHATSAPP_BUDGET_ALERT_TOKEN
         generateValue: true
       - key: WHATSAPP_BUDGET_ALERT_INTERVAL_MINUTES
