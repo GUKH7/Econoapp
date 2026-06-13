@@ -16,6 +16,9 @@ type FinancialPeriod = {
 type WhatsappTransactionDraft = {
   description: string;
   amount: number;
+  totalAmount?: number;
+  installmentCount?: number;
+  transactionDate?: string;
   type: TransactionType;
   scope: FinancialScope;
   categoryHint: string;
@@ -205,6 +208,11 @@ export class WhatsappService {
     message: string,
     recentMessages: WhatsappConversationMessage[],
   ): Promise<string> {
+    const budgetReply = await this.trySetCategoryBudget(userId, message);
+    if (budgetReply) {
+      return budgetReply;
+    }
+
     const mutationReply = await this.tryCreateMutationDraft(userId, phone, message);
     if (mutationReply) {
       return mutationReply;
@@ -349,9 +357,18 @@ export class WhatsappService {
       extracted.type as TransactionType,
       isSale,
     );
+    const transactionDate = this.resolveTransactionDate(message);
+    const installmentCount = this.extractInstallmentCount(message);
+    const totalAmount = extracted.amount;
+    const amount =
+      installmentCount > 1
+        ? Math.round((totalAmount / installmentCount) * 100) / 100
+        : totalAmount;
     const draft: WhatsappTransactionDraft = {
       description,
-      amount: extracted.amount,
+      amount,
+      ...(installmentCount > 1 ? { totalAmount, installmentCount } : {}),
+      ...(transactionDate ? { transactionDate: transactionDate.toISOString() } : {}),
       type: extracted.type as TransactionType,
       scope,
       categoryHint,
@@ -658,6 +675,95 @@ export class WhatsappService {
     ].join('\n');
   }
 
+  private async trySetCategoryBudget(userId: string, message: string): Promise<string | null> {
+    const normalized = this.normalizeText(message);
+    const match = normalized.match(
+      /\b(?:defina|definir|coloque|estabeleca|estabelecer|limite|orcamento)\b.*?(?:r\$)?\s*(\d+(?:[.,]\d{1,2})?)\s*(?:reais?)?\s*(?:para|em|na|no)\s+(.+)$/,
+    );
+    if (!match) return null;
+
+    const amount = this.parseBrazilianAmount(match[1]!);
+    if (amount <= 0) return 'Informe um valor de orçamento maior que zero.';
+
+    const scope = this.inferExplicitScope(message) ?? FinancialScope.PERSONAL;
+    const categoryText = match[2]!
+      .replace(/\b(pessoal|negocio|empresa|empresarial)\b/g, '')
+      .replace(/[.!?]+$/g, '')
+      .trim();
+    if (!categoryText) {
+      return 'Para qual categoria devo definir esse orçamento?';
+    }
+
+    const category = await this.resolveCategory(userId, categoryText, TransactionType.EXPENSE);
+    const month = this.currentMonthRange().start;
+    await this.prisma.categoryBudget.upsert({
+      where: {
+        userId_categoryId_scope_month: {
+          userId,
+          categoryId: category.id,
+          scope,
+          month,
+        },
+      },
+      create: { userId, categoryId: category.id, scope, month, amount },
+      update: { amount },
+    });
+    const spent = await this.categoryExpenseTotal(userId, category.id, scope, month);
+    const percentage = amount > 0 ? Math.round((spent / amount) * 100) : 0;
+    return [
+      'Orçamento definido ✅',
+      `Categoria: ${category.name}`,
+      `Limite mensal: ${this.formatMoney(amount)}`,
+      `Modo: ${scope === FinancialScope.BUSINESS ? 'Negócio' : 'Pessoal'}`,
+      `Já utilizado: ${this.formatMoney(spent)} (${percentage}%)`,
+    ].join('\n');
+  }
+
+  private async categoryBudgetAlert(
+    userId: string,
+    categoryId: string,
+    categoryName: string,
+    scope: FinancialScope,
+  ): Promise<string | null> {
+    const month = this.currentMonthRange().start;
+    const budget = await this.prisma.categoryBudget.findUnique({
+      where: {
+        userId_categoryId_scope_month: { userId, categoryId, scope, month },
+      },
+    });
+    if (!budget) return null;
+    const limit = Number(budget.amount);
+    const spent = await this.categoryExpenseTotal(userId, categoryId, scope, month);
+    const percentage = limit > 0 ? Math.round((spent / limit) * 100) : 0;
+    if (percentage < 80) return null;
+    if (spent > limit) {
+      return `🚨 Orçamento excedido em ${categoryName}: ${this.formatMoney(spent)} de ${this.formatMoney(limit)} (${percentage}%). Excesso de ${this.formatMoney(spent - limit)}.`;
+    }
+    return `⚠️ Orçamento próximo do limite em ${categoryName}: ${this.formatMoney(spent)} de ${this.formatMoney(limit)} (${percentage}%).`;
+  }
+
+  private async categoryExpenseTotal(
+    userId: string,
+    categoryId: string,
+    scope: FinancialScope,
+    monthStart: Date,
+  ): Promise<number> {
+    const monthEnd = new Date(
+      Date.UTC(monthStart.getUTCFullYear(), monthStart.getUTCMonth() + 1, 1),
+    );
+    const result = await this.prisma.transaction.aggregate({
+      where: {
+        userId,
+        categoryId,
+        scope,
+        type: TransactionType.EXPENSE,
+        date: { gte: monthStart, lt: monthEnd },
+      },
+      _sum: { netAmount: true },
+    });
+    return Number(result._sum.netAmount ?? 0);
+  }
+
   private async findUserByPhone(phone: string) {
     const normalized = phone.replace(/\D/g, '');
     const withoutBrazilCode = normalized.startsWith('55') ? normalized.slice(2) : normalized;
@@ -671,6 +777,14 @@ export class WhatsappService {
     const normalizedHint = this.normalizeText(hint);
     const existing = await this.prisma.category.findFirst({ where: { userId, name: { equals: hint, mode: 'insensitive' } } });
     if (existing) return existing;
+    const categories = await this.prisma.category.findMany({
+      where: { userId },
+      select: { id: true, name: true, color: true },
+    });
+    const normalizedMatch = categories.find(
+      (category) => this.normalizeText(category.name) === normalizedHint,
+    );
+    if (normalizedMatch) return normalizedMatch;
 
     const fallbackName =
       type === 'EXPENSE' && normalizedHint.includes('mercado') ? 'Alimentacao' : this.titleCase(hint);
@@ -897,7 +1011,12 @@ export class WhatsappService {
       '',
       `Tipo: ${type}`,
       `Título: ${draft.description}`,
-      `Valor: ${this.formatMoney(draft.amount)}`,
+      draft.installmentCount && draft.totalAmount
+        ? `Valor: ${this.formatMoney(draft.totalAmount)} em ${draft.installmentCount}x de ${this.formatMoney(draft.amount)}`
+        : `Valor: ${this.formatMoney(draft.amount)}`,
+      draft.transactionDate
+        ? `Data: ${this.formatDateOnly(draft.transactionDate)}`
+        : '',
       `Categoria: ${draft.categoryHint}`,
       draft.channelHint ? `Canal: ${draft.channelHint}` : '',
       draft.paymentLabel
@@ -946,25 +1065,58 @@ export class WhatsappService {
       draft.scope === FinancialScope.BUSINESS
         ? await this.resolveChannel(userId, draft.channelHint)
         : undefined;
-    const transaction = await this.transactionService.create(userId, {
-      description: draft.description,
-      amount: draft.amount,
-      type: draft.type,
-      source: TransactionSource.WHATSAPP,
-      scope: draft.scope,
-      categoryId: category.id,
-      ...(channel ? { channelId: channel.id } : {}),
-      ...(draft.accountId ? { accountId: draft.accountId } : {}),
-      ...(draft.creditCardId ? { creditCardId: draft.creditCardId } : {}),
-    });
+    const installmentCount = draft.installmentCount ?? 1;
+    const firstDate = draft.transactionDate ? new Date(draft.transactionDate) : new Date();
+    const transactions: Transaction[] = [];
+    for (let index = 0; index < installmentCount; index += 1) {
+      const installmentDate = this.addMonthsKeepingDay(firstDate, index);
+      const installmentAmount =
+        installmentCount > 1 &&
+        draft.totalAmount &&
+        index === installmentCount - 1
+          ? Math.round(
+              (draft.totalAmount - draft.amount * (installmentCount - 1)) * 100,
+            ) / 100
+          : draft.amount;
+      const transaction = await this.transactionService.create(userId, {
+        description:
+          installmentCount > 1
+            ? `${draft.description} (${index + 1}/${installmentCount})`
+            : draft.description,
+        amount: installmentAmount,
+        type: draft.type,
+        source: TransactionSource.WHATSAPP,
+        scope: draft.scope,
+        categoryId: category.id,
+        ...(draft.transactionDate || installmentCount > 1
+          ? { date: installmentDate.toISOString() }
+          : {}),
+        ...(channel ? { channelId: channel.id } : {}),
+        ...(draft.accountId ? { accountId: draft.accountId } : {}),
+        ...(draft.creditCardId ? { creditCardId: draft.creditCardId } : {}),
+      });
+      transactions.push(transaction);
+    }
     await this.clearPendingMessage(userId);
-    return this.transactionConfirmation(
-      transaction,
+    const confirmation = this.transactionConfirmation(
+      transactions[0]!,
       category.name,
       channel?.name,
       draft.scope,
       draft.paymentLabel,
     );
+    const installmentMessage =
+      installmentCount > 1
+        ? `\nParcelas: ${installmentCount}x, a partir de ${this.formatMoney(draft.amount)}, de ${this.formatDateOnly(firstDate.toISOString())} até ${this.formatDateOnly(this.addMonthsKeepingDay(firstDate, installmentCount - 1).toISOString())}.`
+        : '';
+    const budgetAlert =
+      draft.type === TransactionType.EXPENSE &&
+      this.isDateInCurrentMonth(firstDate)
+        ? await this.categoryBudgetAlert(userId, category.id, category.name, draft.scope)
+        : null;
+    return [confirmation, installmentMessage, budgetAlert ? `\n${budgetAlert}` : '']
+      .filter(Boolean)
+      .join('');
   }
 
   private async findPossibleDuplicate(
@@ -1803,6 +1955,123 @@ export class WhatsappService {
       return isSale ? `Venda de ${category}` : `Receita de ${category}`;
     }
     return `Gasto com ${category}`;
+  }
+
+  private resolveTransactionDate(message: string): Date | null {
+    const lower = this.normalizeText(message);
+    const today = this.todayInSaoPaulo();
+
+    if (/\bontem\b/.test(lower)) {
+      return new Date(
+        Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - 1, 12),
+      );
+    }
+    if (/\bhoje\b/.test(lower)) {
+      return today;
+    }
+
+    const explicitDate = lower.match(/\b(\d{1,2})[/-](\d{1,2})(?:[/-](\d{2,4}))?\b/);
+    if (explicitDate) {
+      const day = Number(explicitDate[1]);
+      const month = Number(explicitDate[2]) - 1;
+      let year = explicitDate[3] ? Number(explicitDate[3]) : today.getUTCFullYear();
+      if (year < 100) year += 2000;
+      return this.validDateAtNoon(year, month, day);
+    }
+
+    const dayOfMonth = lower.match(/\bdia\s+(\d{1,2})\b/);
+    if (dayOfMonth) {
+      return this.validDateAtNoon(
+        today.getUTCFullYear(),
+        today.getUTCMonth(),
+        Number(dayOfMonth[1]),
+      );
+    }
+
+    const weekdayNames = [
+      ['domingo'],
+      ['segunda', 'segunda-feira'],
+      ['terca', 'terca-feira'],
+      ['quarta', 'quarta-feira'],
+      ['quinta', 'quinta-feira'],
+      ['sexta', 'sexta-feira'],
+      ['sabado'],
+    ];
+    const targetWeekday = weekdayNames.findIndex((names) =>
+      names.some((name) => new RegExp(`\\b${name}\\b`).test(lower)),
+    );
+    if (targetWeekday >= 0) {
+      const daysAgo = (today.getUTCDay() - targetWeekday + 7) % 7;
+      return new Date(
+        Date.UTC(
+          today.getUTCFullYear(),
+          today.getUTCMonth(),
+          today.getUTCDate() - daysAgo,
+          12,
+        ),
+      );
+    }
+
+    return null;
+  }
+
+  private extractInstallmentCount(message: string): number {
+    const match = this.normalizeText(message).match(/\b(?:em\s*)?(\d{1,2})\s*x\b/);
+    if (!match) return 1;
+    return Math.min(60, Math.max(1, Number(match[1])));
+  }
+
+  private todayInSaoPaulo(): Date {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      timeZone: 'America/Sao_Paulo',
+    }).formatToParts(new Date());
+    const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+    return new Date(Date.UTC(Number(values.year), Number(values.month) - 1, Number(values.day), 12));
+  }
+
+  private validDateAtNoon(year: number, month: number, day: number): Date | null {
+    const date = new Date(Date.UTC(year, month, day, 12));
+    if (
+      date.getUTCFullYear() !== year ||
+      date.getUTCMonth() !== month ||
+      date.getUTCDate() !== day
+    ) {
+      return null;
+    }
+    return date;
+  }
+
+  private addMonthsKeepingDay(date: Date, months: number): Date {
+    const targetYear = date.getUTCFullYear();
+    const targetMonth = date.getUTCMonth() + months;
+    const lastDay = new Date(Date.UTC(targetYear, targetMonth + 1, 0)).getUTCDate();
+    return new Date(
+      Date.UTC(targetYear, targetMonth, Math.min(date.getUTCDate(), lastDay), 12),
+    );
+  }
+
+  private formatDateOnly(value: string): string {
+    return new Intl.DateTimeFormat('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      timeZone: 'UTC',
+    }).format(new Date(value));
+  }
+
+  private isDateInCurrentMonth(date: Date): boolean {
+    const current = this.currentMonthRange();
+    return date >= current.start && date < current.end;
+  }
+
+  private parseBrazilianAmount(value: string): number {
+    const normalized = value.includes(',')
+      ? value.replace(/\./g, '').replace(',', '.')
+      : value;
+    return Number(normalized);
   }
 
   private currentMonthRange(): { start: Date; end: Date } {

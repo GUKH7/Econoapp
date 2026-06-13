@@ -45,6 +45,7 @@ model User {
   transactions         Transaction[]
   accounts             FinancialAccount[]
   creditCards          CreditCard[]
+  categoryBudgets      CategoryBudget[]
   whatsappConversation WhatsappConversation?
 }
 
@@ -73,6 +74,23 @@ model SalesChannel {
   @@index([userId])
 }
 
+model CategoryBudget {
+  id         String         @id @default(uuid()) @db.Uuid
+  userId     String         @db.Uuid
+  categoryId String         @db.Uuid
+  scope      FinancialScope @default(PERSONAL)
+  month      DateTime       @db.Timestamptz(6)
+  amount     Decimal        @db.Decimal(15, 4)
+  createdAt  DateTime       @default(now()) @db.Timestamptz(6)
+  updatedAt  DateTime       @updatedAt @db.Timestamptz(6)
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, categoryId, scope, month])
+  @@index([userId, scope, month])
+}
+
 model Category {
   id           String        @id @default(uuid()) @db.Uuid
   name         String
@@ -81,6 +99,7 @@ model Category {
   createdAt    DateTime      @default(now()) @db.Timestamptz(6)
   user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   transactions Transaction[]
+  budgets      CategoryBudget[]
 
   @@index([userId])
 }
