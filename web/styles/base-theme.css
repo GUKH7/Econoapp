@@ -319,11 +319,11 @@ summary:focus-visible {
 .auth-shell {
   animation: pageIn 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
   display: grid;
-  gap: 28px;
+  gap: 16px;
   margin: 0 auto;
   max-width: 500px;
   min-height: 100dvh;
-  padding: 34px 22px;
+  padding: 22px;
   place-content: center;
 }
 
@@ -410,10 +410,10 @@ summary:focus-visible {
 
 .auth-title {
   color: var(--text);
-  font-size: clamp(24px, 8vw, 34px);
+  font-size: clamp(22px, 7vw, 30px);
   font-weight: 950;
   line-height: 1.08;
-  margin: 24px 0 10px;
+  margin: 14px 0 8px;
   text-align: center;
 }
 
@@ -433,13 +433,13 @@ summary:focus-visible {
 
 .welcome-illustration {
   aspect-ratio: 1 / 1;
-  border-radius: 28px;
+  border-radius: 22px;
   display: block;
   height: auto;
-  margin: 22px auto 12px;
-  max-width: 330px;
+  margin: 12px auto 8px;
+  max-width: 220px;
   object-fit: contain;
-  width: min(330px, 84vw);
+  width: min(220px, 58vw);
 }
 
 .welcome-panel .auth-subtitle {
@@ -453,6 +453,7 @@ summary:focus-visible {
 }
 
 .auth-shell .card {
+  padding: 16px;
   position: relative;
   z-index: 1;
 }
@@ -470,7 +471,29 @@ summary:focus-visible {
 
 .auth-switch {
   grid-template-columns: 1fr 1fr;
-  margin-bottom: 18px;
+  margin-bottom: 12px;
+}
+
+.auth-shell .form {
+  gap: 10px;
+}
+
+.auth-shell .field {
+  gap: 6px;
+}
+
+.auth-shell input {
+  min-height: 48px;
+}
+
+.auth-shell .button {
+  min-height: 48px;
+}
+
+.auth-shell .error {
+  font-size: 13px;
+  margin: 0 0 10px;
+  padding: 10px 12px;
 }
 
 .scope-switch button,

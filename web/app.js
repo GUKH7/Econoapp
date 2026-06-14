@@ -142,7 +142,7 @@ function renderLoading() {
 
 function renderAuth(initialError = '') {
   app.innerHTML = `
-    <section class="auth-shell">
+    <section class="auth-shell" data-auth-shell data-auth-mode="login">
       <div class="welcome-panel">
         <div class="brand-row centered">
           <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
@@ -173,6 +173,7 @@ function renderAuth(initialError = '') {
     button.classList.add('active');
     const form = document.querySelector('[data-auth-form]');
     form.dataset.mode = button.dataset.mode;
+    document.querySelector('[data-auth-shell]').dataset.authMode = button.dataset.mode;
     form.innerHTML = authFields(button.dataset.mode);
     bindAuthPasswordToggle(form);
   });
