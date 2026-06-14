@@ -2,7 +2,7 @@ import { state } from './state.js';
 
 async function request(path, options = {}) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 12000);
+  const timeout = setTimeout(() => controller.abort(), options.timeoutMs || 75000);
   const headers = new Headers(options.headers);
   headers.set('Content-Type', 'application/json');
   if (state.accessToken) headers.set('Authorization', `Bearer ${state.accessToken}`);
@@ -24,7 +24,7 @@ async function request(path, options = {}) {
     return response.json();
   } catch (error) {
     if (error.name === 'AbortError') {
-      throw new Error('A API demorou para responder. Confira o backend e a URL configurada.');
+      throw new Error('O servidor demorou para iniciar. Tente novamente em alguns segundos.');
     }
     throw error;
   } finally {

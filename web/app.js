@@ -47,6 +47,40 @@ function setError(message) {
   if (target) target.classList.toggle('hidden', !message);
 }
 
+let toastTimer;
+
+function showToast(message, tone = 'success') {
+  document.querySelector('[data-toast]')?.remove();
+  clearTimeout(toastTimer);
+  const toast = document.createElement('div');
+  toast.className = `toast ${tone}`;
+  toast.dataset.toast = '';
+  toast.setAttribute('role', tone === 'error' ? 'alert' : 'status');
+  toast.setAttribute('aria-live', tone === 'error' ? 'assertive' : 'polite');
+  toast.textContent = message;
+  document.body.appendChild(toast);
+  requestAnimationFrame(() => toast.classList.add('visible'));
+  toastTimer = setTimeout(() => {
+    toast.classList.remove('visible');
+    setTimeout(() => toast.remove(), 180);
+  }, tone === 'error' ? 5200 : 3200);
+}
+
+function setFormBusy(form, busy, label = 'Salvando...') {
+  const button = form?.querySelector('button[type="submit"]');
+  if (!button) return;
+  if (busy) {
+    button.dataset.idleLabel = button.textContent;
+    button.disabled = true;
+    button.textContent = label;
+    form.setAttribute('aria-busy', 'true');
+    return;
+  }
+  button.disabled = false;
+  button.textContent = button.dataset.idleLabel || button.textContent;
+  form.removeAttribute('aria-busy');
+}
+
 function renderWithTransition(mutator, direction = 'forward') {
   transitionTo(() => {
     mutator();
@@ -79,6 +113,7 @@ async function bootstrap() {
     return;
   }
 
+  renderLoading();
   try {
     await loadData();
     renderApp();
@@ -86,6 +121,23 @@ async function bootstrap() {
     clearSession();
     renderAuth(error.message);
   }
+}
+
+function renderLoading() {
+  app.innerHTML = `
+    <section class="loading-shell" role="status" aria-live="polite">
+      <div class="loading-copy">
+        <strong>Carregando suas finanças</strong>
+        <span>O servidor pode levar alguns segundos para iniciar.</span>
+      </div>
+      <div class="loading-skeleton wide"></div>
+      <div class="loading-grid">
+        <div class="loading-skeleton"></div>
+        <div class="loading-skeleton"></div>
+      </div>
+      <div class="loading-skeleton tall"></div>
+    </section>
+  `;
 }
 
 function renderAuth(initialError = '') {
@@ -137,10 +189,6 @@ function authFields(mode) {
       <label class="field">Telefone<input name="phone" inputmode="tel" required /></label>
       <label class="field">Email<input name="email" type="email" autocomplete="email" /></label>
       ${passwordField('Senha', 'new-password', 'password', 'Crie uma senha')}
-      <details class="inline-create">
-        <summary>Configuracao avancada</summary>
-        <label class="field">API<input name="apiUrl" value="${escapeHtml(state.apiUrl)}" required /></label>
-      </details>
       <button class="button" type="submit">Criar conta</button>
     `;
   }
@@ -184,6 +232,9 @@ async function handleAuth(event) {
   const data = Object.fromEntries(new FormData(form));
   const submitButton = form.querySelector('button[type="submit"]');
   const submitLabel = submitButton?.textContent || '';
+  const slowServerTimer = setTimeout(() => {
+    if (submitButton?.disabled) submitButton.textContent = 'Iniciando servidor...';
+  }, 2500);
   if (submitButton) {
     submitButton.disabled = true;
     submitButton.textContent = form.dataset.mode === 'register' ? 'Criando...' : 'Entrando...';
@@ -214,6 +265,7 @@ async function handleAuth(event) {
   } catch (error) {
     setError(error.message);
   } finally {
+    clearTimeout(slowServerTimer);
     if (submitButton) {
       submitButton.disabled = false;
       submitButton.textContent = submitLabel;
@@ -227,7 +279,6 @@ function renderApp() {
     <section class="shell" data-swipe-shell>
       <header class="appbar">
         <h1>${screenTitle()}</h1>
-        <button class="icon-button compact" type="button" aria-label="Notificacoes">!</button>
       </header>
 
       <main class="page-track" data-swipe-track>
@@ -276,7 +327,7 @@ function bindShellEvents() {
       saveScopes();
       loadData()
         .then(() => renderWithTransition(() => {}))
-        .catch((error) => alert(error.message));
+        .catch((error) => showToast(error.message, 'error'));
     }, 90);
   });
 
@@ -564,7 +615,9 @@ function bindSwipeNavigation() {
 
 async function handleTransactionSubmit(event) {
   event.preventDefault();
-  const data = Object.fromEntries(new FormData(event.currentTarget));
+  const form = event.currentTarget;
+  const data = Object.fromEntries(new FormData(form));
+  setFormBusy(form, true, 'Salvando lançamento...');
   try {
     let categoryId = data.categoryId;
     if (String(data.newCategoryName || '').trim()) {
@@ -577,7 +630,13 @@ async function handleTransactionSubmit(event) {
       saveCategoryKinds();
     }
     if (!categoryId) {
-      alert(data.type === 'INCOME' ? 'Escolha ou crie uma origem de receita.' : 'Escolha ou crie uma categoria de gasto.');
+      showToast(
+        data.type === 'INCOME'
+          ? 'Escolha ou crie uma origem de receita.'
+          : 'Escolha ou crie uma categoria de gasto.',
+        'error',
+      );
+      setFormBusy(form, false);
       return;
     }
 
@@ -606,22 +665,28 @@ async function handleTransactionSubmit(event) {
     await loadData();
     state.sheetOpen = false;
     renderApp();
+    showToast(data.type === 'INCOME' ? 'Receita registrada.' : 'Gasto registrado.');
   } catch (error) {
-    alert(error.message);
+    setFormBusy(form, false);
+    showToast(error.message, 'error');
   }
 }
 
 async function handleCategorySubmit(event) {
   event.preventDefault();
-  const data = Object.fromEntries(new FormData(event.currentTarget));
+  const form = event.currentTarget;
+  const data = Object.fromEntries(new FormData(form));
+  setFormBusy(form, true, 'Criando categoria...');
   try {
     const category = await api().createCategory({ name: data.name, color: state.categoryColor });
     state.categoryKinds[category.data.id] = data.kind || 'EXPENSE';
     saveCategoryKinds();
     await loadData();
     renderApp();
+    showToast('Categoria criada.');
   } catch (error) {
-    alert(error.message);
+    setFormBusy(form, false);
+    showToast(error.message, 'error');
   }
 }
 
@@ -647,14 +712,17 @@ async function handleSeedCategories() {
     saveCategoryKinds();
     await loadData();
     renderApp();
+    showToast('Categorias iniciais criadas.');
   } catch (error) {
-    alert(error.message);
+    showToast(error.message, 'error');
   }
 }
 
 async function handleChannelSubmit(event) {
   event.preventDefault();
-  const data = Object.fromEntries(new FormData(event.currentTarget));
+  const form = event.currentTarget;
+  const data = Object.fromEntries(new FormData(form));
+  setFormBusy(form, true, 'Criando canal...');
   try {
     await api().createChannel({
       name: data.name,
@@ -662,43 +730,59 @@ async function handleChannelSubmit(event) {
     });
     await loadData();
     renderApp();
+    showToast('Canal de venda criado.');
   } catch (error) {
-    alert(error.message);
+    setFormBusy(form, false);
+    showToast(error.message, 'error');
   }
 }
 
-function handleWalletSubmit(event) {
+async function handleWalletSubmit(event) {
   event.preventDefault();
-  const data = Object.fromEntries(new FormData(event.currentTarget));
-  api()
-    .createAccount({
+  const form = event.currentTarget;
+  const data = Object.fromEntries(new FormData(form));
+  setFormBusy(form, true, 'Criando conta...');
+  try {
+    await api().createAccount({
       name: String(data.name).trim(),
       type: data.type,
       balance: parseAmount(data.balance || '0'),
       scope: state.scope,
-    })
-    .then(loadData)
-    .then(renderApp)
-    .catch((error) => alert(error.message));
+    });
+    await loadData();
+    renderApp();
+    showToast('Conta ou carteira criada.');
+  } catch (error) {
+    setFormBusy(form, false);
+    showToast(error.message, 'error');
+  }
 }
 
-function handleCardSubmit(event) {
+async function handleCardSubmit(event) {
   event.preventDefault();
-  const data = Object.fromEntries(new FormData(event.currentTarget));
-  api()
-    .createCard({
+  const form = event.currentTarget;
+  const data = Object.fromEntries(new FormData(form));
+  setFormBusy(form, true, 'Criando cartão...');
+  try {
+    await api().createCard({
       name: String(data.name).trim(),
       limit: parseAmount(data.limit || '0'),
       scope: state.scope,
-    })
-    .then(loadData)
-    .then(renderApp)
-    .catch((error) => alert(error.message));
+    });
+    await loadData();
+    renderApp();
+    showToast('Cartão criado.');
+  } catch (error) {
+    setFormBusy(form, false);
+    showToast(error.message, 'error');
+  }
 }
 
 async function handleBudgetSubmit(event) {
   event.preventDefault();
-  const data = Object.fromEntries(new FormData(event.currentTarget));
+  const form = event.currentTarget;
+  const data = Object.fromEntries(new FormData(form));
+  setFormBusy(form, true, 'Salvando limite...');
   try {
     await api().upsertBudget({
       categoryId: data.categoryId,
@@ -708,8 +792,10 @@ async function handleBudgetSubmit(event) {
     localStorage.removeItem('econoapp.budgets');
     await loadData();
     renderApp();
+    showToast('Limite atualizado.');
   } catch (error) {
-    alert(error.message);
+    setFormBusy(form, false);
+    showToast(error.message, 'error');
   }
 }
 
@@ -719,8 +805,9 @@ async function handleBudgetDelete(id) {
     await api().deleteBudget(id);
     await loadData();
     renderApp();
+    showToast('Limite removido.');
   } catch (error) {
-    alert(error.message);
+    showToast(error.message, 'error');
   }
 }
 
@@ -756,16 +843,20 @@ async function restartWhatsapp() {
 
 async function handleWhatsappMessageSubmit(event) {
   event.preventDefault();
-  const data = Object.fromEntries(new FormData(event.currentTarget));
+  const form = event.currentTarget;
+  const data = Object.fromEntries(new FormData(form));
+  setFormBusy(form, true, 'Enviando...');
   try {
     await api().sendWhatsappMessage({
       phone: String(data.phone).replace(/\D/g, ''),
       message: String(data.message).trim(),
     });
-    event.currentTarget.reset();
-    alert('Mensagem enviada pelo WhatsApp.');
+    form.reset();
+    setFormBusy(form, false);
+    showToast('Mensagem enviada pelo WhatsApp.');
   } catch (error) {
-    alert(error.message);
+    setFormBusy(form, false);
+    showToast(error.message, 'error');
   }
 }
 
