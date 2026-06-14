@@ -16,7 +16,6 @@ export function balanceCard(label, value) {
     <article class="balance-card">
       <div class="metric-label">${label}<span class="balance-eye">ver</span></div>
       <div class="metric-value">${money.format(value)}</div>
-      <div class="sparkline" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span></div>
       <div class="month-title"><span>${currentMonth}</span><span>${scopedTransactions().length} lançamentos</span></div>
     </article>
   `;

@@ -1,44 +1,37 @@
-import { colors, money, state } from '../state.js';
+import { money, state } from '../state.js';
 import { escapeHtml } from '../utils.js';
 import { scopedTotals, scopedTransactions, scopeLabel, totalsByCategory } from '../finance.js';
 import { currentMonth, emptyState, icon, transactionRow } from './shared.js';
 
 export function dashboardView() {
-  const rows = scopedTransactions().slice(0, 8).map(transactionRow).join('');
+  const rows = scopedTransactions().slice(0, 4).map(transactionRow).join('');
   const assistant = assistantInsight();
   const assistantActionAttr = assistant.manageSection
     ? `data-manage-section="${assistant.manageSection}"`
     : `data-tab-jump="${assistant.target}"`;
-  const categories = state.categories
-    .map(
-      (category) =>
-        `<span class="chip"><span class="dot" style="background:${category.color}"></span>${escapeHtml(category.name)}</span>`,
-    )
-    .join('');
   const onboarding = onboardingCard();
 
   return `
     ${onboarding}
-    ${dashboardInsights()}
-    <article class="assistant-card ${assistant.tone}">
+    <article class="assistant-card dashboard-assistant ${assistant.tone}">
       <div class="assistant-icon">${icon('chat')}</div>
-      <div>
+      <div class="assistant-copy">
         <span>EconoAssistente</span>
         <strong>${escapeHtml(assistant.title)}</strong>
         <p>${escapeHtml(assistant.copy)}</p>
-        <button class="assistant-action" type="button" ${assistantActionAttr}>${escapeHtml(assistant.action)}</button>
       </div>
+      <button class="assistant-action" type="button" ${assistantActionAttr}>${escapeHtml(assistant.action)}</button>
     </article>
-    <div class="split">
-      <article class="card">
-        <div class="panel-title"><h2>Fluxo recente</h2><button class="button secondary" type="button" data-tab-jump="transactions">Ver tudo</button></div>
-        ${rows || emptyState('Nenhum lançamento no período', 'Toque no + para adicionar uma receita ou gasto.', '+')}
-      </article>
-      <article class="card">
-        <div class="panel-title"><h2>Categorias</h2><button class="button secondary" type="button" data-tab-jump="more">Editar</button></div>
-        <div class="chip-list">${categories || '<p class="empty">Crie categorias para organizar os lançamentos.</p>'}</div>
-      </article>
-    </div>
+    <article class="card dashboard-recent">
+      <div class="panel-title">
+        <div>
+          <span class="eyebrow">Movimentações</span>
+          <h2>Últimos lançamentos</h2>
+        </div>
+        <button class="button secondary compact-action" type="button" data-tab-jump="transactions">Ver fluxo</button>
+      </div>
+      ${rows || emptyState('Nenhum lançamento no período', 'Toque no + para adicionar uma receita ou gasto.', '+')}
+    </article>
   `;
 }
 
@@ -145,53 +138,6 @@ function assistantInsight() {
   };
 }
 
-function dashboardInsights() {
-  const totals = scopedTotals();
-  const expenses = totalsByCategory('EXPENSE').sort((a, b) => b.total - a.total);
-  const topExpense = expenses[0];
-  const budget = Number(state.budgets[state.scope] || 0);
-  const budgetSpent = Number(state.budgetSummary?.totalSpent ?? totals.expense);
-  const budgetUsed = budget > 0 ? Math.min(100, Math.round((budgetSpent / budget) * 100)) : 0;
-  const scopedWallets = state.wallets.filter((wallet) => !wallet.scope || wallet.scope === state.scope);
-  const walletBalance = scopedWallets.reduce((sum, wallet) => sum + Number(wallet.balance || 0), 0);
-  const insight =
-    totals.expense > totals.income && totals.income > 0
-      ? 'Gastos acima das receitas neste mês.'
-      : topExpense
-        ? `${topExpense.name} concentra seus maiores gastos.`
-        : 'Registre lançamentos para gerar insights.';
-
-  return `
-    <article class="insight-card">
-      <div class="panel-title">
-        <div>
-          <span class="eyebrow">Resumo do mês</span>
-          <h2>${scopeLabel()}</h2>
-        </div>
-        <button class="button secondary compact-action" type="button" data-tab-jump="reports">Relatórios</button>
-      </div>
-      <div class="insight-grid">
-        <div class="insight-metric">
-          <span>Resultado</span>
-          <strong class="${totals.balance < 0 ? 'expense' : 'income'}">${money.format(totals.balance)}</strong>
-        </div>
-        <div class="insight-metric">
-          <span>Contas</span>
-          <strong>${money.format(walletBalance)}</strong>
-        </div>
-      </div>
-      <div class="insight-progress">
-        <div><span>Limite usado</span><strong>${budget ? `${budgetUsed}%` : 'Não definido'}</strong></div>
-        <div class="budget-progress"><span style="width:${budgetUsed}%"></span></div>
-      </div>
-      <div class="insight-note">
-        <span class="row-icon neutral-bg">${topExpense ? topExpense.name.slice(0, 1).toUpperCase() : icon('target')}</span>
-        <p>${escapeHtml(insight)}</p>
-      </div>
-    </article>
-  `;
-}
-
 function onboardingCard() {
   const hasAccount = state.wallets.some((wallet) => !wallet.scope || wallet.scope === state.scope);
   const hasCategories = state.categories.some((category) => {
@@ -224,30 +170,23 @@ function onboardingCard() {
       copy: 'Registre uma entrada ou despesa.',
     },
   ];
+  const completedSteps = steps.filter((step) => step.done).length;
+  const nextStep = steps.find((step) => !step.done);
 
   return `
-    <article class="onboarding-card">
+    <article class="onboarding-card onboarding-compact">
       <div class="onboarding-head">
         <div>
-          <span>Primeiros passos</span>
-          <h2>Configure seu EconoApp</h2>
-          <p>Complete o básico para acompanhar seu dinheiro com dados organizados.</p>
+          <span>Primeiros passos · ${completedSteps} de ${steps.length}</span>
+          <h2>${escapeHtml(nextStep.title)}</h2>
+          <p>${escapeHtml(nextStep.copy)}</p>
         </div>
         <button class="icon-button compact" type="button" data-onboarding-dismiss aria-label="Ocultar primeiros passos">x</button>
       </div>
-      <div class="onboarding-steps">
-        ${steps
-          .map(
-            (step) => `
-              <button class="onboarding-step ${step.done ? 'done' : ''}" type="button" data-onboarding-action="${step.action}">
-                <span class="step-icon">${step.done ? 'OK' : step.icon}</span>
-                <span><strong>${step.title}</strong><small>${step.copy}</small></span>
-                <span class="step-arrow">${step.done ? 'ok' : '>'}</span>
-              </button>
-            `,
-          )
-          .join('')}
-      </div>
+      <button class="button onboarding-next" type="button" data-onboarding-action="${nextStep.action}">
+        ${nextStep.icon}
+        Continuar configuração
+      </button>
     </article>
   `;
 }

@@ -401,8 +401,7 @@
   }
 
   .mini-card,
-  .card,
-  .insight-card {
+  .card {
     border-radius: 16px;
     padding: 14px;
   }
@@ -431,17 +430,8 @@
   }
 
   .balance-card {
-    min-height: 198px;
-    padding: 20px 20px 16px;
-  }
-
-  .sparkline {
-    height: 42px;
-    margin-bottom: 4px;
-  }
-
-  .sparkline span {
-    width: 5px;
+    min-height: 148px;
+    padding: 18px 18px 14px;
   }
 
   .report-summary {
@@ -497,6 +487,16 @@
     padding: 10px 12px;
   }
 
+  .dashboard-assistant {
+    grid-template-columns: 38px minmax(0, 1fr);
+  }
+
+  .dashboard-assistant .assistant-action {
+    grid-column: 2;
+    justify-self: start;
+    margin-top: 6px;
+  }
+
   .assistant-icon {
     border-radius: 12px;
     flex-basis: 38px;
@@ -515,7 +515,6 @@
 
   .assistant-action {
     font-size: 11px;
-    margin-top: 8px;
     min-height: 30px;
     padding: 0 12px;
   }
@@ -533,23 +532,6 @@
   .tab-icon {
     height: 22px;
     width: 22px;
-  }
-
-  .insight-card {
-    gap: 11px;
-  }
-
-  .insight-grid {
-    gap: 8px;
-  }
-
-  .insight-metric {
-    border-radius: 14px;
-    padding: 10px;
-  }
-
-  .insight-metric strong {
-    font-size: clamp(18px, 5.7vw, 23px);
   }
 
   .report-panel .panel-title {
@@ -587,10 +569,6 @@
 
   .category-share {
     min-width: 86px;
-  }
-
-  .insight-note {
-    display: none;
   }
 
   .bottom-sheet {
