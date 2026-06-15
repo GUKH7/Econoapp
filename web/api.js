@@ -35,6 +35,7 @@ async function request(path, options = {}) {
 export function api() {
   return {
     login: (payload) => request('/auth/login', { method: 'POST', body: JSON.stringify(payload) }),
+    googleLogin: (payload) => request('/auth/google', { method: 'POST', body: JSON.stringify(payload) }),
     register: (payload) => request('/auth/register', { method: 'POST', body: JSON.stringify(payload) }),
     me: () => request('/auth/me'),
     dashboard: () => request(`/dashboard?scope=${state.scope}`),

@@ -42,7 +42,8 @@ model User {
   phone                String                @unique
   telegramId           String?               @unique
   email                String?               @unique
-  passwordHash         String
+  passwordHash         String?
+  googleSubject        String?               @unique
   createdAt            DateTime              @default(now()) @db.Timestamptz(6)
   updatedAt            DateTime              @updatedAt @db.Timestamptz(6)
   refreshTokens        RefreshToken[]

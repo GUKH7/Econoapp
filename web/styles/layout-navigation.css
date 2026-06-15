@@ -100,15 +100,32 @@
 
 @media (max-height: 720px) and (max-width: 640px) {
   .auth-shell {
+    gap: 6px;
+    padding-bottom: 8px;
+    padding-top: 8px;
     place-content: start center;
   }
 
   .auth-shell[data-auth-mode="login"] .welcome-illustration {
-    width: min(118px, 30vw);
+    margin-bottom: 4px;
+    margin-top: 6px;
+    width: min(96px, 27vw);
   }
 
   .auth-shell[data-auth-mode="login"] .welcome-panel .auth-subtitle {
     display: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .auth-shell[data-auth-step="google-phone"] .welcome-illustration,
+  .auth-shell[data-auth-step="google-phone"] .welcome-panel .auth-subtitle {
+    display: none;
+  }
+
+  .auth-shell[data-auth-step="google-phone"] .auth-title {
+    font-size: 20px;
+    margin-bottom: 0;
   }
 }
 

@@ -8,6 +8,7 @@ const envSchema = z.object({
   JWT_REFRESH_EXPIRES_IN: z.string().min(1),
   TELEGRAM_BOT_TOKEN: z.string().min(1),
   GEMINI_API_KEY: z.string().min(1),
+  GOOGLE_CLIENT_ID: z.string().default(''),
   WHATSAPP_BOT_API_URL: z.string().url().default('http://64.181.189.107:3001/econoapp'),
   WHATSAPP_BOT_SEND_MESSAGE_PATH: z.string().default('/send-message'),
   WHATSAPP_ADMIN_PHONES: z.string().default('5511934736234'),

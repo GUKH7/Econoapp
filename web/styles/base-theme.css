@@ -496,6 +496,48 @@ summary:focus-visible {
   padding: 10px 12px;
 }
 
+.auth-divider {
+  align-items: center;
+  color: var(--muted);
+  display: flex;
+  font-size: 12px;
+  font-weight: 850;
+  gap: 10px;
+  margin: 12px 0;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  background: var(--line);
+  content: "";
+  flex: 1;
+  height: 1px;
+}
+
+.google-button-host {
+  display: flex;
+  justify-content: center;
+  min-height: 44px;
+  width: 100%;
+}
+
+.google-phone-form {
+  display: grid;
+  gap: 10px;
+}
+
+.google-phone-form p {
+  display: grid;
+  gap: 3px;
+  margin: 0;
+}
+
+.google-phone-form p span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
 .scope-switch button,
 .auth-switch button,
 .period-switch button {

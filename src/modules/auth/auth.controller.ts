@@ -12,6 +12,7 @@ import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
+import { GoogleLoginDto } from './dto/google-login.dto';
 
 class RefreshDto {
   @IsString()
@@ -37,6 +38,17 @@ export class AuthController {
   @Post('login')
   async login(@Body() dto: LoginDto): Promise<{ data: AuthTokensResponse }> {
     const data = await this.authService.login(dto);
+    return { data };
+  }
+
+  @ApiOperation({ summary: 'Autenticar ou criar conta com Google' })
+  @Public()
+  @Throttle({ default: { limit: env.NODE_ENV === 'development' ? 60 : 10, ttl: 60000 } })
+  @Post('google')
+  async google(
+    @Body() dto: GoogleLoginDto,
+  ): Promise<{ data: AuthTokensResponse | { requiresPhone: true } }> {
+    const data = await this.authService.googleLogin(dto);
     return { data };
   }
 

@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { hash, compare } from 'bcryptjs';
 import { randomUUID } from 'node:crypto';
+import { OAuth2Client } from 'google-auth-library';
 import { PrismaService } from '@/config/database';
 import {
   ConflictException,
@@ -13,6 +14,7 @@ import { env } from '@/config/env';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
+import { GoogleLoginDto } from './dto/google-login.dto';
 
 interface AuthTokens {
   accessToken: string;
@@ -41,6 +43,8 @@ function parseDurationToMs(value: string): number {
 
 @Injectable()
 export class AuthService {
+  private readonly googleClient = new OAuth2Client();
+
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(JwtService) private readonly jwtService: JwtService,
@@ -85,12 +89,73 @@ export class AuthService {
       throw new UnauthorizedException('Credenciais inválidas');
     }
 
+    if (!user.passwordHash) {
+      throw new UnauthorizedException('Use o botão Continuar com Google para entrar');
+    }
+
     const valid = await compare(input.password, user.passwordHash);
     if (!valid) {
       throw new UnauthorizedException('Credenciais inválidas');
     }
 
     return this.issueTokens(user.id, user.phone, user.email ?? undefined);
+  }
+
+  async googleLogin(input: GoogleLoginDto): Promise<AuthTokens | { requiresPhone: true }> {
+    if (!env.GOOGLE_CLIENT_ID) {
+      throw new BadRequestException('Login com Google ainda não foi configurado');
+    }
+
+    let payload;
+    try {
+      const ticket = await this.googleClient.verifyIdToken({
+        idToken: input.credential,
+        audience: env.GOOGLE_CLIENT_ID,
+      });
+      payload = ticket.getPayload();
+    } catch {
+      throw new UnauthorizedException('Não foi possível validar sua conta Google');
+    }
+
+    if (!payload?.sub || !payload.email || payload.email_verified !== true) {
+      throw new UnauthorizedException('A conta Google precisa ter um e-mail verificado');
+    }
+
+    const email = payload.email.toLowerCase();
+    const user = await this.prisma.user.findFirst({
+      where: { OR: [{ googleSubject: payload.sub }, { email }] },
+    });
+
+    if (user) {
+      if (user.googleSubject && user.googleSubject !== payload.sub) {
+        throw new ConflictException('Este e-mail já está vinculado a outra conta Google');
+      }
+      if (!user.googleSubject) {
+        await this.prisma.user.update({
+          where: { id: user.id },
+          data: { googleSubject: payload.sub },
+        });
+      }
+      return this.issueTokens(user.id, user.phone, user.email ?? undefined);
+    }
+
+    if (!input.phone) return { requiresPhone: true };
+
+    const phoneOwner = await this.prisma.user.findUnique({ where: { phone: input.phone } });
+    if (phoneOwner) {
+      throw new ConflictException('Este telefone já está vinculado a outra conta');
+    }
+
+    const created = await this.prisma.user.create({
+      data: {
+        name: payload.name?.trim() || email.split('@')[0] || 'Usuário',
+        phone: input.phone,
+        email,
+        passwordHash: null,
+        googleSubject: payload.sub,
+      },
+    });
+    return this.issueTokens(created.id, created.phone, created.email ?? undefined);
   }
 
   async refresh(refreshToken: string): Promise<AuthTokens> {

@@ -19,6 +19,8 @@ services:
         value: 7d
       - key: GEMINI_API_KEY
         sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
       - key: TELEGRAM_BOT_TOKEN
         sync: false
       - key: WHATSAPP_BOT_API_URL
@@ -52,6 +54,8 @@ services:
         value: https://econoapp-backend.onrender.com/api/v1
       - key: API_TARGET
         value: https://econoapp-backend.onrender.com
+      - key: GOOGLE_CLIENT_ID
+        sync: false
 
 databases:
   - name: econoapp-postgres

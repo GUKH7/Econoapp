@@ -27,6 +27,9 @@ import {
 } from './views.js';
 
 const MAIN_TABS = ['dashboard', 'transactions', 'reports', 'budget', 'more'];
+const GOOGLE_CLIENT_ID = window.ECONOAPP_CONFIG?.googleClientId || '';
+let pendingGoogleCredential = '';
+let googleInitAttempts = 0;
 
 function screenTitle() {
   const titles = {
@@ -162,6 +165,20 @@ function renderAuth(initialError = '') {
         <form class="form" data-auth-form data-mode="login">
           ${authFields('login')}
         </form>
+        ${
+          GOOGLE_CLIENT_ID
+            ? `<div class="auth-divider"><span>ou</span></div>
+               <div class="google-auth">
+                 <div class="google-button-host" data-google-button></div>
+                 <form class="google-phone-form hidden" data-google-phone-form>
+                   <p><strong>Falta só seu telefone</strong><span>Usaremos esse número para identificar você no chatbot do WhatsApp.</span></p>
+                   <label class="field">Telefone<input name="phone" inputmode="tel" autocomplete="tel" placeholder="(11) 99999-9999" required /></label>
+                   <button class="button" type="submit">Concluir cadastro</button>
+                   <button class="button secondary" type="button" data-google-cancel>Usar outra forma de acesso</button>
+                 </form>
+               </div>`
+            : ''
+        }
       </div>
     </section>
   `;
@@ -181,6 +198,9 @@ function renderAuth(initialError = '') {
   const authForm = document.querySelector('[data-auth-form]');
   authForm.addEventListener('submit', handleAuth);
   bindAuthPasswordToggle(authForm);
+  document.querySelector('[data-google-phone-form]')?.addEventListener('submit', handleGooglePhone);
+  document.querySelector('[data-google-cancel]')?.addEventListener('click', cancelGooglePhone);
+  initializeGoogleLogin();
 }
 
 function authFields(mode) {
@@ -272,6 +292,111 @@ async function handleAuth(event) {
       submitButton.textContent = submitLabel;
     }
   }
+}
+
+function initializeGoogleLogin() {
+  const host = document.querySelector('[data-google-button]');
+  if (!host || !GOOGLE_CLIENT_ID) return;
+  if (host.dataset.googleRendered === 'true') return;
+  if (!window.google?.accounts?.id) {
+    if (!document.querySelector('[data-google-sdk]')) {
+      const script = document.createElement('script');
+      script.src = 'https://accounts.google.com/gsi/client';
+      script.async = true;
+      script.defer = true;
+      script.dataset.googleSdk = '';
+      script.addEventListener('load', initializeGoogleLogin, { once: true });
+      script.addEventListener(
+        'error',
+        () => setError('Não foi possível carregar o acesso com Google. Tente novamente.'),
+        { once: true },
+      );
+      document.head.appendChild(script);
+    }
+    if (googleInitAttempts < 20) {
+      googleInitAttempts += 1;
+      setTimeout(initializeGoogleLogin, 250);
+    }
+    return;
+  }
+
+  googleInitAttempts = 0;
+  host.dataset.googleRendered = 'true';
+  window.google.accounts.id.initialize({
+    client_id: GOOGLE_CLIENT_ID,
+    callback: handleGoogleCredential,
+    use_fedcm_for_prompt: true,
+  });
+  window.google.accounts.id.renderButton(host, {
+    type: 'standard',
+    shape: 'rectangular',
+    theme: 'outline',
+    text: 'continue_with',
+    size: 'large',
+    locale: 'pt-BR',
+    width: Math.min(360, Math.max(250, Math.round(host.getBoundingClientRect().width))),
+  });
+}
+
+async function handleGoogleCredential(response) {
+  pendingGoogleCredential = response?.credential || '';
+  if (!pendingGoogleCredential) {
+    setError('Não foi possível receber a credencial do Google.');
+    return;
+  }
+  await completeGoogleLogin();
+}
+
+async function handleGooglePhone(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const data = Object.fromEntries(new FormData(form));
+  await completeGoogleLogin(String(data.phone || '').replace(/\D/g, ''), form);
+}
+
+async function completeGoogleLogin(phone, form) {
+  setError('');
+  if (!pendingGoogleCredential) {
+    setError('Selecione sua conta Google novamente.');
+    return;
+  }
+
+  if (form) setFormBusy(form, true, 'Concluindo...');
+  try {
+    const response = await api().googleLogin({
+      credential: pendingGoogleCredential,
+      ...(phone ? { phone } : {}),
+    });
+    if (response.data.requiresPhone) {
+      document.querySelector('[data-auth-shell]').dataset.authStep = 'google-phone';
+      document.querySelector('[data-auth-tabs]')?.classList.add('hidden');
+      document.querySelector('[data-auth-form]')?.classList.add('hidden');
+      document.querySelector('.auth-divider')?.classList.add('hidden');
+      document.querySelector('[data-google-phone-form]')?.classList.remove('hidden');
+      document.querySelector('[data-google-button]')?.classList.add('hidden');
+      return;
+    }
+    pendingGoogleCredential = '';
+    saveSession(response.data);
+    renderLoading();
+    await loadData();
+    renderApp();
+  } catch (error) {
+    setError(error.message);
+  } finally {
+    if (form) setFormBusy(form, false);
+  }
+}
+
+function cancelGooglePhone() {
+  pendingGoogleCredential = '';
+  const shell = document.querySelector('[data-auth-shell]');
+  if (shell) delete shell.dataset.authStep;
+  document.querySelector('[data-auth-tabs]')?.classList.remove('hidden');
+  document.querySelector('[data-auth-form]')?.classList.remove('hidden');
+  document.querySelector('.auth-divider')?.classList.remove('hidden');
+  document.querySelector('[data-google-phone-form]')?.classList.add('hidden');
+  document.querySelector('[data-google-button]')?.classList.remove('hidden');
 }
 
 function renderApp() {

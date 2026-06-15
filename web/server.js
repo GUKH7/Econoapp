@@ -7,6 +7,7 @@ const root = __dirname;
 const port = Number(process.env.WEB_PORT || 5173);
 const apiTarget = new URL(process.env.API_TARGET || 'http://localhost:3001');
 const publicApiUrl = process.env.WEB_API_URL || '';
+const googleClientId = process.env.GOOGLE_CLIENT_ID || '';
 
 const types = {
   '.html': 'text/html; charset=utf-8',
@@ -64,12 +65,14 @@ const server = http.createServer((request, response) => {
     return;
   }
 
-  if (requested === '/config.js' && publicApiUrl) {
+  if (requested === '/config.js' && (publicApiUrl || googleClientId)) {
     response.writeHead(200, {
       'Content-Type': 'text/javascript; charset=utf-8',
       'Cache-Control': 'no-store',
     });
-    response.end(`window.ECONOAPP_CONFIG = ${JSON.stringify({ apiUrl: publicApiUrl })};`);
+    response.end(
+      `window.ECONOAPP_CONFIG = ${JSON.stringify({ apiUrl: publicApiUrl, googleClientId })};`,
+    );
     return;
   }
 

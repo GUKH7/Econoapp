@@ -10,6 +10,10 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { JwtService } from '@nestjs/jwt';
 import { hash, compare } from 'bcryptjs';
 
+const googleMocks = vi.hoisted(() => ({
+  verifyIdToken: vi.fn(),
+}));
+
 // ---------------------------------------------------------------------------
 // Mocks globais — hoisted pelo Vitest antes de qualquer import
 // ---------------------------------------------------------------------------
@@ -20,6 +24,7 @@ vi.mock('@/config/env', () => ({
     JWT_EXPIRES_IN: '1h',
     JWT_REFRESH_EXPIRES_IN: '7d',
     GEMINI_API_KEY: 'test-gemini-api-key',
+    GOOGLE_CLIENT_ID: 'google-client-id.apps.googleusercontent.com',
     WHATSAPP_ADMIN_PHONES: '11999999999',
     PORT: 3001,
     NODE_ENV: 'test',
@@ -33,6 +38,12 @@ vi.mock('bcryptjs', () => ({
 
 vi.mock('node:crypto', () => ({
   randomUUID: vi.fn().mockReturnValue('mock-refresh-token-uuid'),
+}));
+
+vi.mock('google-auth-library', () => ({
+  OAuth2Client: class {
+    verifyIdToken = googleMocks.verifyIdToken;
+  },
 }));
 
 // ---------------------------------------------------------------------------
@@ -58,6 +69,7 @@ const mockUser = {
   phone: '11999999999',
   email: 'gustavo@example.com',
   passwordHash: 'hashed_password',
+  googleSubject: null,
   createdAt: new Date('2024-01-01T00:00:00Z'),
   updatedAt: new Date('2024-01-01T00:00:00Z'),
 };
@@ -448,6 +460,92 @@ describe('AuthService', () => {
       expect(isWhatsappAdminPhone('5511999999999')).toBe(true);
       expect(isWhatsappAdminPhone('+55 (11) 99999-9999')).toBe(true);
       expect(isWhatsappAdminPhone('11888888888')).toBe(false);
+    });
+
+    it('(8) orienta login Google quando a conta não possui senha', async () => {
+      mockPrisma.user.findFirst.mockResolvedValue({ ...mockUser, passwordHash: null });
+
+      await expect(
+        service.login({ email: 'gustavo@example.com', password: 'senha1234' }),
+      ).rejects.toThrow('Use o botão Continuar com Google para entrar');
+      expect(compare).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('googleLogin', () => {
+    const googlePayload = {
+      sub: 'google-sub-1',
+      email: 'gustavo@example.com',
+      email_verified: true,
+      name: 'Gustavo Santos',
+    };
+
+    beforeEach(() => {
+      googleMocks.verifyIdToken.mockResolvedValue({
+        getPayload: () => googlePayload,
+      });
+    });
+
+    it('(9) vincula uma conta existente pelo e-mail verificado', async () => {
+      mockPrisma.user.findFirst.mockResolvedValue(mockUser);
+      mockPrisma.user.update.mockResolvedValue({ ...mockUser, googleSubject: googlePayload.sub });
+
+      const result = await service.googleLogin({ credential: 'google-id-token-value-long' });
+
+      expect(mockPrisma.user.update).toHaveBeenCalledWith({
+        where: { id: mockUser.id },
+        data: { googleSubject: googlePayload.sub },
+      });
+      expect(result).toEqual({
+        accessToken: 'mock-access-token',
+        refreshToken: 'mock-refresh-token-uuid',
+      });
+    });
+
+    it('(10) solicita telefone para uma nova conta Google', async () => {
+      mockPrisma.user.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.googleLogin({ credential: 'google-id-token-value-long' }),
+      ).resolves.toEqual({ requiresPhone: true });
+      expect(mockPrisma.user.create).not.toHaveBeenCalled();
+    });
+
+    it('(11) cria uma nova conta Google após receber o telefone', async () => {
+      mockPrisma.user.findFirst.mockResolvedValue(null);
+      mockPrisma.user.findUnique.mockResolvedValue(null);
+      mockPrisma.user.create.mockResolvedValue({
+        ...mockUser,
+        passwordHash: null,
+        googleSubject: googlePayload.sub,
+      });
+
+      const result = await service.googleLogin({
+        credential: 'google-id-token-value-long',
+        phone: '11999999999',
+      });
+
+      expect(mockPrisma.user.create).toHaveBeenCalledWith({
+        data: {
+          name: 'Gustavo Santos',
+          phone: '11999999999',
+          email: 'gustavo@example.com',
+          passwordHash: null,
+          googleSubject: googlePayload.sub,
+        },
+      });
+      expect(result).toEqual({
+        accessToken: 'mock-access-token',
+        refreshToken: 'mock-refresh-token-uuid',
+      });
+    });
+
+    it('(12) rejeita credencial Google inválida', async () => {
+      googleMocks.verifyIdToken.mockRejectedValue(new Error('invalid token'));
+
+      await expect(
+        service.googleLogin({ credential: 'google-id-token-value-long' }),
+      ).rejects.toThrow('Não foi possível validar sua conta Google');
     });
   });
 });
