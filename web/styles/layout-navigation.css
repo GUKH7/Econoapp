@@ -27,8 +27,8 @@
 
 .appbar h1 {
   color: var(--text);
-  font-size: 22px;
-  font-weight: 950;
+  font-size: 21px;
+  font-weight: 900;
   margin: 0;
 }
 
@@ -502,7 +502,7 @@
   .shell {
     padding-left: 12px;
     padding-right: 12px;
-    padding-top: 14px;
+    padding-top: 12px;
   }
 
   .page-track,

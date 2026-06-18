@@ -11,6 +11,7 @@ export function dashboardView() {
     : `data-tab-jump="${assistant.target}"`;
 
   return `
+    ${state.scope === 'BUSINESS' ? businessSummaryCard() : ''}
     <article class="assistant-card dashboard-assistant ${assistant.tone}">
       <div class="assistant-icon">${icon('chat')}</div>
       <div class="assistant-copy">
@@ -30,6 +31,88 @@ export function dashboardView() {
       </div>
       ${rows || emptyState('Nenhum lançamento no período', 'Toque no + para adicionar uma receita ou gasto.', '+')}
     </article>
+  `;
+}
+
+function businessSummaryCard() {
+  const transactions = scopedTransactions();
+  const totals = scopedTotals();
+  const margin = totals.income > 0 ? Math.round((totals.balance / totals.income) * 100) : 0;
+  const channelRows = channelSummary(transactions);
+  const bestChannel = channelRows[0];
+  const channelTotal = channelRows.reduce((sum, item) => sum + item.total, 0);
+
+  return `
+    <article class="business-summary-card">
+      <div class="business-summary-head">
+        <div>
+          <span class="eyebrow">Resumo do negócio</span>
+          <h2>${money.format(totals.income)}</h2>
+          <p>Faturamento de ${currentMonth}</p>
+        </div>
+        <span class="business-badge ${totals.balance >= 0 ? 'positive' : 'negative'}">
+          ${totals.balance >= 0 ? '+' : '-'}${Math.abs(margin)}%
+        </span>
+      </div>
+      <div class="business-kpis">
+        <div><span>Entradas</span><strong class="income">${money.format(totals.income)}</strong></div>
+        <div><span>Saídas</span><strong class="expense">${money.format(totals.expense)}</strong></div>
+        <div><span>Lucro</span><strong>${money.format(totals.balance)}</strong></div>
+      </div>
+      <div class="business-channel-block">
+        <div class="panel-title compact">
+          <div>
+            <span class="eyebrow">Canais de venda</span>
+            <h3>${bestChannel ? `Destaque: ${escapeHtml(bestChannel.name)}` : 'Sem canais registrados'}</h3>
+          </div>
+          <button class="button secondary compact-action" type="button" data-manage-section="channels">Gerenciar</button>
+        </div>
+        <div class="business-channel-list">
+          ${
+            channelRows.length
+              ? channelRows.slice(0, 3).map((channel) => channelRow(channel, channelTotal)).join('')
+              : '<p class="empty">Cadastre canais para enxergar de onde vem o faturamento.</p>'
+          }
+        </div>
+      </div>
+    </article>
+  `;
+}
+
+function channelSummary(transactions) {
+  const byChannel = new Map(
+    state.channels.map((channel) => [
+      channel.id,
+      {
+        color: channel.color || '#22C55E',
+        id: channel.id,
+        name: channel.name,
+        total: 0,
+      },
+    ]),
+  );
+
+  transactions
+    .filter((transaction) => transaction.type === 'INCOME' && transaction.channelId)
+    .forEach((transaction) => {
+      const channel = byChannel.get(transaction.channelId);
+      if (channel) channel.total += Number(transaction.netAmount || transaction.amount || 0);
+    });
+
+  return [...byChannel.values()].filter((channel) => channel.total > 0).sort((a, b) => b.total - a.total);
+}
+
+function channelRow(channel, total) {
+  const percent = total > 0 ? Math.round((channel.total / total) * 100) : 0;
+  return `
+    <div class="business-channel-row">
+      <span class="row-icon" style="background:${escapeHtml(channel.color)}">${escapeHtml(channel.name.slice(0, 1).toUpperCase())}</span>
+      <div>
+        <strong>${escapeHtml(channel.name)}</strong>
+        <div class="category-share"><span style="width:${percent}%"></span></div>
+      </div>
+      <small>${money.format(channel.total)} · ${percent}%</small>
+    </div>
   `;
 }
 
