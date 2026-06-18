@@ -706,16 +706,9 @@ function bindViewEvents() {
     });
   });
 
-  document.querySelectorAll('[data-assistant-suggestion]').forEach((button) => {
+  document.querySelectorAll('[data-assistant-action]').forEach((button) => {
     button.addEventListener('click', () => {
-      const suggestion = button.dataset.assistantSuggestion;
-      if (suggestion === 'Registrar gasto') {
-        state.quickType = 'EXPENSE';
-        state.sheetOpen = true;
-        renderApp();
-        return;
-      }
-      showToast(`Din recebeu: ${suggestion}`);
+      handleAssistantAction(button.dataset.assistantAction);
     });
   });
 
@@ -725,8 +718,79 @@ function bindViewEvents() {
     const message = String(new FormData(form).get('message') || '').trim();
     if (!message) return;
     form.reset();
-    showToast('Din vai responder com base nos seus dados.');
+    handleAssistantMessage(message);
   });
+}
+
+function handleAssistantAction(action) {
+  if (action === 'expense' || action === 'income') {
+    state.quickType = action === 'income' ? 'INCOME' : 'EXPENSE';
+    state.sheetOpen = true;
+    renderApp();
+    return;
+  }
+
+  if (action === 'reports') {
+    switchTab('reports');
+    return;
+  }
+
+  if (action === 'budget') {
+    renderWithTransition(() => {
+      state.tab = 'budget';
+      state.fabOpen = false;
+    });
+    return;
+  }
+
+  if (action === 'business') {
+    renderWithTransition(() => {
+      state.scope = 'BUSINESS';
+      saveScopes();
+      state.tab = 'dashboard';
+      state.fabOpen = false;
+    });
+    loadData()
+      .then(() => renderApp())
+      .catch((error) => showToast(error.message, 'error'));
+    return;
+  }
+
+  if (action === 'channels') {
+    renderWithTransition(() => {
+      state.tab = 'more';
+      state.manageSection = 'channels';
+      state.fabOpen = false;
+    });
+    return;
+  }
+
+  showToast('Din está pronto para ajudar.');
+}
+
+function handleAssistantMessage(message) {
+  const normalized = message.toLowerCase();
+  if (/\b(gasto|gastei|despesa|paguei|compra)\b/.test(normalized)) {
+    handleAssistantAction('expense');
+    return;
+  }
+  if (/\b(receita|ganhei|recebi|vendi|entrada)\b/.test(normalized)) {
+    handleAssistantAction('income');
+    return;
+  }
+  if (/\b(relat|gastei|gastos|despesas|categoria)\b/.test(normalized)) {
+    handleAssistantAction('reports');
+    return;
+  }
+  if (/\b(negocio|negócio|venda|vendas|faturamento)\b/.test(normalized)) {
+    handleAssistantAction('business');
+    return;
+  }
+  if (/\b(limite|orcamento|orçamento|meta)\b/.test(normalized)) {
+    handleAssistantAction('budget');
+    return;
+  }
+  showToast('Din entendeu. Use uma sugestão rápida para agir agora.');
 }
 
 function renderTransactionList() {
