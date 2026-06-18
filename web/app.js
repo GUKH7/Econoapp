@@ -26,7 +26,7 @@ import {
   viewHtml,
 } from './views.js';
 
-const MAIN_TABS = ['dashboard', 'transactions', 'reports', 'budget', 'more'];
+const MAIN_TABS = ['dashboard', 'transactions', 'reports', 'more'];
 const GOOGLE_CLIENT_ID = window.ECONOAPP_CONFIG?.googleClientId || '';
 let pendingGoogleCredential = '';
 let googleInitAttempts = 0;
@@ -37,11 +37,22 @@ function screenTitle() {
     transactions: 'Transações',
     reports: 'Relatórios',
     budget: 'Limites',
-    more: state.manageSection === 'accounts' ? 'Contas e carteiras' : 'Mais',
+    more: manageTitle(),
     launch: 'Lançamentos',
   };
   if (state.scope === 'BUSINESS' && state.tab === 'dashboard') return 'Negócio';
   return titles[state.tab] || 'Resumo';
+}
+
+function manageTitle() {
+  const titles = {
+    accounts: 'Contas e carteiras',
+    cards: 'Cartões',
+    categories: 'Categorias e canais',
+    channels: 'Canais de venda',
+    whatsapp: 'WhatsApp',
+  };
+  return titles[state.manageSection] || 'Mais';
 }
 
 function setError(message) {
@@ -99,9 +110,18 @@ function transitionDirectionForTab(targetTab) {
 }
 
 function switchTab(targetTab) {
-  if (targetTab === state.tab) return;
+  if (targetTab === state.tab) {
+    if (targetTab === 'more' && state.manageSection) {
+      renderWithTransition(() => {
+        state.manageSection = '';
+        state.fabOpen = false;
+      }, 'back');
+    }
+    return;
+  }
   renderWithTransition(() => {
     state.tab = targetTab;
+    if (targetTab === 'more') state.manageSection = '';
     state.fabOpen = false;
   }, transitionDirectionForTab(targetTab));
 }
@@ -522,6 +542,13 @@ function bindViewEvents() {
         refreshWhatsappStatus();
       }
     });
+  });
+
+  document.querySelector('[data-manage-back]')?.addEventListener('click', () => {
+    renderWithTransition(() => {
+      state.manageSection = '';
+      state.fabOpen = false;
+    }, 'back');
   });
 
   document.querySelector('[data-onboarding-dismiss]')?.addEventListener('click', () => {

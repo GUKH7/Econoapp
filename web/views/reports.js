@@ -91,7 +91,7 @@ export function reportsView() {
     <article class="card report-advice">
       <div class="panel-title">
         <div>
-          <span class="eyebrow">Leitura rapida</span>
+          <span class="eyebrow">Leitura rápida</span>
           <h2>O que observar</h2>
           <p class="report-advice-summary">${escapeHtml(balanceInsight)}</p>
         </div>

@@ -137,8 +137,8 @@ export function transactionRow(transaction) {
   const iconColor = transaction.type === 'EXPENSE' ? '#EF4444' : '#22C55E';
   const paymentLabel = payment ? ` - ${escapeHtml(payment.label)}` : '';
   return `
-    <div class="row">
-      <div style="display:flex;align-items:center;gap:12px;min-width:0">
+    <div class="row transaction-row">
+      <div class="transaction-main">
         <span class="row-icon" style="background:${category?.color || iconColor}">${iconText}</span>
         <div>
           <div class="row-title">${escapeHtml(transaction.description)}</div>

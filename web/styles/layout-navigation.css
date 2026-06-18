@@ -194,6 +194,32 @@
   box-shadow: 0 10px 22px rgba(34, 197, 94, 0.16);
 }
 
+.timeline-list {
+  display: grid;
+  gap: 16px;
+}
+
+.timeline-group {
+  display: grid;
+  gap: 8px;
+}
+
+.timeline-group h2 {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 950;
+  margin: 0 0 0 4px;
+}
+
+.timeline-card {
+  background: transparent;
+  border-top: 1px solid var(--line);
+}
+
+.timeline-card .row {
+  min-height: 64px;
+}
+
 .shell {
   touch-action: pan-y;
 }

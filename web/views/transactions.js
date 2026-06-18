@@ -1,25 +1,25 @@
-import { state } from '../state.js';
+import { dateFmt, state } from '../state.js';
 import { escapeHtml } from '../utils.js';
 import { paymentMetaForTransaction, scopedTransactions, transactionScope } from '../finance.js';
 import { currentMonth, emptyState, transactionRow } from './shared.js';
 
 export function transactionsView() {
   return `
-    <label class="search-field"><input type="search" placeholder="Buscar transações" value="${escapeHtml(state.transactionSearch)}" data-transaction-search /></label>
+    <label class="search-field"><input type="search" placeholder="Buscar lançamento" value="${escapeHtml(state.transactionSearch)}" data-transaction-search /></label>
     <div class="filter-chips">
       ${transactionFilterButton('ALL', 'Todos')}
       ${transactionFilterButton('INCOME', 'Receitas')}
       ${transactionFilterButton('EXPENSE', 'Gastos')}
-      ${transactionFilterButton('TRANSFER', 'Transferencias')}
+      ${transactionFilterButton('TRANSFER', 'Transferências')}
     </div>
     <div class="period-switch">
-      <button type="button">Abril</button>
+      <button type="button">Maio</button>
       <button class="active" type="button">${currentMonth}</button>
-      <button type="button">Junho</button>
+      <button type="button">Julho</button>
     </div>
-    <article class="card" data-transaction-list>
+    <section class="timeline-list" data-transaction-list>
       ${transactionListHtml()}
-    </article>
+    </section>
   `;
 }
 
@@ -50,6 +50,41 @@ function filteredTransactions() {
 }
 
 export function transactionListHtml() {
-  const rows = filteredTransactions().map(transactionRow).join('');
-  return rows || emptyState('Nenhum lançamento encontrado', 'Ajuste a busca ou toque no + para adicionar um lançamento.', '+');
+  const transactions = filteredTransactions();
+  if (!transactions.length) {
+    return emptyState('Nenhum lançamento encontrado', 'Ajuste a busca ou toque no + para adicionar um lançamento.', '+');
+  }
+
+  const groups = new Map();
+  transactions.forEach((transaction) => {
+    const label = dateGroupLabel(transaction.date);
+    if (!groups.has(label)) groups.set(label, []);
+    groups.get(label).push(transaction);
+  });
+
+  return [...groups.entries()]
+    .map(
+      ([label, rows]) => `
+        <section class="timeline-group">
+          <h2>${escapeHtml(label)}</h2>
+          <article class="timeline-card">${rows.map(transactionRow).join('')}</article>
+        </section>
+      `,
+    )
+    .join('');
+}
+
+function dateGroupLabel(dateValue) {
+  const date = new Date(dateValue);
+  const today = new Date();
+  const yesterday = new Date();
+  yesterday.setDate(today.getDate() - 1);
+
+  if (sameDay(date, today)) return 'Hoje';
+  if (sameDay(date, yesterday)) return 'Ontem';
+  return dateFmt.format(date);
+}
+
+function sameDay(a, b) {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 }

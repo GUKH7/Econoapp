@@ -12,7 +12,7 @@ export const state = {
   categories: [],
   channels: [],
   tab: 'dashboard',
-  manageSection: 'accounts',
+  manageSection: '',
   scope: localStorage.getItem('econoapp.scope') || 'PERSONAL',
   fabOpen: false,
   sheetOpen: false,

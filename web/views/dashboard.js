@@ -16,7 +16,7 @@ export function dashboardView() {
     <article class="assistant-card dashboard-assistant ${assistant.tone}">
       <div class="assistant-icon">${icon('chat')}</div>
       <div class="assistant-copy">
-        <span>EconoAssistente</span>
+        <span>Din</span>
         <strong>${escapeHtml(assistant.title)}</strong>
         <p>${escapeHtml(assistant.copy)}</p>
       </div>
@@ -122,7 +122,7 @@ function assistantInsight() {
   if (topExpense) {
     return {
       action: 'Ver relatórios',
-      copy: `${topExpense.name} e a maior categoria agora, mas seu resultado segue positivo em ${money.format(totals.balance)}.`,
+      copy: `${topExpense.name} é a maior categoria agora, mas seu resultado segue positivo em ${money.format(totals.balance)}.`,
       target: 'reports',
       title: 'Controle em bom ritmo',
       tone: 'positive',
