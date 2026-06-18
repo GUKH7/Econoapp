@@ -9,10 +9,8 @@ export function dashboardView() {
   const assistantActionAttr = assistant.manageSection
     ? `data-manage-section="${assistant.manageSection}"`
     : `data-tab-jump="${assistant.target}"`;
-  const onboarding = onboardingCard();
 
   return `
-    ${onboarding}
     <article class="assistant-card dashboard-assistant ${assistant.tone}">
       <div class="assistant-icon">${icon('chat')}</div>
       <div class="assistant-copy">
@@ -49,19 +47,19 @@ function assistantInsight() {
 
   if (!transactions.length) {
     return {
-      action: 'Criar lançamento',
-      copy: 'Comece registrando uma receita ou gasto. Depois eu consigo apontar categorias, limites e tendências.',
-      target: 'launch',
-      title: 'Vamos criar sua primeira leitura',
+      action: 'Conversar com o Din',
+      copy: 'Me conte uma receita ou gasto pelo assistente e eu te ajudo a organizar o lançamento.',
+      target: 'assistant',
+      title: 'Pronto para começar',
       tone: 'neutral',
     };
   }
 
   if (totals.balance < 0) {
     return {
-      action: 'Ver gastos',
+      action: 'Abrir Din',
       copy: `O resultado está negativo em ${money.format(Math.abs(totals.balance))}. Comece revisando ${topExpense?.name || 'os maiores gastos'} antes de novos lançamentos.`,
-      target: 'reports',
+      target: 'assistant',
       title: 'Alerta de resultado negativo',
       tone: 'warning',
     };
@@ -69,9 +67,9 @@ function assistantInsight() {
 
   if (budget > 0 && budgetUsed >= 90) {
     return {
-      action: 'Ajustar limite',
+      action: 'Abrir Din',
       copy: `Você já usou ${budgetUsed}% do limite de ${scopeLabel().toLowerCase()}. Reduza gastos variáveis ou aumente o limite se ele estiver defasado.`,
-      target: 'budget',
+      target: 'assistant',
       title: 'Limite quase no teto',
       tone: 'warning',
     };
@@ -79,9 +77,9 @@ function assistantInsight() {
 
   if (topExpense && topPercent >= 45) {
     return {
-      action: 'Analisar categoria',
+      action: 'Abrir Din',
       copy: `${topExpense.name} concentra ${topPercent}% dos gastos. Se for recorrente, vale definir uma meta específica para essa categoria.`,
-      target: 'reports',
+      target: 'assistant',
       title: 'Gasto concentrado detectado',
       tone: 'attention',
     };
@@ -89,9 +87,9 @@ function assistantInsight() {
 
   if (!budget && totals.expense > 0) {
     return {
-      action: 'Definir limite',
+      action: 'Abrir Din',
       copy: `Você já tem ${money.format(totals.expense)} em gastos no período. Criar um limite ajuda a acompanhar o ritmo antes do fim do mês.`,
-      target: 'budget',
+      target: 'assistant',
       title: 'Falta um teto de gastos',
       tone: 'neutral',
     };
@@ -121,72 +119,19 @@ function assistantInsight() {
 
   if (topExpense) {
     return {
-      action: 'Ver relatórios',
+      action: 'Abrir Din',
       copy: `${topExpense.name} é a maior categoria agora, mas seu resultado segue positivo em ${money.format(totals.balance)}.`,
-      target: 'reports',
+      target: 'assistant',
       title: 'Controle em bom ritmo',
       tone: 'positive',
     };
   }
 
   return {
-    action: 'Ver fluxo',
+    action: 'Abrir Din',
     copy: `Saldo positivo de ${money.format(totals.balance)} neste período. Continue registrando para eu comparar melhor os próximos meses.`,
-    target: 'transactions',
+    target: 'assistant',
     title: 'Saldo positivo',
     tone: 'positive',
   };
-}
-
-function onboardingCard() {
-  const hasAccount = state.wallets.some((wallet) => !wallet.scope || wallet.scope === state.scope);
-  const hasCategories = state.categories.some((category) => {
-    const kind = state.categoryKinds[category.id];
-    return state.scope === 'BUSINESS' ? kind === 'INCOME' || kind === 'EXPENSE' : kind !== 'INCOME' || kind === 'EXPENSE';
-  });
-  const hasTransaction = scopedTransactions().length > 0;
-  if (state.onboardingDismissed || (hasAccount && hasCategories && hasTransaction)) return '';
-
-  const steps = [
-    {
-      action: 'accounts',
-      done: hasAccount,
-      icon: icon('wallet'),
-      title: 'Conta ou carteira',
-      copy: 'Defina onde o dinheiro entra e sai.',
-    },
-    {
-      action: 'seed-categories',
-      done: hasCategories,
-      icon: icon('tag'),
-      title: 'Categorias iniciais',
-      copy: 'Crie uma base para receitas e gastos.',
-    },
-    {
-      action: 'transaction',
-      done: hasTransaction,
-      icon: icon('plus'),
-      title: 'Primeiro lançamento',
-      copy: 'Registre uma entrada ou despesa.',
-    },
-  ];
-  const completedSteps = steps.filter((step) => step.done).length;
-  const nextStep = steps.find((step) => !step.done);
-
-  return `
-    <article class="onboarding-card onboarding-compact">
-      <div class="onboarding-head">
-        <div>
-          <span>Primeiros passos · ${completedSteps} de ${steps.length}</span>
-          <h2>${escapeHtml(nextStep.title)}</h2>
-          <p>${escapeHtml(nextStep.copy)}</p>
-        </div>
-        <button class="icon-button compact" type="button" data-onboarding-dismiss aria-label="Ocultar primeiros passos">x</button>
-      </div>
-      <button class="button onboarding-next" type="button" data-onboarding-action="${nextStep.action}">
-        ${nextStep.icon}
-        Continuar configuração
-      </button>
-    </article>
-  `;
 }

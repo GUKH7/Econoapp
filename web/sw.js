@@ -1,4 +1,4 @@
-const CACHE_NAME = 'econoapp-v48';
+const CACHE_NAME = 'econoapp-v49';
 const ASSETS = [
   './index.html',
   './styles.css',
@@ -19,6 +19,7 @@ const ASSETS = [
   './views/dashboard.js',
   './views/manage.js',
   './views/reports.js',
+  './views/assistant.js',
   './views/shared.js',
   './views/transaction-form.js',
   './views/transactions.js',

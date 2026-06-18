@@ -13,6 +13,8 @@ export const state = {
   channels: [],
   tab: 'dashboard',
   manageSection: '',
+  manageAccountTab: 'accounts',
+  manageModal: '',
   scope: localStorage.getItem('econoapp.scope') || 'PERSONAL',
   fabOpen: false,
   sheetOpen: false,

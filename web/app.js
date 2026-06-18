@@ -37,6 +37,7 @@ function screenTitle() {
     transactions: 'Transações',
     reports: 'Relatórios',
     budget: 'Limites',
+    assistant: 'Din',
     more: manageTitle(),
     launch: 'Lançamentos',
   };
@@ -534,9 +535,13 @@ function bindViewEvents() {
   document.querySelectorAll('[data-manage-section]').forEach((button) => {
     button.addEventListener('click', () => {
       renderWithTransition(() => {
+        const requestedSection = button.dataset.manageSection;
         state.tab = 'more';
-        state.manageSection = button.dataset.manageSection;
+        state.manageSection = requestedSection === 'cards' ? 'accounts' : requestedSection;
+        if (requestedSection === 'cards') state.manageAccountTab = 'cards';
+        if (requestedSection === 'accounts' && !state.manageAccountTab) state.manageAccountTab = 'accounts';
         state.fabOpen = false;
+        state.manageModal = '';
       });
       if (button.dataset.manageSection === 'whatsapp' && !state.whatsappStatus) {
         refreshWhatsappStatus();
@@ -544,9 +549,33 @@ function bindViewEvents() {
     });
   });
 
+  document.querySelectorAll('[data-account-tab]').forEach((button) => {
+    button.addEventListener('click', () => {
+      renderWithTransition(() => {
+        state.manageAccountTab = button.dataset.accountTab;
+        state.manageModal = '';
+      });
+    });
+  });
+
+  document.querySelectorAll('[data-manage-modal]').forEach((button) => {
+    button.addEventListener('click', () => {
+      state.manageModal = button.dataset.manageModal;
+      renderApp();
+    });
+  });
+
+  document.querySelectorAll('[data-manage-modal-close]').forEach((element) => {
+    element.addEventListener('click', () => {
+      state.manageModal = '';
+      renderApp();
+    });
+  });
+
   document.querySelector('[data-manage-back]')?.addEventListener('click', () => {
     renderWithTransition(() => {
       state.manageSection = '';
+      state.manageModal = '';
       state.fabOpen = false;
     }, 'back');
   });
@@ -633,6 +662,16 @@ function bindViewEvents() {
     });
   });
 
+  document.querySelectorAll('input[name="balance"], input[name="limit"], input[name="budget"]').forEach((input) => {
+    input.addEventListener('input', () => {
+      input.value = formatCurrencyInput(input.value);
+    });
+    input.addEventListener('focus', () => {
+      if (!input.value.trim()) input.value = formatCurrencyInput('0');
+      input.select();
+    });
+  });
+
   document.querySelectorAll('[data-amount-preset]').forEach((button) => {
     button.addEventListener('click', () => {
       const form = button.closest('[data-transaction-form]');
@@ -665,6 +704,28 @@ function bindViewEvents() {
         state.reportType = button.dataset.reportType;
       });
     });
+  });
+
+  document.querySelectorAll('[data-assistant-suggestion]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const suggestion = button.dataset.assistantSuggestion;
+      if (suggestion === 'Registrar gasto') {
+        state.quickType = 'EXPENSE';
+        state.sheetOpen = true;
+        renderApp();
+        return;
+      }
+      showToast(`Din recebeu: ${suggestion}`);
+    });
+  });
+
+  document.querySelector('[data-assistant-form]')?.addEventListener('submit', (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const message = String(new FormData(form).get('message') || '').trim();
+    if (!message) return;
+    form.reset();
+    showToast('Din vai responder com base nos seus dados.');
   });
 }
 
@@ -903,6 +964,7 @@ async function handleWalletSubmit(event) {
       scope: state.scope,
     });
     await loadData();
+    state.manageModal = '';
     renderApp();
     showToast('Conta ou carteira criada.');
   } catch (error) {
@@ -923,6 +985,7 @@ async function handleCardSubmit(event) {
       scope: state.scope,
     });
     await loadData();
+    state.manageModal = '';
     renderApp();
     showToast('Cartão criado.');
   } catch (error) {

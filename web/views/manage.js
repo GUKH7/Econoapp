@@ -71,10 +71,10 @@ export function moreView() {
         <div class="panel-title"><h2>Gerenciar</h2></div>
         <div class="menu-list">
           <button class="menu-item" type="button" data-tab-jump="launch"><span class="tab-icon">+/-</span><span>Lançamentos</span><span>›</span></button>
-          <button class="menu-item" type="button" data-manage-section="accounts"><span class="tab-icon">${icon('wallet')}</span><span>Contas e carteiras</span><span>›</span></button>
-          <button class="menu-item" type="button" data-manage-section="cards"><span class="tab-icon">${icon('card')}</span><span>Cartões de crédito</span><span>›</span></button>
+          <button class="menu-item" type="button" data-manage-section="accounts"><span class="tab-icon">${icon('wallet')}</span><span>Contas e cartões</span><span>›</span></button>
           <button class="menu-item" type="button" data-manage-section="categories"><span class="tab-icon">${icon('tag')}</span><span>Categorias e canais</span><span>›</span></button>
           <button class="menu-item" type="button" data-tab-jump="budget"><span class="tab-icon">${icon('target')}</span><span>Limites e metas</span><span>›</span></button>
+          <button class="menu-item" type="button" data-tab-jump="assistant"><span class="tab-icon">${icon('chat')}</span><span>Din / Assistente</span><span>›</span></button>
           ${
             state.user?.isWhatsappAdmin
               ? `<button class="menu-item" type="button" data-manage-section="whatsapp"><span class="tab-icon">${icon('chat')}</span><span>WhatsApp</span><span>›</span></button>`
@@ -91,9 +91,12 @@ export function manageView() {
   const scopedWallets = state.wallets.filter((wallet) => !wallet.scope || wallet.scope === state.scope);
   const scopedCards = state.cards.filter((card) => !card.scope || card.scope === state.scope);
   const section = state.manageSection || 'accounts';
+  const activeAccountTab = state.manageAccountTab || 'accounts';
+  const bankAccounts = scopedWallets.filter((wallet) => wallet.type === 'BANK');
+  const cashWallets = scopedWallets.filter((wallet) => wallet.type !== 'BANK');
+  const totalBalance = scopedWallets.reduce((sum, wallet) => sum + Number(wallet.balance || 0), 0);
   const sections = [
-    { id: 'accounts', label: 'Contas', meta: `${scopedWallets.length} cadastradas`, icon: icon('wallet') },
-    { id: 'cards', label: 'Cartões', meta: `${scopedCards.length} cadastrados`, icon: icon('card') },
+    { id: 'accounts', label: 'Contas', meta: `${scopedWallets.length + scopedCards.length} itens`, icon: icon('wallet') },
     { id: 'categories', label: 'Categorias', meta: `${state.categories.length} itens`, icon: icon('tag') },
     { id: 'channels', label: 'Canais', meta: `${state.channels.length} meios`, icon: icon('shop') },
     ...(state.user?.isWhatsappAdmin
@@ -111,45 +114,35 @@ export function manageView() {
     )
     .join('');
 
+  const accountRows = {
+    accounts: bankAccounts,
+    wallets: cashWallets,
+  };
+  const selectedWallets = accountRows[activeAccountTab] || bankAccounts;
+  const accountEmpty = activeAccountTab === 'wallets' ? 'Cadastre uma carteira para dinheiro físico ou caixa.' : 'Cadastre seus bancos e contas correntes.';
+  const accountAddLabel = activeAccountTab === 'cards' ? 'Adicionar cartão' : activeAccountTab === 'wallets' ? 'Adicionar carteira' : 'Adicionar conta';
+  const accountModalType = activeAccountTab === 'cards' ? 'card' : activeAccountTab === 'wallets' ? 'wallet' : 'account';
+
   const accountsPanel = `
     <article class="card manage-panel">
-      <div class="panel-title"><h2>Bancos e carteiras</h2></div>
-      <div class="total-strip">
-        <span>Saldo total</span>
-        <strong>${money.format(scopedWallets.reduce((sum, wallet) => sum + Number(wallet.balance || 0), 0))}</strong>
+      <div class="panel-title">
+        <div>
+          <span class="eyebrow">Saldo total</span>
+          <h2>${money.format(totalBalance)}</h2>
+        </div>
+        <button class="icon-button" type="button" data-manage-modal="${accountModalType}" aria-label="${accountAddLabel}">+</button>
       </div>
-      <form class="form" data-wallet-form>
-        <label class="field">Nome<input name="name" required placeholder="Ex: Nubank, Inter, Dinheiro" /></label>
-        <label class="field">Tipo
-          <select name="type">
-            <option value="BANK">Banco</option>
-            <option value="WALLET">Carteira</option>
-          </select>
-        </label>
-        <label class="field">Saldo inicial<input name="balance" inputmode="decimal" placeholder="0,00" /></label>
-        <button class="button" type="submit">Salvar conta</button>
-      </form>
+      <div class="account-tabs" role="tablist" aria-label="Contas e cartões">
+        ${accountTab('accounts', 'Contas', activeAccountTab)}
+        ${accountTab('cards', 'Cartões', activeAccountTab)}
+        ${accountTab('wallets', 'Carteiras', activeAccountTab)}
+      </div>
       <div class="surface-list">
-        ${scopedWallets.map((wallet) => `<div class="row"><div><div class="row-title">${escapeHtml(wallet.name)}</div><div class="row-meta">${wallet.type === 'BANK' ? 'Banco' : 'Carteira'} ${scopeLabel()} - ${money.format(Number(wallet.balance || 0))}</div></div></div>`).join('') || '<p class="empty">Cadastre bancos ou carteiras para este escopo.</p>'}
-      </div>
-    </article>
-  `;
-
-  const cardsPanel = `
-    <article class="card manage-panel">
-      <div class="panel-title"><h2>Cartões de crédito</h2></div>
-      <div class="credit-preview">
-        <span>EconoApp</span>
-        <strong>**** 1234</strong>
-        <small>Crédito</small>
-      </div>
-      <form class="form" data-card-form>
-        <label class="field">Nome<input name="name" required placeholder="Ex: Nubank crédito, Inter Black" /></label>
-        <label class="field">Limite<input name="limit" inputmode="decimal" placeholder="0,00" /></label>
-        <button class="button" type="submit">Salvar cartão</button>
-      </form>
-      <div class="surface-list">
-        ${scopedCards.map((card) => `<div class="row"><div><div class="row-title">${escapeHtml(card.name)}</div><div class="row-meta">Cartão ${scopeLabel()} - limite ${money.format(Number(card.limit || 0))}</div></div></div>`).join('') || '<p class="empty">Cadastre cartões para registrar gastos no crédito.</p>'}
+        ${
+          activeAccountTab === 'cards'
+            ? accountCardRows(scopedCards)
+            : selectedWallets.map(walletRow).join('') || `<p class="empty">${accountEmpty}</p>`
+        }
       </div>
     </article>
   `;
@@ -221,7 +214,7 @@ export function manageView() {
 
   const panels = {
     accounts: accountsPanel,
-    cards: cardsPanel,
+    cards: accountsPanel,
     categories: categoriesPanel,
     channels: channelsPanel,
     whatsapp: whatsappPanel,
@@ -232,7 +225,89 @@ export function manageView() {
       <button class="back-link" type="button" data-manage-back>‹ Voltar</button>
       <div class="manage-grid">${nav}</div>
       ${state.user?.isWhatsappAdmin || section !== 'whatsapp' ? panels[section] || accountsPanel : accountsPanel}
+      ${manageModalHtml()}
     </section>
+  `;
+}
+
+function accountTab(id, label, activeTab) {
+  return `<button class="${activeTab === id ? 'active' : ''}" type="button" data-account-tab="${id}">${label}</button>`;
+}
+
+function walletRow(wallet) {
+  return `
+    <div class="row account-row">
+      <span class="row-icon neutral-bg">${icon('wallet')}</span>
+      <div class="row-main">
+        <div class="row-title">${escapeHtml(wallet.name)}</div>
+        <div class="row-meta">${wallet.type === 'BANK' ? 'Banco' : 'Carteira'} - ${scopeLabel()}</div>
+      </div>
+      <strong>${money.format(Number(wallet.balance || 0))}</strong>
+    </div>
+  `;
+}
+
+function accountCardRows(cards) {
+  return cards
+    .map(
+      (card) => `
+        <div class="row account-row">
+          <span class="row-icon neutral-bg">${icon('card')}</span>
+          <div class="row-main">
+            <div class="row-title">${escapeHtml(card.name)}</div>
+            <div class="row-meta">Cartão de crédito - ${scopeLabel()}</div>
+          </div>
+          <div class="account-limits">
+            <strong>${money.format(Number(card.currentBill || 0))}</strong>
+            <small>Limite ${money.format(Number(card.limit || 0))}</small>
+          </div>
+        </div>
+      `,
+    )
+    .join('') || '<p class="empty">Cadastre cartões para registrar gastos no crédito.</p>';
+}
+
+function manageModalHtml() {
+  if (!state.manageModal) return '';
+  const isCard = state.manageModal === 'card';
+  const isWallet = state.manageModal === 'wallet';
+  const title = isCard ? 'Novo cartão' : isWallet ? 'Nova carteira' : 'Nova conta';
+  const form = isCard ? cardFormHtml() : walletFormHtml(isWallet ? 'WALLET' : 'BANK');
+
+  return `
+    <div class="sheet-backdrop" data-manage-modal-close></div>
+    <section class="bottom-sheet manage-bottom-sheet" role="dialog" aria-modal="true" aria-label="${title}">
+      <div class="sheet-handle"></div>
+      <div class="panel-title sheet-title">
+        <div>
+          <span>${scopeLabel()}</span>
+          <h2>${title}</h2>
+        </div>
+        <button class="icon-button" type="button" data-manage-modal-close aria-label="Fechar">x</button>
+      </div>
+      ${form}
+    </section>
+  `;
+}
+
+function walletFormHtml(type) {
+  return `
+    <form class="form" data-wallet-form>
+      <label class="field">Nome<input name="name" required placeholder="Ex: Nubank, Inter, Dinheiro" /></label>
+      <input type="hidden" name="type" value="${type}" />
+      <label class="field">Saldo inicial<input name="balance" inputmode="decimal" placeholder="R$ 0,00" /></label>
+      <button class="button" type="submit">${type === 'BANK' ? 'Salvar conta' : 'Salvar carteira'}</button>
+    </form>
+  `;
+}
+
+function cardFormHtml() {
+  return `
+    <form class="form" data-card-form>
+      <label class="field">Nome<input name="name" required placeholder="Ex: Nubank crédito, Inter Black" /></label>
+      <label class="field">Limite<input name="limit" inputmode="decimal" placeholder="R$ 0,00" /></label>
+      <button class="button" type="submit">Salvar cartão</button>
+    </form>
   `;
 }
 
