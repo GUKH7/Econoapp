@@ -8,11 +8,36 @@ export function assistantView() {
   const transactions = scopedTransactions();
   const topExpense = totalsByCategory('EXPENSE').sort((a, b) => b.total - a.total)[0];
   const balanceTone = totals.balance >= 0 ? 'positivo' : 'negativo';
-  const topExpensePercent = topExpense && totals.expense > 0 ? Math.round((topExpense.total / totals.expense) * 100) : 0;
+  const topExpensePercent =
+    topExpense && totals.expense > 0 ? Math.round((topExpense.total / totals.expense) * 100) : 0;
   const topExpenseCopy = topExpense
     ? `${topExpense.name} concentra ${topExpensePercent}% dos seus gastos em ${currentMonth}.`
     : `Ainda não há gastos suficientes para eu identificar uma categoria principal em ${currentMonth}.`;
   const nextAction = nextBestAction(totals, topExpense, transactions.length);
+  const conversationHtml = state.assistantMessages.length
+    ? state.assistantMessages.map(assistantMessageHtml).join('')
+    : '';
+  const loadingHtml = state.assistantLoading
+    ? `
+        <article class="chat-row bot assistant-typing-row">
+          <span class="assistant-avatar">${icon('chat')}</span>
+          <div class="chat-bubble assistant-typing">
+            <span></span><span></span><span></span>
+          </div>
+        </article>
+      `
+    : '';
+  const errorHtml = state.assistantError
+    ? `
+        <article class="chat-row bot">
+          <span class="assistant-avatar">${icon('chat')}</span>
+          <div class="chat-bubble assistant-error">
+            <strong>Não consegui responder agora</strong>
+            <p>${escapeHtml(state.assistantError)}</p>
+          </div>
+        </article>
+      `
+    : '';
 
   return `
     <section class="assistant-chat-screen">
@@ -54,10 +79,10 @@ export function assistantView() {
 
         <div class="quick-suggestions">
           <span>Sugestões rápidas</span>
-          <button type="button" data-assistant-action="reports">Quanto gastei este mês?</button>
+          <button type="button" data-assistant-message="Quanto gastei este mês?">Quanto gastei este mês?</button>
           <button type="button" data-assistant-action="expense">Registrar gasto</button>
           <button type="button" data-assistant-action="income">Registrar receita</button>
-          <button type="button" data-assistant-action="business">Resumo do negócio</button>
+          <button type="button" data-assistant-message="Resumo do meu negócio">Resumo do negócio</button>
         </div>
 
         <article class="chat-row bot">
@@ -74,12 +99,27 @@ export function assistantView() {
             </button>
           </div>
         </article>
+        ${conversationHtml}
+        ${loadingHtml}
+        ${errorHtml}
       </div>
       <form class="assistant-input" data-assistant-form>
-        <input name="message" placeholder="Ex: registrar gasto, ver relatórios, resumo do negócio..." autocomplete="off" />
-        <button type="submit" aria-label="Enviar mensagem">${icon('chat')}</button>
+        <input name="message" placeholder="Pergunte ou registre algo com o Din..." autocomplete="off" ${state.assistantLoading ? 'disabled' : ''} />
+        <button type="submit" aria-label="Enviar mensagem" ${state.assistantLoading ? 'disabled' : ''}>${icon('chat')}</button>
       </form>
     </section>
+  `;
+}
+
+function assistantMessageHtml(message) {
+  const role = message.role === 'user' ? 'user' : 'bot';
+  return `
+    <article class="chat-row ${role}">
+      ${role === 'bot' ? `<span class="assistant-avatar">${icon('chat')}</span>` : ''}
+      <div class="chat-bubble">
+        <p>${escapeHtml(message.text).replace(/\n/g, '<br>')}</p>
+      </div>
+    </article>
   `;
 }
 

@@ -712,6 +712,12 @@ function bindViewEvents() {
     });
   });
 
+  document.querySelectorAll('[data-assistant-message]').forEach((button) => {
+    button.addEventListener('click', () => {
+      handleAssistantMessage(button.dataset.assistantMessage || '');
+    });
+  });
+
   document.querySelector('[data-assistant-form]')?.addEventListener('submit', (event) => {
     event.preventDefault();
     const form = event.currentTarget;
@@ -768,7 +774,27 @@ function handleAssistantAction(action) {
   showToast('Din está pronto para ajudar.');
 }
 
-function handleAssistantMessage(message) {
+async function handleAssistantMessage(message) {
+  state.assistantMessages = [...state.assistantMessages, { role: 'user', text: message }].slice(-12);
+  state.assistantLoading = true;
+  state.assistantError = '';
+  renderApp();
+
+  try {
+    const response = await api().assistantMessage({ message });
+    const reply = response.data?.reply || 'Entendi. Como quer continuar?';
+    state.assistantMessages = [...state.assistantMessages, { role: 'assistant', text: reply }].slice(-12);
+    state.assistantLoading = false;
+    state.assistantError = '';
+    await loadData();
+    renderApp();
+    return;
+  } catch (error) {
+    state.assistantLoading = false;
+    state.assistantError = error.message;
+    renderApp();
+  }
+
   const normalized = message.toLowerCase();
   if (/\b(gasto|gastei|despesa|paguei|compra)\b/.test(normalized)) {
     handleAssistantAction('expense');

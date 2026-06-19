@@ -18,6 +18,7 @@ import { HealthModule } from '@/modules/health/health.module';
 import { TelegramModule } from '@/modules/telegram/telegram.module';
 import { WhatsappModule } from '@/modules/whatsapp/whatsapp.module';
 import { BudgetModule } from '@/modules/budgets/budget.module';
+import { AssistantModule } from '@/modules/assistant/assistant.module';
 
 @Module({
   imports: [
@@ -53,6 +54,7 @@ import { BudgetModule } from '@/modules/budgets/budget.module';
     CategoryModule,
     AccountModule,
     BudgetModule,
+    AssistantModule,
 
     TelegramModule,
     WhatsappModule,

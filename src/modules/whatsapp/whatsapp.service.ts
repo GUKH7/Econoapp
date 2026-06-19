@@ -275,6 +275,79 @@ export class WhatsappService {
     return { phone, reply };
   }
 
+  async handleAppMessage(userId: string, message: string): Promise<{ reply: string }> {
+    const cleanMessage = message.trim();
+    if (!cleanMessage) {
+      throw new BadRequestException('Informe uma mensagem para o Din.');
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, name: true, phone: true },
+    });
+    if (!user) {
+      throw new BadRequestException('Usuario nao encontrado.');
+    }
+
+    const phone = user.phone ? this.normalizeRecipientPhone(user.phone) : `app-${user.id}`;
+    const conversation = await this.getConversation(user.id, phone);
+    const recentMessages = this.parseRecentMessages(conversation.recentMessages);
+    const pendingValue = this.conversationPendingValue(conversation);
+
+    if (this.isMenuCommand(cleanMessage)) {
+      await this.clearPendingMessage(user.id);
+      const reply = this.helpReply();
+      await this.appendConversation(user.id, phone, recentMessages, cleanMessage, reply);
+      return { reply };
+    }
+
+    const paymentDraft = this.parsePaymentDraft(pendingValue);
+    if (paymentDraft) {
+      const reply = await this.handlePaymentSelection(user.id, phone, cleanMessage, paymentDraft);
+      await this.appendConversation(user.id, phone, recentMessages, cleanMessage, reply);
+      return { reply };
+    }
+
+    const mutationDraft = this.parseMutationDraft(pendingValue);
+    if (mutationDraft) {
+      const reply = await this.handleMutationConfirmation(user.id, cleanMessage, mutationDraft);
+      await this.appendConversation(user.id, phone, recentMessages, cleanMessage, reply);
+      return { reply };
+    }
+
+    const transactionDraft = this.parseTransactionDraft(pendingValue);
+    if (transactionDraft) {
+      const reply = await this.handleTransactionConfirmation(user.id, cleanMessage, transactionDraft);
+      await this.appendConversation(user.id, phone, recentMessages, cleanMessage, reply);
+      return { reply };
+    }
+
+    if (this.isCancelCommand(cleanMessage)) {
+      await this.clearPendingMessage(user.id);
+      const reply = pendingValue || this.pendingDetailsText(conversation)
+        ? 'Conversa cancelada. Nenhuma informacao pendente foi salva.'
+        : 'Nao ha nenhuma conversa pendente para cancelar.';
+      await this.appendConversation(user.id, phone, recentMessages, cleanMessage, reply);
+      return { reply };
+    }
+
+    const pendingDetails = this.pendingDetailsText(conversation);
+    const textToProcess = pendingDetails ? `${pendingDetails}. ${cleanMessage}` : cleanMessage;
+    if (pendingValue || pendingDetails) {
+      await this.clearPendingMessage(user.id);
+    }
+
+    const reply = await this.processUserMessage(
+      user.id,
+      user.name,
+      phone,
+      textToProcess,
+      recentMessages,
+    );
+    await this.appendConversation(user.id, phone, recentMessages, cleanMessage, reply);
+    return { reply };
+  }
+
   private async processUserMessage(
     userId: string,
     userName: string,

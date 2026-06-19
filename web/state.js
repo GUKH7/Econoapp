@@ -35,6 +35,9 @@ export const state = {
   whatsappStatus: null,
   whatsappLoading: false,
   whatsappError: '',
+  assistantMessages: [],
+  assistantLoading: false,
+  assistantError: '',
 };
 
 export const app = document.querySelector('#app');
@@ -75,4 +78,7 @@ export function clearSession() {
   localStorage.removeItem('econoapp.refreshToken');
   state.accessToken = '';
   state.refreshToken = '';
+  state.assistantMessages = [];
+  state.assistantLoading = false;
+  state.assistantError = '';
 }
