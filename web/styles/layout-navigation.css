@@ -272,7 +272,7 @@
   transform: translateY(-2px);
 }
 
-.fab {
+.tabs .fab {
   align-items: center;
   align-self: center;
   background: var(--green);
@@ -282,12 +282,15 @@
   color: white;
   display: flex;
   font-size: 32px;
+  font-weight: 500;
+  gap: 0;
   grid-column: 3;
   height: var(--fab-size);
   justify-content: center;
   justify-self: center;
   line-height: 1;
   min-height: var(--fab-size);
+  padding: 0;
   position: relative;
   transform: none;
   width: var(--fab-size);
@@ -295,11 +298,11 @@
   z-index: 40;
 }
 
-.fab:active {
+.tabs .fab:active {
   transform: scale(0.94);
 }
 
-.fab.open {
+.tabs .fab.open {
   background: var(--text);
   transform: rotate(45deg);
 }
@@ -646,6 +649,14 @@
   .tabs button {
     font-size: 10px;
     min-height: 50px;
+  }
+
+  .tabs .fab {
+    border-radius: 999px;
+    font-size: 32px;
+    height: var(--fab-size);
+    min-height: var(--fab-size);
+    width: var(--fab-size);
   }
 
   .tab-icon {
