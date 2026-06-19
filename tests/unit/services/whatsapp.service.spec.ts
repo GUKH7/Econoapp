@@ -203,7 +203,7 @@ describe('WhatsappService', () => {
       text: 'Gastei R$ 35 no mercado',
     });
 
-    expect(result.reply).toContain('Confirme o lançamento');
+    expect(result.reply).toContain('Despesa pronta para salvar');
     expect(result.reply).toContain('Título: Compra no mercado');
     expect(transactionServiceMock.create).not.toHaveBeenCalled();
     expect(prismaMock.user.findFirst).toHaveBeenCalledWith({
@@ -416,7 +416,7 @@ describe('WhatsappService', () => {
       from: '5511999999999',
       text: 'Cartão Nubank',
     });
-    expect(draftReply.reply).toContain('Forma de pagamento: Cartão - Nubank');
+    expect(draftReply.reply).toContain('Pagamento: Cartão - Nubank');
 
     const transactionPending = prismaMock.whatsappConversation.upsert.mock.calls
       .map(([input]) => input.update?.pendingText)
@@ -573,7 +573,7 @@ describe('WhatsappService', () => {
         }),
       }),
     );
-    expect(reply.reply).toContain('Forma de pagamento: Carteira - Dinheiro Loja');
+    expect(reply.reply).toContain('Pagamento: Carteira - Dinheiro Loja');
     expect(reply.reply).not.toContain('Não reconheci');
   });
 
@@ -631,7 +631,7 @@ describe('WhatsappService', () => {
       from: '5511999999999',
       text: 'Pix',
     });
-    expect(draftReply.reply).toContain('Receber em: Banco/Pix - Nubank');
+    expect(draftReply.reply).toContain('Pagamento: Banco/Pix - Nubank');
 
     const transactionPending = prismaMock.whatsappConversation.upsert.mock.calls
       .map(([input]) => input.update?.pendingText)
@@ -716,6 +716,72 @@ describe('WhatsappService', () => {
       .map(([input]) => input.update?.pendingText)
       .find((value) => typeof value === 'string' && value.startsWith('__TRANSACTION_CONFIRMATION__:'));
     expect(updatedPending).toContain('"categoryHint":"Itens De Higiene"');
+  });
+
+  it('atualiza valor titulo modo e pagamento do rascunho com comandos naturais', async () => {
+    fetchMock.mockImplementation(async (url: string) => ({
+      ok: true,
+      json: vi.fn().mockResolvedValue(
+        url.endsWith('/status') ? { status: 'conectado' } : { success: true },
+      ),
+    }));
+    prismaMock.user.findFirst.mockResolvedValue({
+      id: 'user-1',
+      name: 'Gustavo',
+      phone: '11999999999',
+    });
+    prismaMock.financialAccount.findMany.mockResolvedValue([
+      { id: 'wallet-main', name: 'Carteira', type: 'WALLET' },
+    ]);
+    prismaMock.creditCard.findMany.mockResolvedValue([]);
+    const pendingText =
+      '__TRANSACTION_CONFIRMATION__:{"description":"Compra de toalha","amount":20,"type":"EXPENSE","scope":"PERSONAL","categoryHint":"Cuidados pessoais","paymentLabel":"Banco/Pix - Nubank","accountId":"account-bank"}';
+
+    prismaMock.whatsappConversation.upsert.mockResolvedValue({
+      recentMessages: [],
+      pendingText,
+    });
+
+    const valueReply = await service.handleWebhook({
+      from: '5511999999999',
+      text: 'Altere o valor para R$ 25',
+    });
+    expect(valueReply.reply).toContain('25,00');
+    expect(valueReply.reply).toContain('Valor atualizado');
+
+    prismaMock.whatsappConversation.upsert.mockResolvedValue({
+      recentMessages: [],
+      pendingText,
+    });
+    const titleReply = await service.handleWebhook({
+      from: '5511999999999',
+      text: 'Mude o título para compra de toalha de banho',
+    });
+    expect(titleReply.reply).toContain('Título: Compra de toalha de banho');
+    expect(titleReply.reply).toContain('Título atualizado');
+
+    prismaMock.whatsappConversation.upsert.mockResolvedValue({
+      recentMessages: [],
+      pendingText,
+    });
+    const scopeReply = await service.handleWebhook({
+      from: '5511999999999',
+      text: 'Coloque como negócio',
+    });
+    expect(scopeReply.reply).toContain('Modo: Negócio');
+    expect(scopeReply.reply).toContain('Pagamento: não informado');
+    expect(scopeReply.reply).toContain('Modo atualizado');
+
+    prismaMock.whatsappConversation.upsert.mockResolvedValue({
+      recentMessages: [],
+      pendingText,
+    });
+    const paymentReply = await service.handleWebhook({
+      from: '5511999999999',
+      text: 'Troque a forma de pagamento para carteira',
+    });
+    expect(paymentReply.reply).toContain('Pagamento: Carteira - Carteira');
+    expect(paymentReply.reply).toContain('Pagamento atualizado');
   });
 
   it('pergunta se a venda e pessoal ou do negocio antes de solicitar o canal', async () => {
@@ -838,7 +904,7 @@ describe('WhatsappService', () => {
       from: '5511999999999',
       text: 'Venda direta',
     });
-    expect(draftReply.reply).toContain('Confirme o lançamento');
+    expect(draftReply.reply).toContain('Receita pronta para salvar');
     expect(transactionServiceMock.create).not.toHaveBeenCalled();
 
     const pendingText = prismaMock.whatsappConversation.upsert.mock.calls
@@ -929,7 +995,7 @@ describe('WhatsappService', () => {
       from: '5511999999999',
       text: 'Pessoal',
     });
-    expect(draftReply.reply).toContain('Confirme o lançamento');
+    expect(draftReply.reply).toContain('Receita pronta para salvar');
     expect(transactionServiceMock.create).not.toHaveBeenCalled();
 
     const pendingText = prismaMock.whatsappConversation.upsert.mock.calls
@@ -1022,7 +1088,7 @@ describe('WhatsappService', () => {
       from: '5511999999999',
       text: 'Foi um serviço que eu fiz',
     });
-    expect(draftReply.reply).toContain('Confirme o lançamento');
+    expect(draftReply.reply).toContain('Receita pronta para salvar');
     expect(transactionServiceMock.create).not.toHaveBeenCalled();
 
     const pendingText = prismaMock.whatsappConversation.upsert.mock.calls

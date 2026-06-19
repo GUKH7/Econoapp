@@ -54,6 +54,12 @@ type WhatsappPaymentDraft = {
     type: FinancialAccountType;
   };
 };
+type WhatsappDraftEdit =
+  | { kind: 'amount'; amount: number; label: 'Valor' }
+  | { kind: 'title'; title: string; label: 'Título' }
+  | { kind: 'category'; category: string; label: 'Categoria' }
+  | { kind: 'scope'; scope: FinancialScope; label: 'Modo' }
+  | { kind: 'payment'; query?: string; label: 'Pagamento' };
 type WhatsappMutationDraft =
   | {
       action: 'UPDATE_AMOUNT';
@@ -1228,12 +1234,16 @@ export class WhatsappService {
 
   private transactionDraftConfirmation(draft: WhatsappTransactionDraft): string {
     const type = draft.type === TransactionType.EXPENSE ? 'Despesa' : 'Receita';
+    const headline =
+      draft.type === TransactionType.EXPENSE
+        ? 'Despesa pronta para salvar'
+        : 'Receita pronta para salvar';
     return [
       draft.possibleDuplicate ? '⚠️ Possível lançamento duplicado' : '',
       draft.possibleDuplicate
         ? `Já existe: ${draft.possibleDuplicate.description} — ${this.formatMoney(draft.possibleDuplicate.amount)} em ${this.formatDateTime(draft.possibleDuplicate.date)}.`
         : '',
-      'Confirme o lançamento:',
+      headline,
       '',
       `Tipo: ${type}`,
       `Título: ${draft.description}`,
@@ -1246,13 +1256,13 @@ export class WhatsappService {
       `Categoria: ${draft.categoryHint}`,
       draft.channelHint ? `Canal: ${draft.channelHint}` : '',
       draft.paymentLabel
-        ? `${draft.type === TransactionType.INCOME ? 'Receber em' : 'Forma de pagamento'}: ${draft.paymentLabel}`
-        : 'Conta/forma de pagamento: não informada',
+        ? `Pagamento: ${draft.paymentLabel}`
+        : 'Pagamento: não informado',
       `Modo: ${draft.scope === FinancialScope.BUSINESS ? 'Negócio' : 'Pessoal'}`,
       '',
       draft.possibleDuplicate
         ? 'Para criar mesmo assim, responda: Salvar novamente. Ou responda: Cancelar.'
-        : 'Responda: Confirmar, Editar ou Cancelar.',
+        : 'Responda: Confirmar, Editar ou Cancelar. Você também pode pedir: "altere o valor", "mude o título", "troque o pagamento" ou "coloque como negócio".',
     ]
       .filter(Boolean)
       .join('\n');
@@ -1277,14 +1287,39 @@ export class WhatsappService {
       return 'Certo. Envie novamente o lançamento com as informações corrigidas, incluindo valor e descrição.';
     }
 
-    const categoryUpdate = this.parseDraftCategoryUpdate(message);
-    if (categoryUpdate) {
-      const updatedDraft: WhatsappTransactionDraft = {
-        ...draft,
-        categoryHint: categoryUpdate,
-      };
+    const draftEdit = this.parseDraftEdit(message);
+    if (draftEdit) {
+      if (draftEdit.kind === 'payment') {
+        const paymentOptions = await this.findPaymentOptions(userId, draft.scope, draft.type);
+        if (!paymentOptions.length) {
+          return `${this.transactionDraftConfirmation(draft)}\n\nVocê ainda não tem contas, carteiras ou cartões cadastrados para trocar o pagamento.`;
+        }
+        const selectedPayment = this.selectPaymentOption(
+          draftEdit.query ?? message,
+          paymentOptions,
+        );
+        if (selectedPayment) {
+          const draftWithoutPayment = this.clearDraftPayment(draft);
+          const updatedDraft: WhatsappTransactionDraft = {
+            ...draftWithoutPayment,
+            paymentLabel: selectedPayment.label,
+            ...(selectedPayment.kind === 'ACCOUNT'
+              ? { accountId: selectedPayment.id }
+              : { creditCardId: selectedPayment.id }),
+          };
+          await this.setPendingTransactionDraft(userId, phone, updatedDraft);
+          return `${this.transactionDraftConfirmation(updatedDraft)}\n\nPagamento atualizado.`;
+        }
+        await this.setPendingPaymentDraft(userId, phone, {
+          transaction: this.clearDraftPayment(draft),
+          options: paymentOptions,
+        });
+        return `${this.paymentSelectionQuestion(draft.type, paymentOptions)}\n\nEscolha a nova forma de pagamento para esse lançamento.`;
+      }
+
+      const updatedDraft = this.applyDraftEdit(draft, draftEdit);
       await this.setPendingTransactionDraft(userId, phone, updatedDraft);
-      return `${this.transactionDraftConfirmation(updatedDraft)}\n\nCategoria atualizada.`;
+      return `${this.transactionDraftConfirmation(updatedDraft)}\n\n${this.draftEditUpdatedMessage(draftEdit)}.`;
     }
 
     if (draft.possibleDuplicate && !confirmsDuplicate) {
@@ -1527,38 +1562,7 @@ export class WhatsappService {
       return this.createTransactionFromMessage(userId, phone, message);
     }
 
-    const numericIndex = Number.parseInt(normalized, 10);
-    let selected =
-      Number.isInteger(numericIndex) && String(numericIndex) === normalized
-        ? draft.options[numericIndex - 1]
-        : draft.options.find((option) => {
-            const name = this.normalizeText(option.name);
-            const label = this.normalizeText(option.label);
-            return name === normalized || label.includes(normalized) || normalized.includes(name);
-          });
-
-    if (!selected && normalized === 'pix') {
-      const bankAccounts = draft.options.filter(
-        (option) => option.kind === 'ACCOUNT' && option.accountType === 'BANK',
-      );
-      if (bankAccounts.length === 1) {
-        selected = bankAccounts[0];
-      }
-    }
-    if (!selected && normalized === 'carteira') {
-      const wallets = draft.options.filter(
-        (option) => option.kind === 'ACCOUNT' && option.accountType === 'WALLET',
-      );
-      if (wallets.length === 1) {
-        selected = wallets[0];
-      }
-    }
-    if (!selected && /^(cartao|cartao de credito)$/.test(normalized)) {
-      const cards = draft.options.filter((option) => option.kind === 'CARD');
-      if (cards.length === 1) {
-        selected = cards[0];
-      }
-    }
+    let selected = this.selectPaymentOption(message, draft.options);
 
     if (!selected) {
       const requestedPaymentType = this.requestedPaymentAccountType(message);
@@ -1608,6 +1612,44 @@ export class WhatsappService {
       this.paymentSelectionQuestion(draft.transaction.type, draft.options),
       'Se quiser abandonar esse lançamento, envie “Cancelar”. Para ver opções do Din, envie “Menu”.',
     ].join('\n\n');
+  }
+
+  private selectPaymentOption(
+    message: string,
+    options: WhatsappPaymentOption[],
+  ): WhatsappPaymentOption | undefined {
+    const normalized = this.normalizeText(message);
+    const numericIndex = Number.parseInt(normalized, 10);
+    const selected =
+      Number.isInteger(numericIndex) && String(numericIndex) === normalized
+        ? options[numericIndex - 1]
+        : options.find((option) => {
+            const name = this.normalizeText(option.name);
+            const label = this.normalizeText(option.label);
+            return name === normalized || label.includes(normalized) || normalized.includes(name);
+          });
+    if (selected) return selected;
+
+    if (normalized.includes('pix') || normalized.includes('banco')) {
+      const bankAccounts = options.filter(
+        (option) => option.kind === 'ACCOUNT' && option.accountType === 'BANK',
+      );
+      if (bankAccounts.length === 1) return bankAccounts[0];
+    }
+
+    if (normalized.includes('carteira') || normalized.includes('dinheiro')) {
+      const wallets = options.filter(
+        (option) => option.kind === 'ACCOUNT' && option.accountType === 'WALLET',
+      );
+      if (wallets.length === 1) return wallets[0];
+    }
+
+    if (/\b(cartao|cartao de credito|crédito|credito)\b/.test(normalized)) {
+      const cards = options.filter((option) => option.kind === 'CARD');
+      if (cards.length === 1) return cards[0];
+    }
+
+    return undefined;
   }
 
   private async tryCreateFinancialAccount(userId: string, message: string): Promise<string | null> {
@@ -2508,15 +2550,109 @@ export class WhatsappService {
     return extractedDescription;
   }
 
-  private parseDraftCategoryUpdate(message: string): string | null {
-    const match = message.match(
+  private parseDraftEdit(message: string): WhatsappDraftEdit | null {
+    const amountMatch = message.match(
+      /\b(?:altere|alterar|mude|mudar|troque|trocar|corrija|corrigir)\s+(?:o\s+)?valor\s+(?:para|pra|por)\s*(?:r\$)?\s*(\d+(?:[.,]\d{1,2})?)/i,
+    );
+    if (amountMatch) {
+      const amount = this.parseBrazilianAmount(amountMatch[1]!);
+      return amount > 0 ? { kind: 'amount', amount, label: 'Valor' } : null;
+    }
+
+    const titleMatch = message.match(
+      /\b(?:altere|alterar|mude|mudar|troque|trocar|corrija|corrigir)\s+(?:o\s+)?(?:titulo|título|nome|descricao|descrição)\s+(?:para|pra|por)\s+(.+)$/i,
+    );
+    if (titleMatch) {
+      const title = this.cleanDraftTextValue(titleMatch[1]!);
+      return title ? { kind: 'title', title: this.sentenceCase(title).slice(0, 100), label: 'Título' } : null;
+    }
+
+    const categoryMatch = message.match(
       /\b(?:altere|alterar|mude|mudar|troque|trocar|corrija|corrigir)\s+a?\s*categoria\s+(?:para|pra|por)\s+(.+)$/i,
     );
-    const category = match?.[1]
-      ?.replace(/[.!?]+$/g, '')
+    if (categoryMatch) {
+      const category = this.cleanDraftTextValue(categoryMatch[1]!);
+      return category
+        ? { kind: 'category', category: this.titleCase(category).slice(0, 60), label: 'Categoria' }
+        : null;
+    }
+
+    if (/\b(?:coloque|mude|altere|troque|marque)\b.*\b(?:negocio|negócio|empresa|empresarial)\b/i.test(message)) {
+      return { kind: 'scope', scope: FinancialScope.BUSINESS, label: 'Modo' };
+    }
+    if (/\b(?:coloque|mude|altere|troque|marque)\b.*\b(?:pessoal|particular)\b/i.test(message)) {
+      return { kind: 'scope', scope: FinancialScope.PERSONAL, label: 'Modo' };
+    }
+
+    const paymentMatch = message.match(
+      /\b(?:troque|trocar|altere|alterar|mude|mudar|corrija|corrigir)\b.*\b(?:pagamento|forma|conta)\b(?:\s+(?:para|pra|por)\s+(.+))?$/i,
+    );
+    if (paymentMatch) {
+      const query = paymentMatch[1] ? this.cleanDraftTextValue(paymentMatch[1]) : null;
+      return query
+        ? { kind: 'payment', query, label: 'Pagamento' }
+        : { kind: 'payment', label: 'Pagamento' };
+    }
+    const directPaymentMatch = message.match(
+      /\b(?:troque|trocar|altere|alterar|mude|mudar|corrija|corrigir)\b.*\b(?:carteira|cartao|cartão|pix|banco)\b/i,
+    );
+    if (directPaymentMatch) {
+      return { kind: 'payment', query: message, label: 'Pagamento' };
+    }
+
+    return null;
+  }
+
+  private applyDraftEdit(
+    draft: WhatsappTransactionDraft,
+    edit: Exclude<WhatsappDraftEdit, { kind: 'payment' }>,
+  ): WhatsappTransactionDraft {
+    if (edit.kind === 'amount') {
+      if (draft.installmentCount && draft.installmentCount > 1) {
+        const nextDraft: WhatsappTransactionDraft = { ...draft, amount: edit.amount };
+        delete nextDraft.totalAmount;
+        delete nextDraft.installmentCount;
+        return nextDraft;
+      }
+      return {
+        ...draft,
+        amount: edit.amount,
+      };
+    }
+    if (edit.kind === 'title') {
+      return { ...draft, description: edit.title };
+    }
+    if (edit.kind === 'category') {
+      return { ...draft, categoryHint: edit.category };
+    }
+    return { ...this.clearDraftPayment(draft), scope: edit.scope };
+  }
+
+  private clearDraftPayment(draft: WhatsappTransactionDraft): WhatsappTransactionDraft {
+    const nextDraft: WhatsappTransactionDraft = { ...draft };
+    delete nextDraft.accountId;
+    delete nextDraft.creditCardId;
+    delete nextDraft.paymentLabel;
+    return nextDraft;
+  }
+
+  private draftEditUpdatedMessage(edit: Exclude<WhatsappDraftEdit, { kind: 'payment' }>): string {
+    return edit.kind === 'category'
+      ? 'Categoria atualizada'
+      : `${edit.label} atualizado`;
+  }
+
+  private cleanDraftTextValue(value: string): string {
+    return value
+      .replace(/[.!?]+$/g, '')
       .replace(/\b(por favor|pfv|obrigado|obrigada)\b/gi, '')
+      .replace(/\s+/g, ' ')
       .trim();
-    return category ? this.titleCase(category).slice(0, 60) : null;
+  }
+
+  private sentenceCase(value: string): string {
+    const clean = value.replace(/\s+/g, ' ').trim();
+    return clean ? clean.charAt(0).toUpperCase() + clean.slice(1) : clean;
   }
 
   private buildTransactionDescription(
