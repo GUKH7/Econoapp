@@ -1617,7 +1617,7 @@ describe('WhatsappService', () => {
     const paymentPending = prismaMock.whatsappConversation.upsert.mock.calls
       .map(([input]) => input.update?.pendingText)
       .find((value) => typeof value === 'string' && value.startsWith('__PAYMENT_SELECTION__:'));
-    expect(paymentPending).toContain('"categoryHint":"Toalha Nova"');
+    expect(paymentPending).toContain('"categoryHint":"Cuidados pessoais"');
     expect(paymentPending).toContain('"description":"Compra de toalha nova"');
   });
 

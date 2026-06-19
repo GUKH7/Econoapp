@@ -472,13 +472,17 @@ export class WhatsappService {
       message,
       extracted.type as TransactionType,
     );
+    const followUpCategoryHint = this.inferExpenseCategoryFromDetail(
+      followUpDetailHint,
+      categories.map((item) => item.name),
+    );
     const categoryHint =
       extracted.type === 'INCOME' &&
       (!extractedCategoryHint ||
         this.normalizeText(extractedCategoryHint) === 'nao_especificado')
         ? this.inferIncomeCategory(message) ?? extractedCategoryHint
         : this.normalizeText(extractedCategoryHint) === 'nao_especificado'
-          ? (followUpDetailHint ?? extractedCategoryHint)
+          ? (followUpCategoryHint ?? extractedCategoryHint)
           : extractedCategoryHint;
     if (!categoryHint || this.normalizeText(categoryHint) === 'nao_especificado') {
       await this.setPendingMessage(
@@ -2424,6 +2428,36 @@ export class WhatsappService {
       .replace(/^(uma|um|o|a|os|as|no|na|nos|nas|em|com)\s+/i, '')
       .replace(/[.!?]+$/g, '')
       .trim();
+  }
+
+  private inferExpenseCategoryFromDetail(
+    detail: string | null,
+    categoryNames: string[],
+  ): string | null {
+    if (!detail) {
+      return null;
+    }
+
+    const normalized = this.normalizeText(detail);
+    const existingMatch = categoryNames.find((name) => {
+      const category = this.normalizeText(name);
+      return normalized.includes(category) || category.includes(normalized);
+    });
+    if (existingMatch) {
+      return existingMatch;
+    }
+
+    const mappings: Array<[RegExp, string]> = [
+      [/\b(mercado|supermercado|restaurante|lanche|almoco|jantar|cafe|comida|ifood)\b/, 'Alimentação'],
+      [/\b(onibus|uber|99|taxi|metro|trem|gasolina|combustivel|estacionamento)\b/, 'Transporte'],
+      [/\b(aluguel|condominio|luz|agua|internet|energia|casa|limpeza|moveis|decoracao)\b/, 'Casa'],
+      [/\b(toalha|roupa|calcado|sapato|barbeiro|cabelo|sabonete|shampoo|higiene|farmacia|perfume)\b/, 'Cuidados pessoais'],
+      [/\b(remedio|consulta|medico|dentista|exame|academia|saude)\b/, 'Saúde'],
+      [/\b(escola|curso|livro|faculdade|educacao)\b/, 'Educação'],
+      [/\b(cinema|show|viagem|bar|lazer|assinatura|netflix|spotify)\b/, 'Lazer'],
+    ];
+
+    return mappings.find(([pattern]) => pattern.test(normalized))?.[1] ?? 'Outros';
   }
 
   private preferFollowUpDescription(
