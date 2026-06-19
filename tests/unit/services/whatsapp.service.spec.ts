@@ -1564,6 +1564,63 @@ describe('WhatsappService', () => {
     });
   });
 
+  it('usa resposta natural de descricao pendente para completar um gasto', async () => {
+    fetchMock.mockImplementation(async (url: string) => ({
+      ok: true,
+      json: vi.fn().mockResolvedValue(
+        url.endsWith('/status') ? { status: 'conectado' } : { success: true },
+      ),
+    }));
+    prismaMock.user.findFirst.mockResolvedValue({
+      id: 'user-1',
+      name: 'Gustavo',
+      phone: '11999999999',
+    });
+    prismaMock.salesChannel.findMany.mockResolvedValue([]);
+    prismaMock.category.findMany.mockResolvedValue([]);
+    prismaMock.category.findFirst.mockResolvedValue(null);
+    prismaMock.financialAccount.findMany.mockResolvedValue([
+      { id: 'wallet-main', name: 'Carteira', type: 'WALLET' },
+    ]);
+    prismaMock.creditCard.findMany.mockResolvedValue([]);
+    geminiMock.extractFinancialData.mockResolvedValue({
+      amount: 20,
+      type: 'EXPENSE',
+      description: 'Gastei 20 reais',
+      categoryHint: 'nao_especificado',
+      channelHint: null,
+      confidence: 0.92,
+    });
+
+    const question = await service.handleWebhook({
+      from: '5511999999999',
+      text: 'Gastei 20 reais',
+    });
+    expect(question.reply).toContain('Com o que foi esse gasto?');
+
+    prismaMock.whatsappConversation.upsert.mockReset();
+    prismaMock.whatsappConversation.upsert.mockResolvedValue({
+      recentMessages: [],
+      pendingText: 'Gastei 20 reais',
+      pendingType: 'TRANSACTION_DETAILS',
+      pendingStep: 'WAITING_DESCRIPTION',
+      pendingData: { text: 'Gastei 20 reais' },
+    });
+
+    const reply = await service.handleWebhook({
+      from: '5511999999999',
+      text: 'Foi comprando uma toalha nova',
+    });
+
+    expect(reply.reply).toContain('Como você pagou esse gasto?');
+    expect(reply.reply).not.toContain('Com o que foi esse gasto?');
+    const paymentPending = prismaMock.whatsappConversation.upsert.mock.calls
+      .map(([input]) => input.update?.pendingText)
+      .find((value) => typeof value === 'string' && value.startsWith('__PAYMENT_SELECTION__:'));
+    expect(paymentPending).toContain('"categoryHint":"Toalha Nova"');
+    expect(paymentPending).toContain('"description":"Compra de toalha nova"');
+  });
+
   it('resume os gastos por categoria sem depender da IA', async () => {
     fetchMock.mockImplementation(async (url: string) => ({
       ok: true,

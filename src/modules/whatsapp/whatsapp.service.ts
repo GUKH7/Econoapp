@@ -468,12 +468,18 @@ export class WhatsappService {
     }
 
     const extractedCategoryHint = String(extracted.categoryHint || '').trim();
+    const followUpDetailHint = this.extractFollowUpDetailHint(
+      message,
+      extracted.type as TransactionType,
+    );
     const categoryHint =
       extracted.type === 'INCOME' &&
       (!extractedCategoryHint ||
         this.normalizeText(extractedCategoryHint) === 'nao_especificado')
         ? this.inferIncomeCategory(message) ?? extractedCategoryHint
-        : extractedCategoryHint;
+        : this.normalizeText(extractedCategoryHint) === 'nao_especificado'
+          ? (followUpDetailHint ?? extractedCategoryHint)
+          : extractedCategoryHint;
     if (!categoryHint || this.normalizeText(categoryHint) === 'nao_especificado') {
       await this.setPendingMessage(
         userId,
@@ -515,7 +521,11 @@ export class WhatsappService {
     const scope =
       explicitScope ?? this.inferScope(message, Boolean(extracted.channelHint));
     const description = this.buildTransactionDescription(
-      extracted.description,
+      this.preferFollowUpDescription(
+        extracted.description,
+        followUpDetailHint,
+        extracted.type as TransactionType,
+      ),
       categoryHint,
       extracted.type as TransactionType,
       isSale,
@@ -2387,6 +2397,55 @@ export class WhatsappService {
     ];
 
     return categories.find(([pattern]) => pattern.test(lower))?.[1] ?? null;
+  }
+
+  private extractFollowUpDetailHint(message: string, type: TransactionType): string | null {
+    if (type !== TransactionType.EXPENSE) {
+      return null;
+    }
+
+    const parts = message
+      .split(/[.!?]+/)
+      .map((part) => part.trim())
+      .filter(Boolean);
+    if (parts.length < 2) {
+      return null;
+    }
+
+    const detail = this.cleanFollowUpDetail(parts[parts.length - 1]!);
+    return detail ? this.titleCase(detail).slice(0, 60) : null;
+  }
+
+  private cleanFollowUpDetail(value: string): string {
+    return value
+      .replace(/\s+/g, ' ')
+      .replace(/^(foi|era|e|é)\s+/i, '')
+      .replace(/^(comprando|pagando|comprei|paguei|gastando|gastei com|gasto com)\s+/i, '')
+      .replace(/^(uma|um|o|a|os|as|no|na|nos|nas|em|com)\s+/i, '')
+      .replace(/[.!?]+$/g, '')
+      .trim();
+  }
+
+  private preferFollowUpDescription(
+    extractedDescription: string | undefined,
+    followUpDetailHint: string | null,
+    type: TransactionType,
+  ): string | undefined {
+    if (!followUpDetailHint || type !== TransactionType.EXPENSE) {
+      return extractedDescription;
+    }
+
+    const normalizedDescription = this.normalizeText(String(extractedDescription || ''));
+    if (
+      !normalizedDescription ||
+      /^(gastei|paguei|comprei)(?: r\$?)? ?\d+([\.,]\d{1,2})?( reais?)?$/.test(
+        normalizedDescription,
+      )
+    ) {
+      return `Compra de ${followUpDetailHint.toLocaleLowerCase('pt-BR')}`;
+    }
+
+    return extractedDescription;
   }
 
   private buildTransactionDescription(
