@@ -274,7 +274,7 @@
 
 .fab {
   align-items: center;
-  align-self: start;
+  align-self: center;
   background: var(--green);
   border: 0;
   border-radius: 999px;
@@ -289,19 +289,19 @@
   line-height: 1;
   min-height: var(--fab-size);
   position: relative;
-  transform: translateY(-50%);
+  transform: none;
   width: var(--fab-size);
   transition: transform 140ms ease, background 140ms ease;
   z-index: 40;
 }
 
 .fab:active {
-  transform: translateY(-50%) scale(0.94);
+  transform: scale(0.94);
 }
 
 .fab.open {
   background: var(--text);
-  transform: translateY(-50%) rotate(45deg);
+  transform: rotate(45deg);
 }
 
 .fab-menu {
