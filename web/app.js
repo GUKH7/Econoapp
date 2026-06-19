@@ -25,6 +25,7 @@ import {
   transactionSheet,
   viewHtml,
 } from './views.js';
+import { icon } from './views/shared.js';
 
 const MAIN_TABS = ['dashboard', 'transactions', 'reports', 'more'];
 const GOOGLE_CLIENT_ID = window.ECONOAPP_CONFIG?.googleClientId || '';
@@ -453,6 +454,7 @@ function renderApp() {
         ${tabButton('more', 'Mais')}
       </nav>
       <button class="fab ${state.fabOpen ? 'open' : ''}" type="button" data-fab aria-label="Adicionar">+</button>
+      ${state.tab === 'assistant' ? assistantInputHtml() : ''}
       ${state.fabOpen ? fabMenu() : ''}
       ${state.sheetOpen ? transactionSheet() : ''}
     </section>
@@ -460,6 +462,15 @@ function renderApp() {
 
   bindShellEvents();
   bindViewEvents();
+}
+
+function assistantInputHtml() {
+  return `
+    <form class="assistant-input" data-assistant-form>
+      <input name="message" placeholder="Pergunte ou registre algo com o Din..." autocomplete="off" ${state.assistantLoading ? 'disabled' : ''} />
+      <button type="submit" aria-label="Enviar mensagem" ${state.assistantLoading ? 'disabled' : ''}>${icon('chat')}</button>
+    </form>
+  `;
 }
 
 function bindShellEvents() {

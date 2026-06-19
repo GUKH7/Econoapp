@@ -103,10 +103,6 @@ export function assistantView() {
         ${loadingHtml}
         ${errorHtml}
       </div>
-      <form class="assistant-input" data-assistant-form>
-        <input name="message" placeholder="Pergunte ou registre algo com o Din..." autocomplete="off" ${state.assistantLoading ? 'disabled' : ''} />
-        <button type="submit" aria-label="Enviar mensagem" ${state.assistantLoading ? 'disabled' : ''}>${icon('chat')}</button>
-      </form>
     </section>
   `;
 }
