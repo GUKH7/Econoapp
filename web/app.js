@@ -450,10 +450,10 @@ function renderApp() {
       <nav class="tabs" data-tabs>
         ${tabButton('dashboard', 'Início')}
         ${tabButton('transactions', 'Fluxo')}
+        <button class="fab ${state.fabOpen ? 'open' : ''}" type="button" data-fab aria-label="Adicionar">+</button>
         ${tabButton('reports', 'Relatórios')}
         ${tabButton('more', 'Mais')}
       </nav>
-      <button class="fab ${state.fabOpen ? 'open' : ''}" type="button" data-fab aria-label="Adicionar">+</button>
       ${state.tab === 'assistant' ? assistantInputHtml() : ''}
       ${state.fabOpen ? fabMenu() : ''}
       ${state.sheetOpen ? transactionSheet() : ''}
