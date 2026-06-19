@@ -1577,7 +1577,7 @@ export class WhatsappService {
     const normalized = this.normalizeText(message);
     const wantsWallet =
       /\b(carteira|dinheiro|caixa)\b/.test(normalized) ||
-      /\b(outra|nova|novo|criar|crie|cadastrar|cadastre|adicionar|adicione)\b/.test(
+      /\b(outra|outro|nova|novo|criar|crie|cadastrar|cadastre|adicionar|adicione|nenhuma|nenhum)\b/.test(
         normalized,
       );
     const wantsBank = /\b(banco|conta|pix)\b/.test(normalized);
@@ -1590,7 +1590,7 @@ export class WhatsappService {
       wantsBank && !normalized.includes('carteira')
         ? FinancialAccountType.BANK
         : FinancialAccountType.WALLET;
-    const fallbackName = type === FinancialAccountType.BANK ? 'Conta principal' : 'Outra carteira';
+    const fallbackName = type === FinancialAccountType.BANK ? 'Conta principal' : 'Outra forma';
     const name = this.extractAccountName(message, type) || fallbackName;
     const account = await this.createFinancialAccount(userId, name, type, scope);
 
@@ -1623,8 +1623,8 @@ export class WhatsappService {
 
   private extractAccountName(message: string, type: FinancialAccountType): string | null {
     const raw = message
-      .replace(/\b(criar|crie|nova|novo|cadastrar|cadastre|adicionar|adicione|uma|um|minha|meu)\b/gi, ' ')
-      .replace(/\b(carteira|banco|conta|para|pelo|pela|com|no|na)\b/gi, ' ')
+      .replace(/\b(criar|crie|nova|novo|cadastrar|cadastre|adicionar|adicione|uma|um|minha|meu|foi|usar|use|nenhuma|nenhum|delas|deles)\b/gi, ' ')
+      .replace(/\b(carteira|banco|conta|forma|pagamento|opcao|opção|para|pelo|pela|com|no|na|de|do|da)\b/gi, ' ')
       .replace(/\s+/g, ' ')
       .trim();
 
@@ -1636,7 +1636,7 @@ export class WhatsappService {
     const generic =
       type === FinancialAccountType.BANK
         ? ['banco', 'conta', 'pix']
-        : ['carteira', 'outra carteira', 'outra'];
+        : ['carteira', 'outra carteira', 'outra', 'outro'];
     if (generic.includes(normalized)) {
       return null;
     }

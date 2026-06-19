@@ -31,7 +31,7 @@ describe('WhatsappService', () => {
       findFirst: ReturnType<typeof vi.fn>;
       findMany: ReturnType<typeof vi.fn>;
     };
-    financialAccount: { findMany: ReturnType<typeof vi.fn> };
+    financialAccount: { findMany: ReturnType<typeof vi.fn>; create: ReturnType<typeof vi.fn> };
     creditCard: { findMany: ReturnType<typeof vi.fn> };
     categoryBudget: {
       upsert: ReturnType<typeof vi.fn>;
@@ -60,7 +60,7 @@ describe('WhatsappService', () => {
       salesChannel: { findMany: vi.fn(), findFirst: vi.fn(), create: vi.fn() },
       category: { findMany: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn(), create: vi.fn() },
       transaction: { aggregate: vi.fn(), groupBy: vi.fn(), findFirst: vi.fn(), findMany: vi.fn() },
-      financialAccount: { findMany: vi.fn() },
+      financialAccount: { findMany: vi.fn(), create: vi.fn() },
       creditCard: { findMany: vi.fn() },
       categoryBudget: {
         upsert: vi.fn(),
@@ -491,6 +491,73 @@ describe('WhatsappService', () => {
 
     expect(reply.reply).toContain('lançamento em andamento');
     expect(reply.reply).toContain('Como você pagou esse gasto?');
+    expect(reply.reply).not.toContain('Não reconheci');
+  });
+
+  it('cria outra carteira quando usuario responde nenhuma delas no pagamento', async () => {
+    fetchMock.mockImplementation(async (url: string) => ({
+      ok: true,
+      json: vi.fn().mockResolvedValue(
+        url.endsWith('/status') ? { status: 'conectado' } : { success: true },
+      ),
+    }));
+    prismaMock.user.findFirst.mockResolvedValue({
+      id: 'user-1',
+      name: 'Gustavo',
+      phone: '11999999999',
+    });
+    prismaMock.salesChannel.findMany.mockResolvedValue([]);
+    prismaMock.category.findMany.mockResolvedValue([{ name: 'Casa' }]);
+    prismaMock.financialAccount.findMany.mockResolvedValue([
+      { id: 'wallet-main', name: 'Carteira', type: 'WALLET' },
+    ]);
+    prismaMock.creditCard.findMany.mockResolvedValue([]);
+    prismaMock.financialAccount.create.mockResolvedValue({
+      id: 'wallet-other',
+      name: 'Outra Forma',
+      type: 'WALLET',
+      scope: FinancialScope.PERSONAL,
+    });
+    prismaMock.category.findFirst.mockResolvedValue({
+      id: 'category-home',
+      name: 'Casa',
+    });
+    geminiMock.extractFinancialData.mockResolvedValue({
+      amount: 10,
+      type: 'EXPENSE',
+      description: 'Compra de toalha',
+      categoryHint: 'Casa',
+      channelHint: null,
+      confidence: 0.99,
+    });
+
+    await service.handleWebhook({
+      from: '5511999999999',
+      text: 'Gastei 10 reais comprando uma toalha',
+    });
+    const paymentPending = prismaMock.whatsappConversation.upsert.mock.calls
+      .map(([input]) => input.update?.pendingText)
+      .find((value) => typeof value === 'string' && value.startsWith('__PAYMENT_SELECTION__:'));
+    prismaMock.whatsappConversation.upsert.mockReset();
+    prismaMock.whatsappConversation.upsert
+      .mockResolvedValueOnce({ recentMessages: [], pendingText: paymentPending })
+      .mockResolvedValue({});
+
+    const reply = await service.handleWebhook({
+      from: '5511999999999',
+      text: 'Nenhuma delas',
+    });
+
+    expect(prismaMock.financialAccount.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          name: 'Outra Forma',
+          type: 'WALLET',
+          userId: 'user-1',
+        }),
+      }),
+    );
+    expect(reply.reply).toContain('Forma de pagamento: Carteira - Outra Forma');
     expect(reply.reply).not.toContain('Não reconheci');
   });
 
