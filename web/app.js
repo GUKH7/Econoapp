@@ -467,7 +467,7 @@ function renderApp() {
 function assistantInputHtml() {
   return `
     <form class="assistant-input" data-assistant-form>
-      <input name="message" placeholder="Pergunte ou registre algo com o Din..." autocomplete="off" ${state.assistantLoading ? 'disabled' : ''} />
+      <input name="message" placeholder="Fale com o Din..." autocomplete="off" ${state.assistantLoading ? 'disabled' : ''} />
       <button type="submit" aria-label="Enviar mensagem" ${state.assistantLoading ? 'disabled' : ''}>${icon('chat')}</button>
     </form>
   `;

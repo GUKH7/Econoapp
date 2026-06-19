@@ -1,4 +1,4 @@
-const CACHE_NAME = 'econoapp-v56';
+const CACHE_NAME = 'econoapp-v57';
 const ASSETS = [
   './index.html',
   './styles.css',
