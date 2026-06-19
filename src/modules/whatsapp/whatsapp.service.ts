@@ -425,7 +425,7 @@ export class WhatsappService {
       const classification = await this.geminiService.classifyWhatsappMessage(message, recentMessages);
 
       if (classification.confidence < 0.6) {
-        return 'Não entendi com segurança. Você quer registrar um lançamento ou consultar suas finanças?';
+        return '🤔 Não entendi com segurança. Você quer registrar um lançamento ou consultar suas finanças?';
       }
       if (classification.intent === 'TRANSACTION') {
         return this.createTransactionFromMessage(userId, phone, message);
@@ -447,12 +447,12 @@ export class WhatsappService {
       }
     } catch {
       if (this.isGreeting(message)) {
-        return `Olá, ${userName.split(/\s+/)[0]}. Como posso ajudar com suas finanças hoje?`;
+        return `👋 Olá, ${userName.split(/\s+/)[0]}. Como posso ajudar com suas finanças hoje?`;
       }
-      return 'Não consegui analisar essa pergunta agora. Você ainda pode consultar saldo, gastos, receitas ou registrar um lançamento.';
+      return '🤔 Não consegui analisar essa pergunta agora. Você ainda pode consultar saldo, gastos, receitas ou registrar um lançamento.';
     }
 
-    return 'Posso registrar receitas e gastos ou responder perguntas sobre suas finanças. O que você quer consultar?';
+    return '💬 Posso registrar receitas e gastos ou responder perguntas sobre suas finanças. O que você quer consultar?';
   }
 
   private async createTransactionFromMessage(
@@ -471,7 +471,7 @@ export class WhatsappService {
     });
 
     if (extracted.confidence <= 0 || extracted.amount <= 0) {
-      return 'Nao entendi se isso e uma receita, gasto, venda ou pergunta. Pode mandar com valor e descricao?';
+      return '🤔 Não entendi se isso é uma receita, gasto, venda ou pergunta. Pode mandar com valor e descrição?';
     }
 
     const extractedCategoryHint = String(extracted.categoryHint || '').trim();
@@ -502,8 +502,8 @@ export class WhatsappService {
         extracted.type === 'INCOME' ? 'WAITING_ORIGIN' : 'WAITING_CATEGORY',
       );
       return extracted.type === 'INCOME'
-        ? 'De onde veio esse dinheiro? Por exemplo: salário, venda, serviço ou transferência.'
-        : 'Com o que foi esse gasto? Por exemplo: mercado, restaurante, transporte ou conta.';
+        ? '💰 De onde veio esse dinheiro? Por exemplo: salário, venda, serviço ou transferência.'
+        : '📝 Com o que foi esse gasto? Por exemplo: mercado, restaurante, transporte ou conta.';
     }
 
     const explicitScope = this.inferExplicitScope(message);
@@ -517,7 +517,7 @@ export class WhatsappService {
         'TRANSACTION_DETAILS',
         'WAITING_SCOPE',
       );
-      return 'Essa venda foi uma renda pessoal ou pertence ao seu negócio? Responda: Pessoal ou Negócio.';
+      return '🏷️ Essa venda foi uma renda pessoal ou pertence ao seu negócio? Responda: Pessoal ou Negócio.';
     }
 
     if (isSale && explicitScope === FinancialScope.BUSINESS && !extracted.channelHint) {
@@ -528,7 +528,7 @@ export class WhatsappService {
         'TRANSACTION_DETAILS',
         'WAITING_CHANNEL',
       );
-      return 'Por qual canal você fez essa venda? Por exemplo: Shopee, Instagram, loja física ou venda direta.';
+      return '🛒 Por qual canal você fez essa venda? Por exemplo: Shopee, Instagram, loja física ou venda direta.';
     }
 
     const scope =
@@ -689,8 +689,8 @@ export class WhatsappService {
         orderBy: { amount: 'desc' },
         include: { category: true },
       });
-      if (!largest) return `Você ainda não tem despesas registradas ${this.periodAt(period.label).toLocaleLowerCase('pt-BR')}.`;
-      return `Sua maior despesa ${this.periodAt(period.label).toLocaleLowerCase('pt-BR')} foi ${largest.description}: ${this.formatMoney(Number(largest.amount))} em ${largest.category.name}.`;
+      if (!largest) return `📭 Você ainda não tem despesas registradas ${this.periodAt(period.label).toLocaleLowerCase('pt-BR')}.`;
+      return `💸 Sua maior despesa ${this.periodAt(period.label).toLocaleLowerCase('pt-BR')} foi ${largest.description}: ${this.formatMoney(Number(largest.amount))} em ${largest.category.name}.`;
     }
 
     if (this.isExpenseListQuestion(lower)) {
@@ -707,7 +707,7 @@ export class WhatsappService {
       });
 
       if (!expenses.length) {
-        return `Você ainda não tem gastos registrados ${this.periodAt(period.label).toLocaleLowerCase('pt-BR')}.`;
+        return `📭 Você ainda não tem gastos registrados ${this.periodAt(period.label).toLocaleLowerCase('pt-BR')}.`;
       }
 
       const total = expenses.reduce((sum, item) => sum + Number(item.netAmount ?? item.amount), 0);
@@ -716,11 +716,11 @@ export class WhatsappService {
           `${index + 1}. ${item.description} — ${item.category.name}: ${this.formatMoney(Number(item.netAmount ?? item.amount))}`,
       );
       return [
-        `Seus gastos ${this.periodOf(period.label)}:`,
+        `📊 Seus gastos ${this.periodOf(period.label)}:`,
         ...lines,
         '',
-        `Total: ${this.formatMoney(total)}`,
-        expenses.length === 15 ? 'Mostrando os 15 gastos mais recentes.' : '',
+        `💵 Total: ${this.formatMoney(total)}`,
+        expenses.length === 15 ? '🔎 Mostrando os 15 gastos mais recentes.' : '',
       ]
         .filter(Boolean)
         .join('\n');
@@ -728,22 +728,22 @@ export class WhatsappService {
 
     if (lower.includes('lucro') || lower.includes('negocio')) {
       const totals = await this.monthTotals(userId, start, end, FinancialScope.BUSINESS);
-      return `Seu negócio está com saldo de ${this.formatMoney(totals.balance)} ${this.periodAt(period.label).toLocaleLowerCase('pt-BR')}.\nReceitas: ${this.formatMoney(totals.income)}\nGastos: ${this.formatMoney(totals.expense)}.`;
+      return `🏪 Seu negócio está com saldo de ${this.formatMoney(totals.balance)} ${this.periodAt(period.label).toLocaleLowerCase('pt-BR')}.\n💰 Receitas: ${this.formatMoney(totals.income)}\n💸 Gastos: ${this.formatMoney(totals.expense)}.`;
     }
 
     const totals = await this.monthTotals(userId, start, end, scope);
     if (lower.includes('gastei') || lower.includes('gasto') || lower.includes('despesa')) {
       const topCategory = await this.topExpenseCategory(userId, start, end, scope);
       return [
-        `${this.periodAt(period.label)}, você gastou ${this.formatMoney(totals.expense)}.`,
-        topCategory ? `Maior categoria: ${topCategory.name} - ${this.formatMoney(topCategory.total)}.` : '',
-        `Resultado do período: ${this.formatMoney(totals.balance)}.`,
+        `📊 ${this.periodAt(period.label)}, você gastou ${this.formatMoney(totals.expense)}.`,
+        topCategory ? `🏷️ Maior categoria: ${topCategory.name} - ${this.formatMoney(topCategory.total)}.` : '',
+        `💵 Resultado do período: ${this.formatMoney(totals.balance)}.`,
       ]
         .filter(Boolean)
         .join('\n');
     }
 
-    return `Resumo ${this.periodOf(period.label)}:\nReceitas: ${this.formatMoney(totals.income)}\nGastos: ${this.formatMoney(totals.expense)}\nSaldo: ${this.formatMoney(totals.balance)}.`;
+    return `📊 Resumo ${this.periodOf(period.label)}:\n💰 Receitas: ${this.formatMoney(totals.income)}\n💸 Gastos: ${this.formatMoney(totals.expense)}\n💵 Saldo: ${this.formatMoney(totals.balance)}.`;
   }
 
   private async answerMonthComparison(
@@ -759,11 +759,11 @@ export class WhatsappService {
     const currentLabel = this.monthLabel(current.start);
     const previousLabel = this.monthLabel(previous.start);
     return [
-      `Comparação: ${currentLabel} x ${previousLabel}`,
+      `📊 Comparação: ${currentLabel} x ${previousLabel}`,
       '',
-      `Receitas: ${this.formatMoney(currentTotals.income)} (${this.percentageChange(previousTotals.income, currentTotals.income)})`,
-      `Gastos: ${this.formatMoney(currentTotals.expense)} (${this.percentageChange(previousTotals.expense, currentTotals.expense)})`,
-      `Saldo: ${this.formatMoney(currentTotals.balance)} (antes ${this.formatMoney(previousTotals.balance)})`,
+      `💰 Receitas: ${this.formatMoney(currentTotals.income)} (${this.percentageChange(previousTotals.income, currentTotals.income)})`,
+      `💸 Gastos: ${this.formatMoney(currentTotals.expense)} (${this.percentageChange(previousTotals.expense, currentTotals.expense)})`,
+      `💵 Saldo: ${this.formatMoney(currentTotals.balance)} (antes ${this.formatMoney(previousTotals.balance)})`,
     ].join('\n');
   }
 
@@ -780,25 +780,25 @@ export class WhatsappService {
       this.largestExpenseIncreases(userId),
     ]);
     return [
-      `Resumo completo ${this.periodOf(period.label)}`,
+      `📊 Resumo completo ${this.periodOf(period.label)}`,
       '',
-      `Receitas: ${this.formatMoney(totals.income)}`,
-      `Gastos: ${this.formatMoney(totals.expense)}`,
-      `Saldo: ${this.formatMoney(totals.balance)}`,
+      `💰 Receitas: ${this.formatMoney(totals.income)}`,
+      `💸 Gastos: ${this.formatMoney(totals.expense)}`,
+      `💵 Saldo: ${this.formatMoney(totals.balance)}`,
       '',
       this.formatDistribution('Gastos por categoria', categories),
       '',
       this.formatDistribution('Receitas por origem', origins),
       '',
-      `Pessoal: ${this.formatMoney(personal.balance)} de saldo`,
-      `Negócio: ${this.formatMoney(business.balance)} de saldo`,
+      `👤 Pessoal: ${this.formatMoney(personal.balance)} de saldo`,
+      `🏪 Negócio: ${this.formatMoney(business.balance)} de saldo`,
       '',
       increases.length
-        ? `Maiores aumentos: ${increases
+        ? `⚠️ Maiores aumentos: ${increases
             .slice(0, 3)
             .map((item) => `${item.name} +${this.formatMoney(item.increase)}`)
             .join(', ')}.`
-        : 'Nenhum aumento de gasto relevante contra o mês anterior.',
+        : '✅ Nenhum aumento de gasto relevante contra o mês anterior.',
     ].join('\n');
   }
 
@@ -810,7 +810,7 @@ export class WhatsappService {
     const categories = await this.expenseCategories(userId, period.start, period.end, scope);
     return categories.length
       ? `${this.formatDistribution(`Gastos por categoria ${this.periodOf(period.label)}`, categories)}`
-      : `Você ainda não tem gastos registrados ${this.periodAt(period.label).toLocaleLowerCase('pt-BR')}.`;
+      : `📭 Você ainda não tem gastos registrados ${this.periodAt(period.label).toLocaleLowerCase('pt-BR')}.`;
   }
 
   private async answerIncomeOrigins(
@@ -821,7 +821,7 @@ export class WhatsappService {
     const origins = await this.incomeOrigins(userId, period.start, period.end, scope);
     return origins.length
       ? this.formatDistribution(`Receitas por origem ${this.periodOf(period.label)}`, origins)
-      : `Você ainda não tem receitas registradas ${this.periodAt(period.label).toLocaleLowerCase('pt-BR')}.`;
+      : `📭 Você ainda não tem receitas registradas ${this.periodAt(period.label).toLocaleLowerCase('pt-BR')}.`;
   }
 
   private async answerScopeComparison(
@@ -833,14 +833,14 @@ export class WhatsappService {
       this.monthTotals(userId, period.start, period.end, FinancialScope.BUSINESS),
     ]);
     return [
-      `Pessoal x Negócio ${this.periodOf(period.label)}`,
+      `📊 Pessoal x Negócio ${this.periodOf(period.label)}`,
       '',
-      `Pessoal — receitas ${this.formatMoney(personal.income)}, gastos ${this.formatMoney(personal.expense)}, saldo ${this.formatMoney(personal.balance)}.`,
-      `Negócio — receitas ${this.formatMoney(business.income)}, gastos ${this.formatMoney(business.expense)}, saldo ${this.formatMoney(business.balance)}.`,
+      `👤 Pessoal — receitas ${this.formatMoney(personal.income)}, gastos ${this.formatMoney(personal.expense)}, saldo ${this.formatMoney(personal.balance)}.`,
+      `🏪 Negócio — receitas ${this.formatMoney(business.income)}, gastos ${this.formatMoney(business.expense)}, saldo ${this.formatMoney(business.balance)}.`,
       '',
       personal.balance === business.balance
-        ? 'Os dois modos tiveram o mesmo resultado.'
-        : `${personal.balance > business.balance ? 'Pessoal' : 'Negócio'} teve o melhor resultado, com diferença de ${this.formatMoney(Math.abs(personal.balance - business.balance))}.`,
+        ? '⚖️ Os dois modos tiveram o mesmo resultado.'
+        : `🏁 ${personal.balance > business.balance ? 'Pessoal' : 'Negócio'} teve o melhor resultado, com diferença de ${this.formatMoney(Math.abs(personal.balance - business.balance))}.`,
     ].join('\n');
   }
 
@@ -850,10 +850,10 @@ export class WhatsappService {
   ): Promise<string> {
     const increases = await this.largestExpenseIncreases(userId, scope);
     if (!increases.length) {
-      return 'Nenhuma categoria de gasto aumentou em relação ao mês anterior.';
+      return '✅ Nenhuma categoria de gasto aumentou em relação ao mês anterior.';
     }
     return [
-      'Maiores aumentos de gastos neste mês:',
+      '⚠️ Maiores aumentos de gastos neste mês:',
       ...increases.slice(0, 5).map(
         (item, index) =>
           `${index + 1}. ${item.name}: +${this.formatMoney(item.increase)} (${this.formatMoney(item.previous)} → ${this.formatMoney(item.current)})`,
@@ -869,7 +869,7 @@ export class WhatsappService {
     if (!match) return null;
 
     const amount = this.parseBrazilianAmount(match[1]!);
-    if (amount <= 0) return 'Informe um valor de orçamento maior que zero.';
+    if (amount <= 0) return '💵 Informe um valor de orçamento maior que zero.';
 
     const scope = this.inferExplicitScope(message) ?? FinancialScope.PERSONAL;
     const categoryText = match[2]!
@@ -877,7 +877,7 @@ export class WhatsappService {
       .replace(/[.!?]+$/g, '')
       .trim();
     if (!categoryText) {
-      return 'Para qual categoria devo definir esse orçamento?';
+      return '🏷️ Para qual categoria devo definir esse orçamento?';
     }
 
     const category = await this.resolveCategory(userId, categoryText, TransactionType.EXPENSE);
@@ -897,11 +897,11 @@ export class WhatsappService {
     const spent = await this.categoryExpenseTotal(userId, category.id, scope, month);
     const percentage = amount > 0 ? Math.round((spent / amount) * 100) : 0;
     return [
-      'Orçamento definido ✅',
-      `Categoria: ${category.name}`,
-      `Limite mensal: ${this.formatMoney(amount)}`,
-      `Modo: ${scope === FinancialScope.BUSINESS ? 'Negócio' : 'Pessoal'}`,
-      `Já utilizado: ${this.formatMoney(spent)} (${percentage}%)`,
+      '✅ Orçamento definido',
+      `🏷️ Categoria: ${category.name}`,
+      `💵 Limite mensal: ${this.formatMoney(amount)}`,
+      `👤 Modo: ${scope === FinancialScope.BUSINESS ? 'Negócio' : 'Pessoal'}`,
+      `📊 Já utilizado: ${this.formatMoney(spent)} (${percentage}%)`,
     ].join('\n');
   }
 
@@ -1217,16 +1217,16 @@ export class WhatsappService {
   ): string {
     const type = transaction.type === 'EXPENSE' ? 'Despesa' : 'Receita';
     return [
-      'Lancamento registrado ✅',
+      '✅ Lancamento registrado',
       '',
-      `${type}: ${transaction.description}`,
-      `Valor: ${this.formatMoney(Number(transaction.amount))}`,
-      `Categoria: ${categoryName}`,
-      channelName ? `Canal: ${channelName}` : '',
+      `${transaction.type === TransactionType.EXPENSE ? '💸' : '💰'} ${type}: ${transaction.description}`,
+      `💵 Valor: ${this.formatMoney(Number(transaction.amount))}`,
+      `🏷️ Categoria: ${categoryName}`,
+      channelName ? `🛒 Canal: ${channelName}` : '',
       paymentLabel
-        ? `${transaction.type === TransactionType.INCOME ? 'Recebido em' : 'Pagamento'}: ${paymentLabel}`
+        ? `🏦 ${transaction.type === TransactionType.INCOME ? 'Recebido em' : 'Pagamento'}: ${paymentLabel}`
         : '',
-      `Modo: ${scope === 'BUSINESS' ? 'Negocio' : 'Pessoal'}`,
+      `👤 Modo: ${scope === 'BUSINESS' ? 'Negocio' : 'Pessoal'}`,
     ]
       .filter(Boolean)
       .join('\n');
@@ -1236,8 +1236,8 @@ export class WhatsappService {
     const type = draft.type === TransactionType.EXPENSE ? 'Despesa' : 'Receita';
     const headline =
       draft.type === TransactionType.EXPENSE
-        ? 'Despesa pronta para salvar'
-        : 'Receita pronta para salvar';
+        ? '🧾 Despesa pronta para salvar'
+        : '🧾 Receita pronta para salvar';
     return [
       draft.possibleDuplicate ? '⚠️ Possível lançamento duplicado' : '',
       draft.possibleDuplicate
@@ -1245,24 +1245,24 @@ export class WhatsappService {
         : '',
       headline,
       '',
-      `Tipo: ${type}`,
-      `Título: ${draft.description}`,
+      `${draft.type === TransactionType.EXPENSE ? '💸' : '💰'} Tipo: ${type}`,
+      `📝 Título: ${draft.description}`,
       draft.installmentCount && draft.totalAmount
-        ? `Valor: ${this.formatMoney(draft.totalAmount)} em ${draft.installmentCount}x de ${this.formatMoney(draft.amount)}`
-        : `Valor: ${this.formatMoney(draft.amount)}`,
+        ? `💵 Valor: ${this.formatMoney(draft.totalAmount)} em ${draft.installmentCount}x de ${this.formatMoney(draft.amount)}`
+        : `💵 Valor: ${this.formatMoney(draft.amount)}`,
       draft.transactionDate
-        ? `Data: ${this.formatDateOnly(draft.transactionDate)}`
+        ? `📅 Data: ${this.formatDateOnly(draft.transactionDate)}`
         : '',
-      `Categoria: ${draft.categoryHint}`,
-      draft.channelHint ? `Canal: ${draft.channelHint}` : '',
+      `🏷️ Categoria: ${draft.categoryHint}`,
+      draft.channelHint ? `🛒 Canal: ${draft.channelHint}` : '',
       draft.paymentLabel
-        ? `Pagamento: ${draft.paymentLabel}`
-        : 'Pagamento: não informado',
-      `Modo: ${draft.scope === FinancialScope.BUSINESS ? 'Negócio' : 'Pessoal'}`,
+        ? `🏦 Pagamento: ${draft.paymentLabel}`
+        : '🏦 Pagamento: não informado',
+      `👤 Modo: ${draft.scope === FinancialScope.BUSINESS ? 'Negócio' : 'Pessoal'}`,
       '',
       draft.possibleDuplicate
-        ? 'Para criar mesmo assim, responda: Salvar novamente. Ou responda: Cancelar.'
-        : 'Responda: Confirmar, Editar ou Cancelar. Você também pode pedir: "altere o valor", "mude o título", "troque o pagamento" ou "coloque como negócio".',
+        ? '✅ Para criar mesmo assim, responda: Salvar novamente. Ou responda: Cancelar.'
+        : '✅ Responda: Confirmar, Editar ou Cancelar. Você também pode pedir: "altere o valor", "mude o título", "troque o pagamento" ou "coloque como negócio".',
     ]
       .filter(Boolean)
       .join('\n');
@@ -1279,12 +1279,12 @@ export class WhatsappService {
 
     if (/^(cancelar|cancela|nao|não)$/.test(command)) {
       await this.clearPendingMessage(userId);
-      return 'Lançamento cancelado. Nenhuma informação foi salva.';
+      return '🗑️ Lançamento cancelado. Nenhuma informação foi salva.';
     }
 
     if (/^(editar|edita|corrigir|corrija)$/.test(command)) {
       await this.clearPendingMessage(userId);
-      return 'Certo. Envie novamente o lançamento com as informações corrigidas, incluindo valor e descrição.';
+      return '✏️ Certo. Envie novamente o lançamento com as informações corrigidas, incluindo valor e descrição.';
     }
 
     const draftEdit = this.parseDraftEdit(message);
@@ -1292,7 +1292,7 @@ export class WhatsappService {
       if (draftEdit.kind === 'payment') {
         const paymentOptions = await this.findPaymentOptions(userId, draft.scope, draft.type);
         if (!paymentOptions.length) {
-          return `${this.transactionDraftConfirmation(draft)}\n\nVocê ainda não tem contas, carteiras ou cartões cadastrados para trocar o pagamento.`;
+          return `${this.transactionDraftConfirmation(draft)}\n\n🏦 Você ainda não tem contas, carteiras ou cartões cadastrados para trocar o pagamento.`;
         }
         const selectedPayment = this.selectPaymentOption(
           draftEdit.query ?? message,
@@ -1308,28 +1308,28 @@ export class WhatsappService {
               : { creditCardId: selectedPayment.id }),
           };
           await this.setPendingTransactionDraft(userId, phone, updatedDraft);
-          return `${this.transactionDraftConfirmation(updatedDraft)}\n\nPagamento atualizado.`;
+          return `${this.transactionDraftConfirmation(updatedDraft)}\n\n🏦 Pagamento atualizado.`;
         }
         await this.setPendingPaymentDraft(userId, phone, {
           transaction: this.clearDraftPayment(draft),
           options: paymentOptions,
         });
-        return `${this.paymentSelectionQuestion(draft.type, paymentOptions)}\n\nEscolha a nova forma de pagamento para esse lançamento.`;
+        return `${this.paymentSelectionQuestion(draft.type, paymentOptions)}\n\n🏦 Escolha a nova forma de pagamento para esse lançamento.`;
       }
 
       const updatedDraft = this.applyDraftEdit(draft, draftEdit);
       await this.setPendingTransactionDraft(userId, phone, updatedDraft);
-      return `${this.transactionDraftConfirmation(updatedDraft)}\n\n${this.draftEditUpdatedMessage(draftEdit)}.`;
+      return `${this.transactionDraftConfirmation(updatedDraft)}\n\n✨ ${this.draftEditUpdatedMessage(draftEdit)}.`;
     }
 
     if (draft.possibleDuplicate && !confirmsDuplicate) {
-      return `${this.transactionDraftConfirmation(draft)}\n\nPara evitar duplicidade, preciso que você escreva “Salvar novamente”.`;
+      return `${this.transactionDraftConfirmation(draft)}\n\n⚠️ Para evitar duplicidade, preciso que você escreva “Salvar novamente”.`;
     }
 
     const confirmsTransaction =
       /^(confirmar|confirmo|sim|salvar|pode salvar)$/.test(command) || confirmsDuplicate;
     if (!confirmsTransaction) {
-      return `${this.transactionDraftConfirmation(draft)}\n\nNão reconheci sua escolha.`;
+      return `${this.transactionDraftConfirmation(draft)}\n\n🤔 Não reconheci sua escolha.`;
     }
 
     const category = await this.resolveCategory(userId, draft.categoryHint, draft.type);
@@ -1478,12 +1478,12 @@ export class WhatsappService {
   ): string {
     return [
       type === TransactionType.INCOME
-        ? 'Em qual conta você recebeu esse dinheiro?'
-        : 'Como você pagou esse gasto?',
+        ? '🏦 Em qual conta você recebeu esse dinheiro?'
+        : '🏦 Como você pagou esse gasto?',
       '',
       ...options.map((option, index) => `${index + 1}. ${option.label}`),
       '',
-      'Responda com o número ou nome da opção.',
+      '✅ Responda com o número ou nome da opção.',
     ].join('\n');
   }
 
@@ -1497,7 +1497,7 @@ export class WhatsappService {
     if (draft.createPayment?.waitingForName) {
       if (/^(cancelar|cancela|nao|não)$/.test(normalized)) {
         await this.clearPendingMessage(userId);
-        return 'Lançamento cancelado. Nenhuma informação foi salva.';
+        return '🗑️ Lançamento cancelado. Nenhuma informação foi salva.';
       }
 
       const name = this.extractAccountName(message, draft.createPayment.type) ?? message.trim();
@@ -1521,7 +1521,7 @@ export class WhatsappService {
     }
     if (/^(cancelar|cancela|nao|não)$/.test(normalized)) {
       await this.clearPendingMessage(userId);
-      return 'Lançamento cancelado. Nenhuma informação foi salva.';
+      return '🗑️ Lançamento cancelado. Nenhuma informação foi salva.';
     }
 
     if (this.isGreeting(message)) {
@@ -1530,7 +1530,7 @@ export class WhatsappService {
 
     if (this.isKnownFinancialQuestion(message)) {
       const answer = await this.answerQuestion(userId, message);
-      return `${answer}\n\nVocê ainda tem um lançamento aguardando forma de pagamento. Responda com o número/nome da opção ou envie “Cancelar”.`;
+      return `${answer}\n\n🏦 Você ainda tem um lançamento aguardando forma de pagamento. Responda com o número/nome da opção ou envie “Cancelar”.`;
     }
 
     if (this.isTransactionWithoutAmount(message)) {
@@ -1542,7 +1542,7 @@ export class WhatsappService {
         'TRANSACTION_DETAILS',
         'WAITING_AMOUNT',
       );
-      return `${this.missingAmountQuestion(message)}\n\nComecei um novo lançamento e descartei o anterior que estava pendente.`;
+      return `${this.missingAmountQuestion(message)}\n\n🧾 Comecei um novo lançamento e descartei o anterior que estava pendente.`;
     }
 
     if (this.needsMoreDescription(message)) {
@@ -1554,7 +1554,7 @@ export class WhatsappService {
         'TRANSACTION_DETAILS',
         'WAITING_DESCRIPTION',
       );
-      return `${this.missingDescriptionQuestion(message)}\n\nComecei um novo lançamento e descartei o anterior que estava pendente.`;
+      return `${this.missingDescriptionQuestion(message)}\n\n🧾 Comecei um novo lançamento e descartei o anterior que estava pendente.`;
     }
 
     if (this.looksLikeTransaction(message)) {
@@ -1592,7 +1592,7 @@ export class WhatsappService {
     }
 
     if (!selected) {
-      return `${this.paymentSelectionQuestion(draft.transaction.type, draft.options)}\n\nNão reconheci essa opção. Você pode responder com o número/nome da opção, criar uma nova carteira ou enviar “Cancelar”.`;
+      return `${this.paymentSelectionQuestion(draft.transaction.type, draft.options)}\n\n🤔 Não reconheci essa opção. Você pode responder com o número/nome da opção, criar uma nova carteira ou enviar “Cancelar”.`;
     }
 
     const transaction: WhatsappTransactionDraft = {
@@ -1608,9 +1608,9 @@ export class WhatsappService {
 
   private pendingPaymentReminder(draft: WhatsappPaymentDraft): string {
     return [
-      'Tenho um lançamento em andamento aguardando a forma de pagamento.',
+      '🧾 Tenho um lançamento em andamento aguardando a forma de pagamento.',
       this.paymentSelectionQuestion(draft.transaction.type, draft.options),
-      'Se quiser abandonar esse lançamento, envie “Cancelar”. Para ver opções do Din, envie “Menu”.',
+      '🗑️ Se quiser abandonar esse lançamento, envie “Cancelar”. Para ver opções do Din, envie “Menu”.',
     ].join('\n\n');
   }
 
@@ -1822,13 +1822,13 @@ export class WhatsappService {
       });
       if (!transaction) {
         return type === TransactionType.EXPENSE
-          ? 'Não encontrei nenhum gasto para corrigir.'
-          : 'Não encontrei nenhum lançamento para corrigir.';
+          ? '🔎 Não encontrei nenhum gasto para corrigir.'
+          : '🔎 Não encontrei nenhum lançamento para corrigir.';
       }
 
       const newAmount = Number(updateMatch[5]!.replace(',', '.'));
       if (!Number.isFinite(newAmount) || newAmount <= 0) {
-        return 'Informe um valor válido para a correção.';
+        return '💵 Informe um valor válido para a correção.';
       }
 
       const draft: WhatsappMutationDraft = {
@@ -1853,7 +1853,7 @@ export class WhatsappService {
       .replace(/\s+/g, ' ')
       .trim();
     if (!searchTerm) {
-      return 'Qual lançamento você quer apagar? Informe parte do título ou da categoria.';
+      return '🔎 Qual lançamento você quer apagar? Informe parte do título ou da categoria.';
     }
 
     const recentTransactions = await this.prisma.transaction.findMany({
@@ -1885,23 +1885,23 @@ export class WhatsappService {
     const type = draft.type === TransactionType.EXPENSE ? 'Despesa' : 'Receita';
     if (draft.action === 'UPDATE_AMOUNT') {
       return [
-        'Confirme a correção:',
+        '✏️ Confirme a correção:',
         '',
-        `${type}: ${draft.description}`,
-        `Valor atual: ${this.formatMoney(draft.previousAmount)}`,
-        `Novo valor: ${this.formatMoney(draft.newAmount)}`,
+        `${draft.type === TransactionType.EXPENSE ? '💸' : '💰'} ${type}: ${draft.description}`,
+        `💵 Valor atual: ${this.formatMoney(draft.previousAmount)}`,
+        `✅ Novo valor: ${this.formatMoney(draft.newAmount)}`,
         '',
-        'Responda: Confirmar ou Cancelar.',
+        '✅ Responda: Confirmar ou Cancelar.',
       ].join('\n');
     }
     return [
-      'Confirme a exclusão:',
+      '🗑️ Confirme a exclusão:',
       '',
-      `${type}: ${draft.description}`,
-      `Valor: ${this.formatMoney(draft.amount)}`,
+      `${draft.type === TransactionType.EXPENSE ? '💸' : '💰'} ${type}: ${draft.description}`,
+      `💵 Valor: ${this.formatMoney(draft.amount)}`,
       '',
-      'Essa ação não poderá ser desfeita.',
-      'Responda: Confirmar ou Cancelar.',
+      '⚠️ Essa ação não poderá ser desfeita.',
+      '✅ Responda: Confirmar ou Cancelar.',
     ].join('\n');
   }
 
@@ -1914,11 +1914,11 @@ export class WhatsappService {
     if (/^(cancelar|cancela|nao|não)$/.test(command)) {
       await this.clearPendingMessage(userId);
       return draft.action === 'DELETE'
-        ? 'Exclusão cancelada. O lançamento foi mantido.'
-        : 'Correção cancelada. O lançamento não foi alterado.';
+        ? '✅ Exclusão cancelada. O lançamento foi mantido.'
+        : '✅ Correção cancelada. O lançamento não foi alterado.';
     }
     if (!/^(confirmar|confirmo|sim|pode|pode fazer)$/.test(command)) {
-      return `${this.mutationDraftConfirmation(draft)}\n\nNão reconheci sua escolha.`;
+      return `${this.mutationDraftConfirmation(draft)}\n\n🤔 Não reconheci sua escolha.`;
     }
 
     if (draft.action === 'UPDATE_AMOUNT') {
@@ -1927,18 +1927,18 @@ export class WhatsappService {
       });
       await this.clearPendingMessage(userId);
       return [
-        'Lançamento corrigido ✅',
-        `${draft.type === TransactionType.EXPENSE ? 'Despesa' : 'Receita'}: ${draft.description}`,
-        `Novo valor: ${this.formatMoney(draft.newAmount)}`,
+        '✅ Lançamento corrigido',
+        `${draft.type === TransactionType.EXPENSE ? '💸 Despesa' : '💰 Receita'}: ${draft.description}`,
+        `💵 Novo valor: ${this.formatMoney(draft.newAmount)}`,
       ].join('\n');
     }
 
     await this.transactionService.delete(userId, draft.transactionId);
     await this.clearPendingMessage(userId);
     return [
-      'Lançamento excluído ✅',
-      `${draft.type === TransactionType.EXPENSE ? 'Despesa' : 'Receita'}: ${draft.description}`,
-      `Valor: ${this.formatMoney(draft.amount)}`,
+      '✅ Lançamento excluído',
+      `${draft.type === TransactionType.EXPENSE ? '💸 Despesa' : '💰 Receita'}: ${draft.description}`,
+      `💵 Valor: ${this.formatMoney(draft.amount)}`,
     ].join('\n');
   }
 
@@ -2186,15 +2186,15 @@ export class WhatsappService {
 
   private helpReply(): string {
     return [
-      'Posso ajudar você a:',
-      '• registrar receitas, gastos e vendas;',
-      '• consultar saldo, gastos e receitas;',
-      '• consultar semanas, meses específicos e comparar períodos;',
-      '• comparar meses e identificar maiores despesas;',
-      '• corrigir e excluir lançamentos com confirmação;',
-      '• analisar suas finanças pessoais ou do negócio.',
+      '👋 Posso ajudar você a:',
+      '🧾 registrar receitas, gastos e vendas;',
+      '📊 consultar saldo, gastos e receitas;',
+      '📅 consultar semanas, meses específicos e comparar períodos;',
+      '🔎 comparar meses e identificar maiores despesas;',
+      '✏️ corrigir e excluir lançamentos com confirmação;',
+      '🏪 analisar suas finanças pessoais ou do negócio.',
       '',
-      'Exemplos: “Gastos da semana”, “Despesas de maio”, “Compare este mês com o anterior” ou “Gastei R$ 40 no mercado”.',
+      '💬 Exemplos: “Gastos da semana”, “Despesas de maio”, “Compare este mês com o anterior” ou “Gastei R$ 40 no mercado”.',
     ].join('\n');
   }
 
@@ -2378,28 +2378,28 @@ export class WhatsappService {
     const lower = this.normalizeText(message);
     if (/\b(gastei|paguei|comprei|saiu)\b/.test(lower)) {
       return lower.includes('hoje')
-        ? 'Quanto você gastou hoje?'
-        : 'Qual foi o valor desse gasto?';
+        ? '💸 Quanto você gastou hoje?'
+        : '💸 Qual foi o valor desse gasto?';
     }
     if (lower.includes('vendi')) {
       return lower.includes('hoje')
-        ? 'Quanto você recebeu com essa venda hoje?'
-        : 'Qual foi o valor dessa venda?';
+        ? '💰 Quanto você recebeu com essa venda hoje?'
+        : '💰 Qual foi o valor dessa venda?';
     }
     return lower.includes('hoje') || /\bhj\b/.test(lower)
-      ? 'Quanto você ganhou hoje?'
-      : 'Qual foi o valor que você recebeu?';
+      ? '💰 Quanto você ganhou hoje?'
+      : '💰 Qual foi o valor que você recebeu?';
   }
 
   private missingDescriptionQuestion(message: string): string {
     const lower = this.normalizeText(message);
     if (lower.includes('vendi')) {
-      return 'O que você vendeu e por qual canal?';
+      return '🛒 O que você vendeu e por qual canal?';
     }
     if (/\b(recebi|ganhei|entrou)\b/.test(lower)) {
-      return 'De onde veio esse dinheiro? Por exemplo: salário, venda, serviço ou transferência.';
+      return '💰 De onde veio esse dinheiro? Por exemplo: salário, venda, serviço ou transferência.';
     }
-    return 'Com o que foi esse gasto? Por exemplo: mercado, restaurante, transporte ou conta.';
+    return '📝 Com o que foi esse gasto? Por exemplo: mercado, restaurante, transporte ou conta.';
   }
 
   private hasAmount(message: string): boolean {

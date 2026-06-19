@@ -876,7 +876,7 @@ describe('WhatsappService', () => {
       from: '5511999999999',
       text: 'Eu ganhei mais dinheiro hj',
     });
-    expect(amountQuestion.reply).toBe('Quanto você ganhou hoje?');
+    expect(amountQuestion.reply).toContain('Quanto você ganhou hoje?');
     expect(transactionServiceMock.create).not.toHaveBeenCalled();
 
     const sourceQuestion = await service.handleWebhook({
