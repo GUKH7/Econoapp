@@ -770,8 +770,8 @@ textarea:focus {
 .assistant-chat-screen {
   display: grid;
   gap: 12px;
-  min-height: calc(100dvh - var(--content-safe-bottom) - 96px);
-  padding-bottom: 74px;
+  min-height: calc(100dvh - var(--content-safe-bottom) - 64px);
+  padding-bottom: calc(var(--bottom-nav-height) + 112px);
 }
 
 .assistant-hero-panel {
@@ -862,6 +862,7 @@ textarea:focus {
 .assistant-thread {
   display: grid;
   gap: 14px;
+  scroll-margin-bottom: calc(var(--bottom-nav-height) + 112px);
 }
 
 .chat-row {
@@ -1035,8 +1036,8 @@ textarea:focus {
   background: rgba(255, 255, 255, 0.94);
   border: 1px solid var(--line);
   border-radius: 999px;
-  bottom: calc(var(--bottom-nav-height) + 10px);
-  box-shadow: var(--shadow-card);
+  bottom: calc(var(--bottom-nav-height) + max(14px, env(safe-area-inset-bottom)));
+  box-shadow: 0 18px 40px rgba(22, 101, 52, 0.16), 0 0 0 1px rgba(255, 255, 255, 0.8);
   display: grid;
   gap: 8px;
   grid-template-columns: 1fr 44px;
@@ -1046,7 +1047,7 @@ textarea:focus {
   position: fixed;
   transform: translateX(-50%);
   width: calc(100% - 32px);
-  z-index: 38;
+  z-index: 62;
 }
 
 .assistant-input input {

@@ -779,6 +779,7 @@ async function handleAssistantMessage(message) {
   state.assistantLoading = true;
   state.assistantError = '';
   renderApp();
+  scrollAssistantToBottom();
 
   try {
     const response = await api().assistantMessage({ message });
@@ -788,11 +789,13 @@ async function handleAssistantMessage(message) {
     state.assistantError = '';
     await loadData();
     renderApp();
+    scrollAssistantToBottom();
     return;
   } catch (error) {
     state.assistantLoading = false;
     state.assistantError = error.message;
     renderApp();
+    scrollAssistantToBottom();
   }
 
   const normalized = message.toLowerCase();
@@ -817,6 +820,14 @@ async function handleAssistantMessage(message) {
     return;
   }
   showToast('Din entendeu. Use uma sugestão rápida para agir agora.');
+}
+
+function scrollAssistantToBottom() {
+  if (state.tab !== 'assistant') return;
+  requestAnimationFrame(() => {
+    const thread = document.querySelector('.assistant-thread');
+    thread?.lastElementChild?.scrollIntoView({ block: 'end', behavior: 'smooth' });
+  });
 }
 
 function renderTransactionList() {

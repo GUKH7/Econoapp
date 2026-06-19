@@ -1,5 +1,12 @@
 import { BadRequestException, Inject, Injectable, ServiceUnavailableException } from '@nestjs/common';
-import { FinancialScope, Prisma, Transaction, TransactionSource, TransactionType } from '@prisma/client';
+import {
+  FinancialAccountType,
+  FinancialScope,
+  Prisma,
+  Transaction,
+  TransactionSource,
+  TransactionType,
+} from '@prisma/client';
 import { env } from '@/config/env';
 import { PrismaService } from '@/config/database';
 import { GeminiService, WhatsappConversationMessage } from '@/services/ai/gemini.service';
@@ -355,6 +362,11 @@ export class WhatsappService {
     message: string,
     recentMessages: WhatsappConversationMessage[],
   ): Promise<string> {
+    const accountReply = await this.tryCreateFinancialAccount(userId, message);
+    if (accountReply) {
+      return accountReply;
+    }
+
     const budgetReply = await this.trySetCategoryBudget(userId, message);
     if (budgetReply) {
       return budgetReply;
@@ -1453,6 +1465,17 @@ export class WhatsappService {
     }
 
     if (!selected) {
+      const createdPayment = await this.tryCreatePaymentAccount(
+        userId,
+        message,
+        draft.transaction.scope,
+      );
+      if (createdPayment) {
+        selected = createdPayment;
+      }
+    }
+
+    if (!selected) {
       return `${this.paymentSelectionQuestion(draft.transaction.type, draft.options)}\n\nNão reconheci essa opção.`;
     }
 
@@ -1465,6 +1488,113 @@ export class WhatsappService {
     };
     await this.setPendingTransactionDraft(userId, phone, transaction);
     return this.transactionDraftConfirmation(transaction);
+  }
+
+  private async tryCreateFinancialAccount(userId: string, message: string): Promise<string | null> {
+    const normalized = this.normalizeText(message);
+    const isCreateIntent = /\b(criar|crie|nova|novo|cadastrar|cadastre|adicionar|adicione)\b/.test(
+      normalized,
+    );
+    const mentionsAccount = /\b(carteira|banco|conta)\b/.test(normalized);
+    if (!isCreateIntent || !mentionsAccount) {
+      return null;
+    }
+
+    const scope = this.inferExplicitScope(message) ?? FinancialScope.PERSONAL;
+    const type =
+      /\b(banco|conta)\b/.test(normalized) && !normalized.includes('carteira')
+        ? FinancialAccountType.BANK
+        : FinancialAccountType.WALLET;
+    const name = this.extractAccountName(message, type);
+
+    if (!name) {
+      return type === FinancialAccountType.BANK
+        ? 'Qual nome você quer dar para esse banco ou conta? Ex: Nubank, Inter ou Conta principal.'
+        : 'Qual nome você quer dar para essa carteira? Ex: Dinheiro, Caixa ou Carteira pessoal.';
+    }
+
+    const account = await this.createFinancialAccount(userId, name, type, scope);
+    return [
+      type === FinancialAccountType.BANK ? 'Conta criada.' : 'Carteira criada.',
+      `${type === FinancialAccountType.BANK ? 'Banco/conta' : 'Carteira'}: ${account.name}`,
+      `Modo: ${account.scope === FinancialScope.BUSINESS ? 'Negócio' : 'Pessoal'}`,
+      'Saldo inicial: R$ 0,00',
+    ].join('\n');
+  }
+
+  private async tryCreatePaymentAccount(
+    userId: string,
+    message: string,
+    scope: FinancialScope,
+  ): Promise<WhatsappPaymentOption | null> {
+    const normalized = this.normalizeText(message);
+    const wantsWallet =
+      /\b(carteira|dinheiro|caixa)\b/.test(normalized) ||
+      /\b(outra|nova|novo|criar|crie|cadastrar|cadastre|adicionar|adicione)\b/.test(
+        normalized,
+      );
+    const wantsBank = /\b(banco|conta|pix)\b/.test(normalized);
+
+    if (!wantsWallet && !wantsBank) {
+      return null;
+    }
+
+    const type =
+      wantsBank && !normalized.includes('carteira')
+        ? FinancialAccountType.BANK
+        : FinancialAccountType.WALLET;
+    const fallbackName = type === FinancialAccountType.BANK ? 'Conta principal' : 'Outra carteira';
+    const name = this.extractAccountName(message, type) || fallbackName;
+    const account = await this.createFinancialAccount(userId, name, type, scope);
+
+    return {
+      accountType: account.type,
+      id: account.id,
+      kind: 'ACCOUNT',
+      label: `${account.type === FinancialAccountType.BANK ? 'Banco/Pix' : 'Carteira'} - ${account.name}`,
+      name: account.name,
+    };
+  }
+
+  private async createFinancialAccount(
+    userId: string,
+    name: string,
+    type: FinancialAccountType,
+    scope: FinancialScope,
+  ): Promise<{ id: string; name: string; type: FinancialAccountType; scope: FinancialScope }> {
+    return this.prisma.financialAccount.create({
+      data: {
+        balance: 0,
+        name: this.titleCase(name).slice(0, 60),
+        scope,
+        type,
+        userId,
+      },
+      select: { id: true, name: true, scope: true, type: true },
+    });
+  }
+
+  private extractAccountName(message: string, type: FinancialAccountType): string | null {
+    const raw = message
+      .replace(/\b(criar|crie|nova|novo|cadastrar|cadastre|adicionar|adicione|uma|um|minha|meu)\b/gi, ' ')
+      .replace(/\b(carteira|banco|conta|para|pelo|pela|com|no|na)\b/gi, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    if (!raw) {
+      return null;
+    }
+
+    const normalized = this.normalizeText(raw);
+    const generic =
+      type === FinancialAccountType.BANK
+        ? ['banco', 'conta', 'pix']
+        : ['carteira', 'outra carteira', 'outra'];
+    if (generic.includes(normalized)) {
+      return null;
+    }
+
+    return raw;
   }
 
   private async tryCreateMutationDraft(
