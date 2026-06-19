@@ -441,6 +441,59 @@ describe('WhatsappService', () => {
     );
   });
 
+  it('explica a pendencia de pagamento ao receber saudacao durante um lancamento', async () => {
+    fetchMock.mockImplementation(async (url: string) => ({
+      ok: true,
+      json: vi.fn().mockResolvedValue(
+        url.endsWith('/status') ? { status: 'conectado' } : { success: true },
+      ),
+    }));
+    prismaMock.user.findFirst.mockResolvedValue({
+      id: 'user-1',
+      name: 'Gustavo',
+      phone: '11999999999',
+    });
+    prismaMock.salesChannel.findMany.mockResolvedValue([]);
+    prismaMock.category.findMany.mockResolvedValue([{ name: 'Alimentação' }]);
+    prismaMock.financialAccount.findMany.mockResolvedValue([
+      { id: 'wallet-main', name: 'Carteira', type: 'WALLET' },
+    ]);
+    prismaMock.creditCard.findMany.mockResolvedValue([]);
+    prismaMock.category.findFirst.mockResolvedValue({
+      id: 'category-food',
+      name: 'Alimentação',
+    });
+    geminiMock.extractFinancialData.mockResolvedValue({
+      amount: 40,
+      type: 'EXPENSE',
+      description: 'Almoço no restaurante',
+      categoryHint: 'Alimentação',
+      channelHint: null,
+      confidence: 0.99,
+    });
+
+    await service.handleWebhook({
+      from: '5511999999999',
+      text: 'Gastei R$ 40 no restaurante',
+    });
+    const paymentPending = prismaMock.whatsappConversation.upsert.mock.calls
+      .map(([input]) => input.update?.pendingText)
+      .find((value) => typeof value === 'string' && value.startsWith('__PAYMENT_SELECTION__:'));
+    prismaMock.whatsappConversation.upsert.mockReset();
+    prismaMock.whatsappConversation.upsert
+      .mockResolvedValueOnce({ recentMessages: [], pendingText: paymentPending })
+      .mockResolvedValue({});
+
+    const reply = await service.handleWebhook({
+      from: '5511999999999',
+      text: 'Oi',
+    });
+
+    expect(reply.reply).toContain('lançamento em andamento');
+    expect(reply.reply).toContain('Como você pagou esse gasto?');
+    expect(reply.reply).not.toContain('Não reconheci');
+  });
+
   it('seleciona o unico banco ao receber por Pix', async () => {
     fetchMock.mockImplementation(async (url: string) => ({
       ok: true,

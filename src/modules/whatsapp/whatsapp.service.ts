@@ -1431,6 +1431,45 @@ export class WhatsappService {
       await this.clearPendingMessage(userId);
       return 'Lançamento cancelado. Nenhuma informação foi salva.';
     }
+
+    if (this.isGreeting(message)) {
+      return this.pendingPaymentReminder(draft);
+    }
+
+    if (this.isKnownFinancialQuestion(message)) {
+      const answer = await this.answerQuestion(userId, message);
+      return `${answer}\n\nVocê ainda tem um lançamento aguardando forma de pagamento. Responda com o número/nome da opção ou envie “Cancelar”.`;
+    }
+
+    if (this.isTransactionWithoutAmount(message)) {
+      await this.clearPendingMessage(userId);
+      await this.setPendingMessage(
+        userId,
+        phone,
+        message,
+        'TRANSACTION_DETAILS',
+        'WAITING_AMOUNT',
+      );
+      return `${this.missingAmountQuestion(message)}\n\nComecei um novo lançamento e descartei o anterior que estava pendente.`;
+    }
+
+    if (this.needsMoreDescription(message)) {
+      await this.clearPendingMessage(userId);
+      await this.setPendingMessage(
+        userId,
+        phone,
+        message,
+        'TRANSACTION_DETAILS',
+        'WAITING_DESCRIPTION',
+      );
+      return `${this.missingDescriptionQuestion(message)}\n\nComecei um novo lançamento e descartei o anterior que estava pendente.`;
+    }
+
+    if (this.looksLikeTransaction(message)) {
+      await this.clearPendingMessage(userId);
+      return this.createTransactionFromMessage(userId, phone, message);
+    }
+
     const numericIndex = Number.parseInt(normalized, 10);
     let selected =
       Number.isInteger(numericIndex) && String(numericIndex) === normalized
@@ -1476,7 +1515,7 @@ export class WhatsappService {
     }
 
     if (!selected) {
-      return `${this.paymentSelectionQuestion(draft.transaction.type, draft.options)}\n\nNão reconheci essa opção.`;
+      return `${this.paymentSelectionQuestion(draft.transaction.type, draft.options)}\n\nNão reconheci essa opção. Você pode responder com o número/nome da opção, criar uma nova carteira ou enviar “Cancelar”.`;
     }
 
     const transaction: WhatsappTransactionDraft = {
@@ -1488,6 +1527,14 @@ export class WhatsappService {
     };
     await this.setPendingTransactionDraft(userId, phone, transaction);
     return this.transactionDraftConfirmation(transaction);
+  }
+
+  private pendingPaymentReminder(draft: WhatsappPaymentDraft): string {
+    return [
+      'Tenho um lançamento em andamento aguardando a forma de pagamento.',
+      this.paymentSelectionQuestion(draft.transaction.type, draft.options),
+      'Se quiser abandonar esse lançamento, envie “Cancelar”. Para ver opções do Din, envie “Menu”.',
+    ].join('\n\n');
   }
 
   private async tryCreateFinancialAccount(userId: string, message: string): Promise<string | null> {
