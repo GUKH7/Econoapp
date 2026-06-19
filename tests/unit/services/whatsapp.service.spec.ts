@@ -686,6 +686,38 @@ describe('WhatsappService', () => {
     });
   });
 
+  it('atualiza a categoria do rascunho com comando natural', async () => {
+    fetchMock.mockImplementation(async (url: string) => ({
+      ok: true,
+      json: vi.fn().mockResolvedValue(
+        url.endsWith('/status') ? { status: 'conectado' } : { success: true },
+      ),
+    }));
+    prismaMock.user.findFirst.mockResolvedValue({
+      id: 'user-1',
+      name: 'Gustavo',
+      phone: '11999999999',
+    });
+    prismaMock.whatsappConversation.upsert.mockResolvedValue({
+      recentMessages: [],
+      pendingText:
+        '__TRANSACTION_CONFIRMATION__:{"description":"Compra de toalha","amount":20,"type":"EXPENSE","scope":"PERSONAL","categoryHint":"Toalha","paymentLabel":"Banco/Pix - Nubank","accountId":"account-bank"}',
+    });
+
+    const result = await service.handleWebhook({
+      from: '5511999999999',
+      text: 'Altere a categoria para itens de higiene',
+    });
+
+    expect(result.reply).toContain('Categoria: Itens De Higiene');
+    expect(result.reply).toContain('Categoria atualizada');
+    expect(transactionServiceMock.create).not.toHaveBeenCalled();
+    const updatedPending = prismaMock.whatsappConversation.upsert.mock.calls
+      .map(([input]) => input.update?.pendingText)
+      .find((value) => typeof value === 'string' && value.startsWith('__TRANSACTION_CONFIRMATION__:'));
+    expect(updatedPending).toContain('"categoryHint":"Itens De Higiene"');
+  });
+
   it('pergunta se a venda e pessoal ou do negocio antes de solicitar o canal', async () => {
     fetchMock.mockImplementation(async (url: string) => ({
       ok: true,
@@ -1583,14 +1615,23 @@ describe('WhatsappService', () => {
       { id: 'wallet-main', name: 'Carteira', type: 'WALLET' },
     ]);
     prismaMock.creditCard.findMany.mockResolvedValue([]);
-    geminiMock.extractFinancialData.mockResolvedValue({
-      amount: 20,
-      type: 'EXPENSE',
-      description: 'Gastei 20 reais',
-      categoryHint: 'nao_especificado',
-      channelHint: null,
-      confidence: 0.92,
-    });
+    geminiMock.extractFinancialData
+      .mockResolvedValueOnce({
+        amount: 20,
+        type: 'EXPENSE',
+        description: 'Gastei 20 reais',
+        categoryHint: 'nao_especificado',
+        channelHint: null,
+        confidence: 0.92,
+      })
+      .mockResolvedValue({
+        amount: 20,
+        type: 'EXPENSE',
+        description: 'Gastei 20 reais',
+        categoryHint: 'Toalha',
+        channelHint: null,
+        confidence: 0.92,
+      });
 
     const question = await service.handleWebhook({
       from: '5511999999999',

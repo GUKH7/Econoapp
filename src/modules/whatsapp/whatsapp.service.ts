@@ -250,6 +250,7 @@ export class WhatsappService {
     if (transactionDraft) {
       const reply = await this.handleTransactionConfirmation(
         user.id,
+        phone,
         message,
         transactionDraft,
       );
@@ -328,7 +329,7 @@ export class WhatsappService {
 
     const transactionDraft = this.parseTransactionDraft(pendingValue);
     if (transactionDraft) {
-      const reply = await this.handleTransactionConfirmation(user.id, cleanMessage, transactionDraft);
+      const reply = await this.handleTransactionConfirmation(user.id, phone, cleanMessage, transactionDraft);
       await this.appendConversation(user.id, phone, recentMessages, cleanMessage, reply);
       return { reply };
     }
@@ -483,6 +484,8 @@ export class WhatsappService {
         ? this.inferIncomeCategory(message) ?? extractedCategoryHint
         : this.normalizeText(extractedCategoryHint) === 'nao_especificado'
           ? (followUpCategoryHint ?? extractedCategoryHint)
+          : this.isGranularFollowUpCategory(extractedCategoryHint, followUpDetailHint)
+            ? (followUpCategoryHint ?? extractedCategoryHint)
           : extractedCategoryHint;
     if (!categoryHint || this.normalizeText(categoryHint) === 'nao_especificado') {
       await this.setPendingMessage(
@@ -1257,6 +1260,7 @@ export class WhatsappService {
 
   private async handleTransactionConfirmation(
     userId: string,
+    phone: string,
     message: string,
     draft: WhatsappTransactionDraft,
   ): Promise<string> {
@@ -1271,6 +1275,16 @@ export class WhatsappService {
     if (/^(editar|edita|corrigir|corrija)$/.test(command)) {
       await this.clearPendingMessage(userId);
       return 'Certo. Envie novamente o lançamento com as informações corrigidas, incluindo valor e descrição.';
+    }
+
+    const categoryUpdate = this.parseDraftCategoryUpdate(message);
+    if (categoryUpdate) {
+      const updatedDraft: WhatsappTransactionDraft = {
+        ...draft,
+        categoryHint: categoryUpdate,
+      };
+      await this.setPendingTransactionDraft(userId, phone, updatedDraft);
+      return `${this.transactionDraftConfirmation(updatedDraft)}\n\nCategoria atualizada.`;
     }
 
     if (draft.possibleDuplicate && !confirmsDuplicate) {
@@ -2460,6 +2474,18 @@ export class WhatsappService {
     return mappings.find(([pattern]) => pattern.test(normalized))?.[1] ?? 'Outros';
   }
 
+  private isGranularFollowUpCategory(categoryHint: string, detail: string | null): boolean {
+    if (!detail) {
+      return false;
+    }
+    const category = this.normalizeText(categoryHint);
+    const normalizedDetail = this.normalizeText(detail);
+    if (!category || !normalizedDetail) {
+      return false;
+    }
+    return normalizedDetail.includes(category) || category.includes(normalizedDetail);
+  }
+
   private preferFollowUpDescription(
     extractedDescription: string | undefined,
     followUpDetailHint: string | null,
@@ -2480,6 +2506,17 @@ export class WhatsappService {
     }
 
     return extractedDescription;
+  }
+
+  private parseDraftCategoryUpdate(message: string): string | null {
+    const match = message.match(
+      /\b(?:altere|alterar|mude|mudar|troque|trocar|corrija|corrigir)\s+a?\s*categoria\s+(?:para|pra|por)\s+(.+)$/i,
+    );
+    const category = match?.[1]
+      ?.replace(/[.!?]+$/g, '')
+      .replace(/\b(por favor|pfv|obrigado|obrigada)\b/gi, '')
+      .trim();
+    return category ? this.titleCase(category).slice(0, 60) : null;
   }
 
   private buildTransactionDescription(
