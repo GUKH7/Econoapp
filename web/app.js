@@ -663,6 +663,23 @@ function bindViewEvents() {
     });
   });
 
+  document.querySelectorAll('[data-din-compose]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const message = button.dataset.dinCompose || '';
+      renderWithTransition(() => {
+        state.sheetOpen = false;
+        state.fabOpen = false;
+        state.tab = 'assistant';
+      });
+      requestAnimationFrame(() => {
+        const input = document.querySelector('[data-assistant-form] input[name="message"]');
+        if (!input) return;
+        input.value = message;
+        input.focus();
+      });
+    });
+  });
+
   document.querySelectorAll('input[name="amount"]').forEach((input) => {
     input.addEventListener('input', () => {
       input.value = formatCurrencyInput(input.value);

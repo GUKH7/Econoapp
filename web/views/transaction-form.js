@@ -75,6 +75,11 @@ function transactionFormHtml(type, context) {
           <span class="entry-mode-icon ${entryIconClass(type)}">${entryIcon(type)}</span>
           <span><strong>${entryHeadline(type)}</strong><small>${scopeLabel()} - ${currentMonth}</small></span>
         </div>
+        <div class="entry-steps" aria-label="Etapas do lançamento">
+          <span class="active">Tipo</span>
+          <span>Valor</span>
+          <span>Detalhes</span>
+        </div>
         <div class="type-toggle three-options" aria-label="Tipo do lançamento">
           ${typeOption('EXPENSE', 'Gasto', type)}
           ${typeOption('INCOME', 'Receita', type)}
@@ -93,11 +98,20 @@ function transactionFormHtml(type, context) {
         isTransfer
           ? transferPreviewHtml(walletOptions)
           : `
+              <article class="din-entry-helper">
+                <span class="assistant-avatar">${icon('chat')}</span>
+                <div>
+                  <strong>Prefere conversar?</strong>
+                  <p>${isExpense ? 'Conte o gasto em uma frase e o Din ajuda a completar.' : 'Conte a entrada em uma frase e o Din ajuda a registrar.'}</p>
+                </div>
+                <button type="button" data-din-compose="${isExpense ? 'Gastei R$ 40 no mercado hoje' : 'Recebi R$ 250 de uma venda hoje'}">Usar Din</button>
+              </article>
+
               <div class="form-section transaction-details-section">
                 <label class="field form-row">
                   <span class="row-icon neutral-bg">${icon('chat')}</span>
                   <span>Descrição</span>
-                  <input name="description" required placeholder="Ex: Mercado, venda Shopee, frete" />
+                  <input name="description" required placeholder="${isExpense ? 'Ex: Mercado, restaurante, frete' : 'Ex: Salário, venda, serviço'}" />
                 </label>
                 <label class="field select-row form-row">
                   <span class="row-icon neutral-bg">${icon('tag')}</span>
@@ -150,7 +164,7 @@ function transactionFormHtml(type, context) {
                 <span>${entryIcon(type)}</span>
                 <div>
                   <strong>${isExpense ? 'Pronto para registrar uma saída' : 'Pronto para registrar uma entrada'}</strong>
-                  <small>Confira valor, ${isExpense ? 'forma de pagamento' : 'conta de recebimento'}, categoria e data antes de salvar.</small>
+                  <small>${isExpense ? 'Valor, pagamento, categoria e data atualizam seu saldo e relatórios.' : 'Valor, origem, conta e data atualizam seu saldo e relatórios.'}</small>
                 </div>
               </div>
             `

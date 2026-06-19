@@ -82,6 +82,7 @@ export function assistantView() {
           <button type="button" data-assistant-message="Quanto gastei este mês?">Quanto gastei este mês?</button>
           <button type="button" data-assistant-action="expense">Registrar gasto</button>
           <button type="button" data-assistant-action="income">Registrar receita</button>
+          <button type="button" data-assistant-message="Criar uma carteira chamada Dinheiro">Criar carteira</button>
           <button type="button" data-assistant-message="Resumo do meu negócio">Resumo do negócio</button>
         </div>
 

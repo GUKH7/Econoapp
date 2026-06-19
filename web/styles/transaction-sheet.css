@@ -134,6 +134,30 @@
   width: 23px;
 }
 
+.entry-steps {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.entry-steps span {
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 950;
+  min-height: 28px;
+  padding: 7px 8px;
+  text-align: center;
+}
+
+.entry-steps span.active {
+  background: var(--green-soft);
+  border-color: #bbf7d0;
+  color: var(--green-dark);
+}
+
 .entry-hero.income-mode {
   border-color: rgba(34, 197, 94, 0.24);
   box-shadow:
@@ -247,6 +271,49 @@
   padding: 0 13px;
 }
 
+.din-entry-helper {
+  align-items: center;
+  background: linear-gradient(135deg, #f0fdf4, #ffffff);
+  border: 1px solid #bbf7d0;
+  border-radius: 18px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 42px 1fr auto;
+  padding: 12px;
+}
+
+.din-entry-helper strong,
+.din-entry-helper p {
+  display: block;
+  margin: 0;
+}
+
+.din-entry-helper strong {
+  color: var(--green-dark);
+  font-size: 13px;
+  font-weight: 950;
+}
+
+.din-entry-helper p {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.3;
+  margin-top: 2px;
+}
+
+.din-entry-helper button {
+  background: var(--green);
+  border: 0;
+  border-radius: 999px;
+  color: white;
+  font-size: 12px;
+  font-weight: 950;
+  min-height: 34px;
+  padding: 0 12px;
+  white-space: nowrap;
+}
+
 .form-row {
   align-items: center;
   display: grid;
@@ -350,6 +417,15 @@
 }
 
 @media (max-width: 390px) {
+  .din-entry-helper {
+    grid-template-columns: 38px 1fr;
+  }
+
+  .din-entry-helper button {
+    grid-column: 2;
+    justify-self: start;
+  }
+
   .type-toggle label {
     font-size: 12px;
     min-height: 38px;
