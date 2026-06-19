@@ -38,6 +38,7 @@ export function fabMenu() {
     <div class="fab-actions">
       <button class="fab-action" type="button" data-action-type="INCOME"><span class="row-icon income-bg">${icon('plus')}</span><span><strong>Nova receita</strong><small>Entrada pessoal ou do negócio</small></span></button>
       <button class="fab-action" type="button" data-action-type="EXPENSE"><span class="row-icon expense-bg">${icon('minus')}</span><span><strong>Novo gasto</strong><small>Despesa, compra ou taxa</small></span></button>
+      <button class="fab-action" type="button" data-action-type="TRANSFER"><span class="row-icon neutral-bg">${icon('flow')}</span><span><strong>Transferência</strong><small>Mover entre contas</small></span></button>
     </div>
   `;
 }

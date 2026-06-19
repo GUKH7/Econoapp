@@ -160,6 +160,19 @@
   box-shadow: 0 0 20px rgba(239, 68, 68, 0.26);
 }
 
+.entry-hero.transfer-mode {
+  border-color: rgba(107, 114, 128, 0.22);
+  box-shadow:
+    0 22px 48px rgba(31, 41, 55, 0.09),
+    0 0 0 1px rgba(107, 114, 128, 0.05),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.entry-hero.transfer-mode::before {
+  background: linear-gradient(180deg, #6b7280, #cbd5e1);
+  box-shadow: 0 0 20px rgba(107, 114, 128, 0.22);
+}
+
 .type-toggle {
   background: var(--surface-2);
   border: 1px solid var(--line);
@@ -168,6 +181,10 @@
   gap: 4px;
   grid-template-columns: 1fr 1fr;
   padding: 4px;
+}
+
+.type-toggle.three-options {
+  grid-template-columns: repeat(3, 1fr);
 }
 
 .type-toggle label {
@@ -179,6 +196,8 @@
   font-weight: 900;
   justify-content: center;
   min-height: 42px;
+  padding: 0 8px;
+  text-align: center;
 }
 
 .type-toggle label.active {
@@ -256,4 +275,88 @@
 
 .sheet-actions .button {
   width: 100%;
+}
+
+.amount-input:disabled,
+.amount-presets button:disabled,
+.transfer-preview select:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.transaction-confirmation {
+  align-items: center;
+  background: linear-gradient(135deg, #f8fafc, #ffffff);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  display: flex;
+  gap: 12px;
+  padding: 14px;
+}
+
+.transaction-confirmation > span {
+  align-items: center;
+  border-radius: 16px;
+  color: white;
+  display: inline-flex;
+  flex: 0 0 42px;
+  height: 42px;
+  justify-content: center;
+  width: 42px;
+}
+
+.transaction-confirmation.income > span {
+  background: var(--green);
+  box-shadow: 0 14px 26px rgba(34, 197, 94, 0.18);
+}
+
+.transaction-confirmation.expense > span {
+  background: var(--red);
+  box-shadow: 0 14px 26px rgba(239, 68, 68, 0.16);
+}
+
+.transaction-confirmation.neutral > span {
+  background: var(--text);
+}
+
+.transaction-confirmation strong,
+.transaction-confirmation small {
+  display: block;
+}
+
+.transaction-confirmation strong {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 950;
+}
+
+.transaction-confirmation small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.35;
+  margin-top: 3px;
+}
+
+.transfer-preview {
+  background:
+    linear-gradient(135deg, rgba(248, 250, 252, 0.96), rgba(255, 255, 255, 0.98)),
+    var(--surface);
+}
+
+.transfer-preview .transaction-confirmation {
+  background: var(--green-soft);
+  border-color: #bbf7d0;
+}
+
+@media (max-width: 390px) {
+  .type-toggle label {
+    font-size: 12px;
+    min-height: 38px;
+    padding: 0 5px;
+  }
+
+  .amount-input {
+    font-size: 40px;
+  }
 }

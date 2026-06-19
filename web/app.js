@@ -923,6 +923,12 @@ async function handleTransactionSubmit(event) {
   const data = Object.fromEntries(new FormData(form));
   setFormBusy(form, true, 'Salvando lançamento...');
   try {
+    if (data.type === 'TRANSFER') {
+      showToast('Transferências reais entram na próxima etapa do backend.', 'error');
+      setFormBusy(form, false);
+      return;
+    }
+
     let categoryId = data.categoryId;
     if (String(data.newCategoryName || '').trim()) {
       const category = await api().createCategory({
@@ -957,6 +963,7 @@ async function handleTransactionSubmit(event) {
       channelId: data.channelId || undefined,
       accountId: paymentTarget.accountId || undefined,
       creditCardId: paymentTarget.creditCardId || undefined,
+      date: data.date || undefined,
     });
     if (data.type === 'EXPENSE' && data.paymentMethod) {
       state.paymentMeta[response.data.id] = paymentMetaFromValue(data.paymentMethod);
@@ -969,7 +976,12 @@ async function handleTransactionSubmit(event) {
     await loadData();
     state.sheetOpen = false;
     renderApp();
-    showToast(data.type === 'INCOME' ? 'Receita registrada.' : 'Gasto registrado.');
+    showToast(
+      `${data.type === 'INCOME' ? 'Receita' : 'Gasto'} registrado: ${parseAmount(data.amount).toLocaleString('pt-BR', {
+        style: 'currency',
+        currency: 'BRL',
+      })}`,
+    );
   } catch (error) {
     setFormBusy(form, false);
     showToast(error.message, 'error');

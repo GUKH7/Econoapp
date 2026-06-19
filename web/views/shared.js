@@ -92,6 +92,7 @@ export function icon(name) {
     card: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2Zm0 2v2h18V8H3Zm0 5v5h18v-5H3Z"/></svg>',
     tag: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11V4h7l11 11-7 7L3 11Zm5-2a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z"/></svg>',
     shop: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 4h16l1 6a4 4 0 0 1-6 3.5 4 4 0 0 1-6 0A4 4 0 0 1 3 10l1-6Zm1 11h14v6H5v-6Z"/></svg>',
+    calendar: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 2h2v3h6V2h2v3h3a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h3V2Zm13 8H4v10h16V10Z"/></svg>',
   };
   return icons[name] || icons.more;
 }
