@@ -49,6 +49,10 @@ type WhatsappPaymentOption = {
 type WhatsappPaymentDraft = {
   transaction: WhatsappTransactionDraft;
   options: WhatsappPaymentOption[];
+  createPayment?: {
+    waitingForName?: boolean;
+    type: FinancialAccountType;
+  };
 };
 type WhatsappMutationDraft =
   | {
@@ -1427,6 +1431,31 @@ export class WhatsappService {
     draft: WhatsappPaymentDraft,
   ): Promise<string> {
     const normalized = this.normalizeText(message);
+    if (draft.createPayment?.waitingForName) {
+      if (/^(cancelar|cancela|nao|não)$/.test(normalized)) {
+        await this.clearPendingMessage(userId);
+        return 'Lançamento cancelado. Nenhuma informação foi salva.';
+      }
+
+      const name = this.extractAccountName(message, draft.createPayment.type) ?? message.trim();
+      if (!name || this.isGenericPaymentName(name, draft.createPayment.type)) {
+        return this.newPaymentNameQuestion(draft.createPayment.type);
+      }
+
+      const createdPayment = await this.createPaymentOptionFromAccount(
+        userId,
+        name,
+        draft.createPayment.type,
+        draft.transaction.scope,
+      );
+      const transaction: WhatsappTransactionDraft = {
+        ...draft.transaction,
+        paymentLabel: createdPayment.label,
+        accountId: createdPayment.id,
+      };
+      await this.setPendingTransactionDraft(userId, phone, transaction);
+      return this.transactionDraftConfirmation(transaction);
+    }
     if (/^(cancelar|cancela|nao|não)$/.test(normalized)) {
       await this.clearPendingMessage(userId);
       return 'Lançamento cancelado. Nenhuma informação foi salva.';
@@ -1504,6 +1533,22 @@ export class WhatsappService {
     }
 
     if (!selected) {
+      const requestedPaymentType = this.requestedPaymentAccountType(message);
+      const paymentName = requestedPaymentType
+        ? this.extractAccountName(message, requestedPaymentType)
+        : null;
+
+      if (requestedPaymentType && !paymentName) {
+        await this.setPendingPaymentDraft(userId, phone, {
+          ...draft,
+          createPayment: {
+            type: requestedPaymentType,
+            waitingForName: true,
+          },
+        });
+        return this.newPaymentNameQuestion(requestedPaymentType);
+      }
+
       const createdPayment = await this.tryCreatePaymentAccount(
         userId,
         message,
@@ -1574,26 +1619,26 @@ export class WhatsappService {
     message: string,
     scope: FinancialScope,
   ): Promise<WhatsappPaymentOption | null> {
-    const normalized = this.normalizeText(message);
-    const wantsWallet =
-      /\b(carteira|dinheiro|caixa)\b/.test(normalized) ||
-      /\b(outra|outro|nova|novo|criar|crie|cadastrar|cadastre|adicionar|adicione|nenhuma|nenhum)\b/.test(
-        normalized,
-      );
-    const wantsBank = /\b(banco|conta|pix)\b/.test(normalized);
-
-    if (!wantsWallet && !wantsBank) {
+    const type = this.requestedPaymentAccountType(message);
+    if (!type) {
       return null;
     }
 
-    const type =
-      wantsBank && !normalized.includes('carteira')
-        ? FinancialAccountType.BANK
-        : FinancialAccountType.WALLET;
-    const fallbackName = type === FinancialAccountType.BANK ? 'Conta principal' : 'Outra forma';
-    const name = this.extractAccountName(message, type) || fallbackName;
-    const account = await this.createFinancialAccount(userId, name, type, scope);
+    const name = this.extractAccountName(message, type);
+    if (!name) {
+      return null;
+    }
 
+    return this.createPaymentOptionFromAccount(userId, name, type, scope);
+  }
+
+  private async createPaymentOptionFromAccount(
+    userId: string,
+    name: string,
+    type: FinancialAccountType,
+    scope: FinancialScope,
+  ): Promise<WhatsappPaymentOption> {
+    const account = await this.createFinancialAccount(userId, name, type, scope);
     return {
       accountType: account.type,
       id: account.id,
@@ -1601,6 +1646,27 @@ export class WhatsappService {
       label: `${account.type === FinancialAccountType.BANK ? 'Banco/Pix' : 'Carteira'} - ${account.name}`,
       name: account.name,
     };
+  }
+
+  private requestedPaymentAccountType(message: string): FinancialAccountType | null {
+    const normalized = this.normalizeText(message);
+    const wantsBank = /\b(banco|conta|pix)\b/.test(normalized);
+    if (wantsBank && !normalized.includes('carteira')) {
+      return FinancialAccountType.BANK;
+    }
+
+    const wantsWallet =
+      /\b(carteira|dinheiro|caixa)\b/.test(normalized) ||
+      /\b(outra|outro|nova|novo|criar|crie|cadastrar|cadastre|adicionar|adicione|nenhuma|nenhum)\b/.test(
+        normalized,
+      );
+    return wantsWallet ? FinancialAccountType.WALLET : null;
+  }
+
+  private newPaymentNameQuestion(type: FinancialAccountType): string {
+    return type === FinancialAccountType.BANK
+      ? 'Qual banco, conta ou forma Pix você quer usar? Ex: Nubank, Inter ou Conta principal.'
+      : 'Qual é o nome dessa forma de pagamento? Ex: Dinheiro, Caixa, Carteira pessoal ou outra carteira.';
   }
 
   private async createFinancialAccount(
@@ -1637,11 +1703,29 @@ export class WhatsappService {
       type === FinancialAccountType.BANK
         ? ['banco', 'conta', 'pix']
         : ['carteira', 'outra carteira', 'outra', 'outro'];
-    if (generic.includes(normalized)) {
+    if (generic.includes(normalized) || this.isGenericPaymentName(raw, type)) {
       return null;
     }
 
     return raw;
+  }
+
+  private isGenericPaymentName(name: string, type: FinancialAccountType): boolean {
+    const normalized = this.normalizeText(name);
+    const generic =
+      type === FinancialAccountType.BANK
+        ? ['banco', 'conta', 'pix', 'outra conta', 'outro banco']
+        : [
+            'carteira',
+            'outra carteira',
+            'outra',
+            'outro',
+            'outra forma',
+            'outra forma de pagamento',
+            'nenhuma',
+            'nenhuma delas',
+          ];
+    return generic.includes(normalized);
   }
 
   private async tryCreateMutationDraft(

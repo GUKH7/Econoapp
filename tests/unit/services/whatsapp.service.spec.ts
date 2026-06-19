@@ -494,7 +494,7 @@ describe('WhatsappService', () => {
     expect(reply.reply).not.toContain('Não reconheci');
   });
 
-  it('cria outra carteira quando usuario responde nenhuma delas no pagamento', async () => {
+  it('pergunta e cria nova forma quando usuario responde outra forma no pagamento', async () => {
     fetchMock.mockImplementation(async (url: string) => ({
       ok: true,
       json: vi.fn().mockResolvedValue(
@@ -514,7 +514,7 @@ describe('WhatsappService', () => {
     prismaMock.creditCard.findMany.mockResolvedValue([]);
     prismaMock.financialAccount.create.mockResolvedValue({
       id: 'wallet-other',
-      name: 'Outra Forma',
+      name: 'Dinheiro Loja',
       type: 'WALLET',
       scope: FinancialScope.PERSONAL,
     });
@@ -543,21 +543,37 @@ describe('WhatsappService', () => {
       .mockResolvedValueOnce({ recentMessages: [], pendingText: paymentPending })
       .mockResolvedValue({});
 
-    const reply = await service.handleWebhook({
+    const askNameReply = await service.handleWebhook({
       from: '5511999999999',
       text: 'Nenhuma delas',
+    });
+
+    expect(prismaMock.financialAccount.create).not.toHaveBeenCalled();
+    expect(askNameReply.reply).toContain('nome dessa forma de pagamento');
+
+    const newPaymentPending = prismaMock.whatsappConversation.upsert.mock.calls
+      .map(([input]) => input.update?.pendingText)
+      .find((value) => typeof value === 'string' && value.startsWith('__PAYMENT_SELECTION__:'));
+    prismaMock.whatsappConversation.upsert.mockReset();
+    prismaMock.whatsappConversation.upsert
+      .mockResolvedValueOnce({ recentMessages: [], pendingText: newPaymentPending })
+      .mockResolvedValue({});
+
+    const reply = await service.handleWebhook({
+      from: '5511999999999',
+      text: 'Dinheiro da loja',
     });
 
     expect(prismaMock.financialAccount.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
-          name: 'Outra Forma',
+          name: 'Dinheiro Loja',
           type: 'WALLET',
           userId: 'user-1',
         }),
       }),
     );
-    expect(reply.reply).toContain('Forma de pagamento: Carteira - Outra Forma');
+    expect(reply.reply).toContain('Forma de pagamento: Carteira - Dinheiro Loja');
     expect(reply.reply).not.toContain('Não reconheci');
   });
 
