@@ -224,7 +224,7 @@ describe('WhatsappService', () => {
       text: 'Confirmar',
     });
 
-    expect(confirmation.reply).toContain('Lancamento registrado');
+    expect(confirmation.reply).toContain('Lançamento registrado');
     expect(transactionServiceMock.create).toHaveBeenCalledWith('user-1', {
       description: 'Compra no mercado',
       amount: 35,
@@ -320,7 +320,7 @@ describe('WhatsappService', () => {
         from: '5511999999999',
         text: 'Salvar novamente',
       });
-      expect(explicitConfirmation.reply).toContain('Lancamento registrado');
+      expect(explicitConfirmation.reply).toContain('Lançamento registrado');
       expect(transactionServiceMock.create).toHaveBeenCalledTimes(1);
     } finally {
       vi.useRealTimers();
@@ -919,7 +919,7 @@ describe('WhatsappService', () => {
       from: '5511999999999',
       text: 'Confirmar',
     });
-    expect(confirmation.reply).toContain('Lancamento registrado');
+    expect(confirmation.reply).toContain('Lançamento registrado');
     expect(transactionServiceMock.create).toHaveBeenCalledTimes(1);
     expect(transactionServiceMock.create).toHaveBeenCalledWith(
       'user-1',
@@ -1010,7 +1010,7 @@ describe('WhatsappService', () => {
       from: '5511999999999',
       text: 'Confirmar',
     });
-    expect(confirmation.reply).toContain('Lancamento registrado');
+    expect(confirmation.reply).toContain('Lançamento registrado');
     expect(confirmation.reply).toContain('Modo: Pessoal');
     expect(prismaMock.salesChannel.findFirst).not.toHaveBeenCalled();
     expect(transactionServiceMock.create).toHaveBeenCalledWith(
@@ -1103,7 +1103,7 @@ describe('WhatsappService', () => {
       from: '5511999999999',
       text: 'Confirmar',
     });
-    expect(confirmation.reply).toContain('Lancamento registrado');
+    expect(confirmation.reply).toContain('Lançamento registrado');
     expect(confirmation.reply).toContain('Categoria: Serviços');
     expect(transactionServiceMock.create).toHaveBeenCalledWith(
       'user-1',
@@ -1568,7 +1568,7 @@ describe('WhatsappService', () => {
       text: 'Confirmar',
     });
 
-    expect(result.reply).toContain('Lancamento registrado');
+    expect(result.reply).toContain('Lançamento registrado');
     expect(transactionServiceMock.create).toHaveBeenCalledTimes(1);
   });
 

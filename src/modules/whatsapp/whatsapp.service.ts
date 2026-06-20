@@ -716,10 +716,10 @@ export class WhatsappService {
           `${index + 1}. ${item.description} — ${item.category.name}: ${this.formatMoney(Number(item.netAmount ?? item.amount))}`,
       );
       return [
-        `📊 Seus gastos ${this.periodOf(period.label)}:`,
+        `📊 *Seus gastos ${this.periodOf(period.label)}:*`,
         ...lines,
         '',
-        `💵 Total: ${this.formatMoney(total)}`,
+        `💵 *Total: ${this.formatMoney(total)}*`,
         expenses.length === 15 ? '🔎 Mostrando os 15 gastos mais recentes.' : '',
       ]
         .filter(Boolean)
@@ -728,22 +728,22 @@ export class WhatsappService {
 
     if (lower.includes('lucro') || lower.includes('negocio')) {
       const totals = await this.monthTotals(userId, start, end, FinancialScope.BUSINESS);
-      return `🏪 Seu negócio está com saldo de ${this.formatMoney(totals.balance)} ${this.periodAt(period.label).toLocaleLowerCase('pt-BR')}.\n💰 Receitas: ${this.formatMoney(totals.income)}\n💸 Gastos: ${this.formatMoney(totals.expense)}.`;
+      return `🏪 *Resumo do negócio*\n\n💵 *Saldo: ${this.formatMoney(totals.balance)}* ${this.periodAt(period.label).toLocaleLowerCase('pt-BR')}.\n💰 *Receitas: ${this.formatMoney(totals.income)}*\n💸 *Gastos: ${this.formatMoney(totals.expense)}*.`;
     }
 
     const totals = await this.monthTotals(userId, start, end, scope);
     if (lower.includes('gastei') || lower.includes('gasto') || lower.includes('despesa')) {
       const topCategory = await this.topExpenseCategory(userId, start, end, scope);
       return [
-        `📊 ${this.periodAt(period.label)}, você gastou ${this.formatMoney(totals.expense)}.`,
-        topCategory ? `🏷️ Maior categoria: ${topCategory.name} - ${this.formatMoney(topCategory.total)}.` : '',
-        `💵 Resultado do período: ${this.formatMoney(totals.balance)}.`,
+        `📊 *${this.periodAt(period.label)}, você gastou ${this.formatMoney(totals.expense)}.*`,
+        topCategory ? `🏷️ Maior categoria: *${topCategory.name} - ${this.formatMoney(topCategory.total)}.*` : '',
+        `💵 Resultado do período: *${this.formatMoney(totals.balance)}.*`,
       ]
         .filter(Boolean)
         .join('\n');
     }
 
-    return `📊 Resumo ${this.periodOf(period.label)}:\n💰 Receitas: ${this.formatMoney(totals.income)}\n💸 Gastos: ${this.formatMoney(totals.expense)}\n💵 Saldo: ${this.formatMoney(totals.balance)}.`;
+    return `📊 *Resumo ${this.periodOf(period.label)}*\n\n💰 *Receitas: ${this.formatMoney(totals.income)}*\n💸 *Gastos: ${this.formatMoney(totals.expense)}*\n💵 *Saldo: ${this.formatMoney(totals.balance)}*.`;
   }
 
   private async answerMonthComparison(
@@ -759,11 +759,11 @@ export class WhatsappService {
     const currentLabel = this.monthLabel(current.start);
     const previousLabel = this.monthLabel(previous.start);
     return [
-      `📊 Comparação: ${currentLabel} x ${previousLabel}`,
+      `📊 *Comparação: ${currentLabel} x ${previousLabel}*`,
       '',
-      `💰 Receitas: ${this.formatMoney(currentTotals.income)} (${this.percentageChange(previousTotals.income, currentTotals.income)})`,
-      `💸 Gastos: ${this.formatMoney(currentTotals.expense)} (${this.percentageChange(previousTotals.expense, currentTotals.expense)})`,
-      `💵 Saldo: ${this.formatMoney(currentTotals.balance)} (antes ${this.formatMoney(previousTotals.balance)})`,
+      `💰 *Receitas: ${this.formatMoney(currentTotals.income)} (${this.percentageChange(previousTotals.income, currentTotals.income)})*`,
+      `💸 *Gastos: ${this.formatMoney(currentTotals.expense)} (${this.percentageChange(previousTotals.expense, currentTotals.expense)})*`,
+      `💵 *Saldo: ${this.formatMoney(currentTotals.balance)} (antes ${this.formatMoney(previousTotals.balance)})*`,
     ].join('\n');
   }
 
@@ -780,18 +780,18 @@ export class WhatsappService {
       this.largestExpenseIncreases(userId),
     ]);
     return [
-      `📊 Resumo completo ${this.periodOf(period.label)}`,
+      `📊 *Resumo completo ${this.periodOf(period.label)}*`,
       '',
-      `💰 Receitas: ${this.formatMoney(totals.income)}`,
-      `💸 Gastos: ${this.formatMoney(totals.expense)}`,
-      `💵 Saldo: ${this.formatMoney(totals.balance)}`,
+      `💰 *Receitas: ${this.formatMoney(totals.income)}*`,
+      `💸 *Gastos: ${this.formatMoney(totals.expense)}*`,
+      `💵 *Saldo: ${this.formatMoney(totals.balance)}*`,
       '',
       this.formatDistribution('Gastos por categoria', categories),
       '',
       this.formatDistribution('Receitas por origem', origins),
       '',
-      `👤 Pessoal: ${this.formatMoney(personal.balance)} de saldo`,
-      `🏪 Negócio: ${this.formatMoney(business.balance)} de saldo`,
+      `👤 *Pessoal: ${this.formatMoney(personal.balance)} de saldo*`,
+      `🏪 *Negócio: ${this.formatMoney(business.balance)} de saldo*`,
       '',
       increases.length
         ? `⚠️ Maiores aumentos: ${increases
@@ -833,7 +833,7 @@ export class WhatsappService {
       this.monthTotals(userId, period.start, period.end, FinancialScope.BUSINESS),
     ]);
     return [
-      `📊 Pessoal x Negócio ${this.periodOf(period.label)}`,
+      `📊 *Pessoal x Negócio ${this.periodOf(period.label)}*`,
       '',
       `👤 Pessoal — receitas ${this.formatMoney(personal.income)}, gastos ${this.formatMoney(personal.expense)}, saldo ${this.formatMoney(personal.balance)}.`,
       `🏪 Negócio — receitas ${this.formatMoney(business.income)}, gastos ${this.formatMoney(business.expense)}, saldo ${this.formatMoney(business.balance)}.`,
@@ -853,7 +853,7 @@ export class WhatsappService {
       return '✅ Nenhuma categoria de gasto aumentou em relação ao mês anterior.';
     }
     return [
-      '⚠️ Maiores aumentos de gastos neste mês:',
+      '⚠️ *Maiores aumentos de gastos neste mês*',
       ...increases.slice(0, 5).map(
         (item, index) =>
           `${index + 1}. ${item.name}: +${this.formatMoney(item.increase)} (${this.formatMoney(item.previous)} → ${this.formatMoney(item.current)})`,
@@ -897,11 +897,12 @@ export class WhatsappService {
     const spent = await this.categoryExpenseTotal(userId, category.id, scope, month);
     const percentage = amount > 0 ? Math.round((spent / amount) * 100) : 0;
     return [
-      '✅ Orçamento definido',
-      `🏷️ Categoria: ${category.name}`,
-      `💵 Limite mensal: ${this.formatMoney(amount)}`,
-      `👤 Modo: ${scope === FinancialScope.BUSINESS ? 'Negócio' : 'Pessoal'}`,
-      `📊 Já utilizado: ${this.formatMoney(spent)} (${percentage}%)`,
+      '✅ *Orçamento definido*',
+      '',
+      `🏷️ *Categoria: ${category.name}*`,
+      `💵 *Limite mensal: ${this.formatMoney(amount)}*`,
+      `👤 *Modo: ${scope === FinancialScope.BUSINESS ? 'Negócio' : 'Pessoal'}*`,
+      `📊 *Já utilizado: ${this.formatMoney(spent)} (${percentage}%)*`,
     ].join('\n');
   }
 
@@ -1187,12 +1188,12 @@ export class WhatsappService {
   ): string {
     const total = items.reduce((sum, item) => sum + item.total, 0);
     return [
-      `${title}:`,
+      `📊 *${title}*`,
       ...items.map((item, index) => {
         const percentage = total > 0 ? Math.round((item.total / total) * 100) : 0;
-        return `${index + 1}. ${item.name}: ${this.formatMoney(item.total)} (${percentage}%)`;
+        return `${index + 1}. *${item.name}: ${this.formatMoney(item.total)} (${percentage}%)*`;
       }),
-      `Total: ${this.formatMoney(total)}`,
+      `💵 *Total: ${this.formatMoney(total)}*`,
     ].join('\n');
   }
 
@@ -1217,16 +1218,16 @@ export class WhatsappService {
   ): string {
     const type = transaction.type === 'EXPENSE' ? 'Despesa' : 'Receita';
     return [
-      '✅ Lancamento registrado',
+      '✅ *Lançamento registrado*',
       '',
-      `${transaction.type === TransactionType.EXPENSE ? '💸' : '💰'} ${type}: ${transaction.description}`,
-      `💵 Valor: ${this.formatMoney(Number(transaction.amount))}`,
-      `🏷️ Categoria: ${categoryName}`,
-      channelName ? `🛒 Canal: ${channelName}` : '',
+      `${transaction.type === TransactionType.EXPENSE ? '💸' : '💰'} *${type}: ${transaction.description}*`,
+      `💵 *Valor: ${this.formatMoney(Number(transaction.amount))}*`,
+      `🏷️ *Categoria: ${categoryName}*`,
+      channelName ? `🛒 *Canal: ${channelName}*` : '',
       paymentLabel
-        ? `🏦 ${transaction.type === TransactionType.INCOME ? 'Recebido em' : 'Pagamento'}: ${paymentLabel}`
+        ? `🏦 *${transaction.type === TransactionType.INCOME ? 'Recebido em' : 'Pagamento'}: ${paymentLabel}*`
         : '',
-      `👤 Modo: ${scope === 'BUSINESS' ? 'Negocio' : 'Pessoal'}`,
+      `👤 *Modo: ${scope === 'BUSINESS' ? 'Negocio' : 'Pessoal'}*`,
     ]
       .filter(Boolean)
       .join('\n');
@@ -1236,8 +1237,8 @@ export class WhatsappService {
     const type = draft.type === TransactionType.EXPENSE ? 'Despesa' : 'Receita';
     const headline =
       draft.type === TransactionType.EXPENSE
-        ? '🧾 Despesa pronta para salvar'
-        : '🧾 Receita pronta para salvar';
+        ? '🧾 *Despesa pronta para salvar*'
+        : '🧾 *Receita pronta para salvar*';
     return [
       draft.possibleDuplicate ? '⚠️ Possível lançamento duplicado' : '',
       draft.possibleDuplicate
@@ -1245,20 +1246,20 @@ export class WhatsappService {
         : '',
       headline,
       '',
-      `${draft.type === TransactionType.EXPENSE ? '💸' : '💰'} Tipo: ${type}`,
-      `📝 Título: ${draft.description}`,
+      `${draft.type === TransactionType.EXPENSE ? '💸' : '💰'} *Tipo: ${type}*`,
+      `📝 *Título: ${draft.description}*`,
       draft.installmentCount && draft.totalAmount
-        ? `💵 Valor: ${this.formatMoney(draft.totalAmount)} em ${draft.installmentCount}x de ${this.formatMoney(draft.amount)}`
-        : `💵 Valor: ${this.formatMoney(draft.amount)}`,
+        ? `💵 *Valor: ${this.formatMoney(draft.totalAmount)} em ${draft.installmentCount}x de ${this.formatMoney(draft.amount)}*`
+        : `💵 *Valor: ${this.formatMoney(draft.amount)}*`,
       draft.transactionDate
-        ? `📅 Data: ${this.formatDateOnly(draft.transactionDate)}`
+        ? `📅 *Data: ${this.formatDateOnly(draft.transactionDate)}*`
         : '',
-      `🏷️ Categoria: ${draft.categoryHint}`,
-      draft.channelHint ? `🛒 Canal: ${draft.channelHint}` : '',
+      `🏷️ *Categoria: ${draft.categoryHint}*`,
+      draft.channelHint ? `🛒 *Canal: ${draft.channelHint}*` : '',
       draft.paymentLabel
-        ? `🏦 Pagamento: ${draft.paymentLabel}`
-        : '🏦 Pagamento: não informado',
-      `👤 Modo: ${draft.scope === FinancialScope.BUSINESS ? 'Negócio' : 'Pessoal'}`,
+        ? `🏦 *Pagamento: ${draft.paymentLabel}*`
+        : '🏦 *Pagamento: não informado*',
+      `👤 *Modo: ${draft.scope === FinancialScope.BUSINESS ? 'Negócio' : 'Pessoal'}*`,
       '',
       draft.possibleDuplicate
         ? '✅ Para criar mesmo assim, responda: Salvar novamente. Ou responda: Cancelar.'
@@ -1478,12 +1479,12 @@ export class WhatsappService {
   ): string {
     return [
       type === TransactionType.INCOME
-        ? '🏦 Em qual conta você recebeu esse dinheiro?'
-        : '🏦 Como você pagou esse gasto?',
+        ? '🏦 *Em qual conta você recebeu esse dinheiro?*'
+        : '🏦 *Como você pagou esse gasto?*',
       '',
       ...options.map((option, index) => `${index + 1}. ${option.label}`),
       '',
-      '✅ Responda com o número ou nome da opção.',
+      '✅ *Responda com o número ou nome da opção.*',
     ].join('\n');
   }
 
@@ -1608,7 +1609,7 @@ export class WhatsappService {
 
   private pendingPaymentReminder(draft: WhatsappPaymentDraft): string {
     return [
-      '🧾 Tenho um lançamento em andamento aguardando a forma de pagamento.',
+      '🧾 *Tenho um lançamento em andamento aguardando a forma de pagamento.*',
       this.paymentSelectionQuestion(draft.transaction.type, draft.options),
       '🗑️ Se quiser abandonar esse lançamento, envie “Cancelar”. Para ver opções do Din, envie “Menu”.',
     ].join('\n\n');
@@ -1885,23 +1886,23 @@ export class WhatsappService {
     const type = draft.type === TransactionType.EXPENSE ? 'Despesa' : 'Receita';
     if (draft.action === 'UPDATE_AMOUNT') {
       return [
-        '✏️ Confirme a correção:',
+        '✏️ *Confirme a correção*',
         '',
-        `${draft.type === TransactionType.EXPENSE ? '💸' : '💰'} ${type}: ${draft.description}`,
-        `💵 Valor atual: ${this.formatMoney(draft.previousAmount)}`,
-        `✅ Novo valor: ${this.formatMoney(draft.newAmount)}`,
+        `${draft.type === TransactionType.EXPENSE ? '💸' : '💰'} *${type}: ${draft.description}*`,
+        `💵 *Valor atual: ${this.formatMoney(draft.previousAmount)}*`,
+        `✅ *Novo valor: ${this.formatMoney(draft.newAmount)}*`,
         '',
-        '✅ Responda: Confirmar ou Cancelar.',
+        '✅ *Responda:* Confirmar ou Cancelar.',
       ].join('\n');
     }
     return [
-      '🗑️ Confirme a exclusão:',
+      '🗑️ *Confirme a exclusão*',
       '',
-      `${draft.type === TransactionType.EXPENSE ? '💸' : '💰'} ${type}: ${draft.description}`,
-      `💵 Valor: ${this.formatMoney(draft.amount)}`,
+      `${draft.type === TransactionType.EXPENSE ? '💸' : '💰'} *${type}: ${draft.description}*`,
+      `💵 *Valor: ${this.formatMoney(draft.amount)}*`,
       '',
       '⚠️ Essa ação não poderá ser desfeita.',
-      '✅ Responda: Confirmar ou Cancelar.',
+      '✅ *Responda:* Confirmar ou Cancelar.',
     ].join('\n');
   }
 
@@ -1927,18 +1928,18 @@ export class WhatsappService {
       });
       await this.clearPendingMessage(userId);
       return [
-        '✅ Lançamento corrigido',
-        `${draft.type === TransactionType.EXPENSE ? '💸 Despesa' : '💰 Receita'}: ${draft.description}`,
-        `💵 Novo valor: ${this.formatMoney(draft.newAmount)}`,
+        '✅ *Lançamento corrigido*',
+        `${draft.type === TransactionType.EXPENSE ? '💸 *Despesa:' : '💰 *Receita:'} ${draft.description}*`,
+        `💵 *Novo valor: ${this.formatMoney(draft.newAmount)}*`,
       ].join('\n');
     }
 
     await this.transactionService.delete(userId, draft.transactionId);
     await this.clearPendingMessage(userId);
     return [
-      '✅ Lançamento excluído',
-      `${draft.type === TransactionType.EXPENSE ? '💸 Despesa' : '💰 Receita'}: ${draft.description}`,
-      `💵 Valor: ${this.formatMoney(draft.amount)}`,
+      '✅ *Lançamento excluído*',
+      `${draft.type === TransactionType.EXPENSE ? '💸 *Despesa:' : '💰 *Receita:'} ${draft.description}*`,
+      `💵 *Valor: ${this.formatMoney(draft.amount)}*`,
     ].join('\n');
   }
 
@@ -2186,7 +2187,7 @@ export class WhatsappService {
 
   private helpReply(): string {
     return [
-      '👋 Posso ajudar você a:',
+      '👋 *Posso ajudar você a:*',
       '🧾 registrar receitas, gastos e vendas;',
       '📊 consultar saldo, gastos e receitas;',
       '📅 consultar semanas, meses específicos e comparar períodos;',
