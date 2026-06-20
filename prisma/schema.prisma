@@ -49,6 +49,7 @@ model User {
   refreshTokens        RefreshToken[]
   channels             SalesChannel[]
   categories           Category[]
+  categoryPreferences  CategoryPreference[]
   transactions         Transaction[]
   accounts             FinancialAccount[]
   creditCards          CreditCard[]
@@ -112,6 +113,23 @@ model Category {
   budgets      CategoryBudget[]
 
   @@index([userId])
+}
+
+model CategoryPreference {
+  id           String          @id @default(uuid()) @db.Uuid
+  userId       String          @db.Uuid
+  sourceKey    String
+  sourceText   String
+  categoryName String
+  type         TransactionType
+  hits         Int             @default(1)
+  createdAt    DateTime        @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime        @updatedAt @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, sourceKey, type])
+  @@index([userId, type])
 }
 
 model FinancialAccount {

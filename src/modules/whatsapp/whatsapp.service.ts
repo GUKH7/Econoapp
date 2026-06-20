@@ -483,7 +483,7 @@ export class WhatsappService {
       followUpDetailHint,
       categories.map((item) => item.name),
     );
-    const categoryHint =
+    let categoryHint =
       extracted.type === 'INCOME' &&
       (!extractedCategoryHint ||
         this.normalizeText(extractedCategoryHint) === 'nao_especificado')
@@ -493,6 +493,13 @@ export class WhatsappService {
           : this.isGranularFollowUpCategory(extractedCategoryHint, followUpDetailHint)
             ? (followUpCategoryHint ?? extractedCategoryHint)
           : extractedCategoryHint;
+    categoryHint = await this.applyLearnedCategoryPreference(
+      userId,
+      categoryHint,
+      extracted.type as TransactionType,
+      [followUpDetailHint, extractedCategoryHint, extracted.description],
+    );
+    categoryHint = this.formatCategoryName(categoryHint, extracted.type as TransactionType);
     if (!categoryHint || this.normalizeText(categoryHint) === 'nao_especificado') {
       await this.setPendingMessage(
         userId,
@@ -1008,7 +1015,16 @@ export class WhatsappService {
 
   private async resolveCategory(userId: string, hint: string, type: string) {
     const normalizedHint = this.normalizeText(hint);
-    const existing = await this.prisma.category.findFirst({ where: { userId, name: { equals: hint, mode: 'insensitive' } } });
+    const displayHint = this.formatCategoryName(hint, type as TransactionType);
+    const existing = await this.prisma.category.findFirst({
+      where: {
+        userId,
+        OR: [
+          { name: { equals: hint, mode: 'insensitive' } },
+          { name: { equals: displayHint, mode: 'insensitive' } },
+        ],
+      },
+    });
     if (existing) return existing;
     const categories = await this.prisma.category.findMany({
       where: { userId },
@@ -1019,8 +1035,13 @@ export class WhatsappService {
     );
     if (normalizedMatch) return normalizedMatch;
 
-    const fallbackName =
-      type === 'EXPENSE' && normalizedHint.includes('mercado') ? 'Alimentacao' : this.titleCase(hint);
+    const similarMatch = this.findSimilarCategory(categories, hint);
+    if (similarMatch) return similarMatch;
+
+    const fallbackName = this.formatCategoryName(
+      type === 'EXPENSE' && normalizedHint.includes('mercado') ? 'Alimentação' : hint,
+      type as TransactionType,
+    );
     return this.prisma.category.create({
       data: { userId, name: fallbackName, color: type === 'INCOME' ? '#22C55E' : '#EF4444' },
     });
@@ -1318,6 +1339,9 @@ export class WhatsappService {
         return `${this.paymentSelectionQuestion(draft.type, paymentOptions)}\n\n🏦 Escolha a nova forma de pagamento para esse lançamento.`;
       }
 
+      if (draftEdit.kind === 'category') {
+        await this.rememberCategoryPreference(userId, draft, draftEdit.category);
+      }
       const updatedDraft = this.applyDraftEdit(draft, draftEdit);
       await this.setPendingTransactionDraft(userId, phone, updatedDraft);
       return `${this.transactionDraftConfirmation(updatedDraft)}\n\n✨ ${this.draftEditUpdatedMessage(draftEdit)}.`;
@@ -2517,6 +2541,147 @@ export class WhatsappService {
     return mappings.find(([pattern]) => pattern.test(normalized))?.[1] ?? 'Outros';
   }
 
+  private async applyLearnedCategoryPreference(
+    userId: string,
+    categoryHint: string,
+    type: TransactionType,
+    contextValues: Array<string | null | undefined>,
+  ): Promise<string> {
+    const keys = this.categoryPreferenceKeys([categoryHint, ...contextValues]);
+    if (!keys.length) {
+      return categoryHint;
+    }
+
+    const preference = await this.prisma.categoryPreference.findFirst({
+      where: { userId, type, sourceKey: { in: keys } },
+      orderBy: [{ hits: 'desc' }, { updatedAt: 'desc' }],
+    });
+
+    return preference?.categoryName ?? categoryHint;
+  }
+
+  private async rememberCategoryPreference(
+    userId: string,
+    draft: WhatsappTransactionDraft,
+    targetCategory: string,
+  ): Promise<void> {
+    const categoryName = this.formatCategoryName(targetCategory, draft.type);
+    const sourceValues = [
+      draft.categoryHint,
+      draft.description,
+      this.extractCategoryLearningTerm(draft.description),
+    ];
+    const keys = this.categoryPreferenceKeys(sourceValues).filter(
+      (key) => key !== this.categoryPreferenceKey(categoryName),
+    );
+    if (!keys.length) {
+      return;
+    }
+
+    await Promise.all(
+      keys.map((sourceKey) =>
+        this.prisma.categoryPreference.upsert({
+          where: {
+            userId_sourceKey_type: {
+              userId,
+              sourceKey,
+              type: draft.type,
+            },
+          },
+          create: {
+            userId,
+            sourceKey,
+            sourceText: sourceKey,
+            categoryName,
+            type: draft.type,
+          },
+          update: {
+            categoryName,
+            hits: { increment: 1 },
+          },
+        }),
+      ),
+    );
+  }
+
+  private categoryPreferenceKeys(values: Array<string | null | undefined>): string[] {
+    return [
+      ...new Set(
+        values
+          .map((value) => this.categoryPreferenceKey(value))
+          .filter((value): value is string => Boolean(value)),
+      ),
+    ];
+  }
+
+  private categoryPreferenceKey(value: string | null | undefined): string | null {
+    if (!value) {
+      return null;
+    }
+    const key = this.normalizeText(
+      value
+        .replace(/^(compra|compras|gasto|despesa|receita|venda|recebimento)\s+(de|do|da|com)\s+/i, '')
+        .replace(/\b(nova|novo|meu|minha|um|uma|o|a|os|as|de|do|da|com|para|pra)\b/gi, ' ')
+        .replace(/\s+/g, ' ')
+        .trim(),
+    );
+    return key.length >= 3 ? key.slice(0, 80) : null;
+  }
+
+  private extractCategoryLearningTerm(description: string): string | null {
+    const match = description.match(/\b(?:compra|gasto|despesa|paguei|comprei)\s+(?:de|com)?\s*(.+)$/i);
+    return match ? this.cleanFollowUpDetail(match[1]!) : null;
+  }
+
+  private findSimilarCategory<T extends { name: string }>(categories: T[], hint: string): T | null {
+    const normalizedHint = this.normalizeText(hint);
+    const hintKey = this.categoryPreferenceKey(hint);
+    const hintGroup = this.categorySemanticGroup(hint);
+    return (
+      categories.find((category) => {
+        const normalizedCategory = this.normalizeText(category.name);
+        const categoryKey = this.categoryPreferenceKey(category.name);
+        return (
+          normalizedCategory === normalizedHint ||
+          (hintKey && categoryKey === hintKey) ||
+          (hintGroup && this.categorySemanticGroup(category.name) === hintGroup)
+        );
+      }) ?? null
+    );
+  }
+
+  private categorySemanticGroup(value: string): string | null {
+    const normalized = this.normalizeText(value);
+    const groups: Array<[RegExp, string]> = [
+      [/\b(alimentacao|mercado|supermercado|restaurante|comida|lanche|ifood)\b/, 'alimentacao'],
+      [/\b(transporte|uber|taxi|onibus|metro|gasolina|combustivel)\b/, 'transporte'],
+      [/\b(casa|moradia|aluguel|condominio|luz|agua|internet|limpeza)\b/, 'casa'],
+      [/\b(cuidados pessoais|higiene|itens de higiene|toalha|roupa|calcado|sabonete|shampoo|perfume|barbeiro|cabelo)\b/, 'cuidados_pessoais'],
+      [/\b(saude|remedio|farmacia|consulta|medico|dentista|exame)\b/, 'saude'],
+      [/\b(educacao|curso|livro|faculdade|escola)\b/, 'educacao'],
+      [/\b(lazer|cinema|show|viagem|bar|netflix|spotify|assinatura)\b/, 'lazer'],
+    ];
+    return groups.find(([pattern]) => pattern.test(normalized))?.[1] ?? null;
+  }
+
+  private formatCategoryName(value: string, type: TransactionType): string {
+    const normalized = this.normalizeText(value);
+    if (type === TransactionType.EXPENSE) {
+      const semanticName = this.categorySemanticGroup(value);
+      if (semanticName === 'alimentacao') return 'Alimentação';
+      if (semanticName === 'transporte') return 'Transporte';
+      if (semanticName === 'casa') return 'Casa';
+      if (semanticName === 'cuidados_pessoais') return 'Itens de higiene';
+      if (semanticName === 'saude') return 'Saúde';
+      if (semanticName === 'educacao') return 'Educação';
+      if (semanticName === 'lazer') return 'Lazer';
+    }
+    if (normalized === 'outros' || normalized === 'outras') {
+      return 'Outros';
+    }
+    return this.titleCasePt(value);
+  }
+
   private isGranularFollowUpCategory(categoryHint: string, detail: string | null): boolean {
     if (!detail) {
       return false;
@@ -2574,7 +2739,7 @@ export class WhatsappService {
     if (categoryMatch) {
       const category = this.cleanDraftTextValue(categoryMatch[1]!);
       return category
-        ? { kind: 'category', category: this.titleCase(category).slice(0, 60), label: 'Categoria' }
+        ? { kind: 'category', category: this.titleCasePt(category).slice(0, 60), label: 'Categoria' }
         : null;
     }
 
@@ -2624,7 +2789,7 @@ export class WhatsappService {
       return { ...draft, description: edit.title };
     }
     if (edit.kind === 'category') {
-      return { ...draft, categoryHint: edit.category };
+      return { ...draft, categoryHint: this.formatCategoryName(edit.category, draft.type) };
     }
     return { ...this.clearDraftPayment(draft), scope: edit.scope };
   }
@@ -2899,6 +3064,21 @@ export class WhatsappService {
       .trim()
       .split(/\s+/)
       .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ');
+  }
+
+  private titleCasePt(value: string): string {
+    const lowercaseWords = new Set(['a', 'as', 'com', 'da', 'das', 'de', 'do', 'dos', 'e', 'em', 'na', 'nas', 'no', 'nos', 'o', 'os', 'para', 'por']);
+    return value
+      .trim()
+      .split(/\s+/)
+      .map((word, index) => {
+        const lower = word.toLocaleLowerCase('pt-BR');
+        if (index > 0 && lowercaseWords.has(lower)) {
+          return lower;
+        }
+        return lower.charAt(0).toLocaleUpperCase('pt-BR') + lower.slice(1);
+      })
       .join(' ');
   }
 

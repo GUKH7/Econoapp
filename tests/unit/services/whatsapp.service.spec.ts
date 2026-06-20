@@ -25,6 +25,10 @@ describe('WhatsappService', () => {
       findUnique: ReturnType<typeof vi.fn>;
       create: ReturnType<typeof vi.fn>;
     };
+    categoryPreference: {
+      findFirst: ReturnType<typeof vi.fn>;
+      upsert: ReturnType<typeof vi.fn>;
+    };
     transaction: {
       aggregate: ReturnType<typeof vi.fn>;
       groupBy: ReturnType<typeof vi.fn>;
@@ -59,6 +63,7 @@ describe('WhatsappService', () => {
       user: { findFirst: vi.fn() },
       salesChannel: { findMany: vi.fn(), findFirst: vi.fn(), create: vi.fn() },
       category: { findMany: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn(), create: vi.fn() },
+      categoryPreference: { findFirst: vi.fn(), upsert: vi.fn() },
       transaction: { aggregate: vi.fn(), groupBy: vi.fn(), findFirst: vi.fn(), findMany: vi.fn() },
       financialAccount: { findMany: vi.fn(), create: vi.fn() },
       creditCard: { findMany: vi.fn() },
@@ -70,6 +75,8 @@ describe('WhatsappService', () => {
       },
       whatsappConversation: { upsert: vi.fn(), update: vi.fn() },
     };
+    prismaMock.categoryPreference.findFirst.mockResolvedValue(null);
+    prismaMock.categoryPreference.upsert.mockResolvedValue({});
     prismaMock.categoryBudget.findUnique.mockResolvedValue(null);
     prismaMock.whatsappConversation.upsert.mockResolvedValue({
       recentMessages: [],
@@ -709,13 +716,34 @@ describe('WhatsappService', () => {
       text: 'Altere a categoria para itens de higiene',
     });
 
-    expect(result.reply).toContain('Categoria: Itens De Higiene');
+    expect(result.reply).toContain('Categoria: Itens de higiene');
     expect(result.reply).toContain('Categoria atualizada');
     expect(transactionServiceMock.create).not.toHaveBeenCalled();
+    expect(prismaMock.categoryPreference.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          userId_sourceKey_type: {
+            userId: 'user-1',
+            sourceKey: 'toalha',
+            type: TransactionType.EXPENSE,
+          },
+        },
+        create: expect.objectContaining({
+          userId: 'user-1',
+          sourceKey: 'toalha',
+          categoryName: 'Itens de higiene',
+          type: TransactionType.EXPENSE,
+        }),
+        update: expect.objectContaining({
+          categoryName: 'Itens de higiene',
+          hits: { increment: 1 },
+        }),
+      }),
+    );
     const updatedPending = prismaMock.whatsappConversation.upsert.mock.calls
       .map(([input]) => input.update?.pendingText)
       .find((value) => typeof value === 'string' && value.startsWith('__TRANSACTION_CONFIRMATION__:'));
-    expect(updatedPending).toContain('"categoryHint":"Itens De Higiene"');
+    expect(updatedPending).toContain('"categoryHint":"Itens de higiene"');
   });
 
   it('atualiza valor titulo modo e pagamento do rascunho com comandos naturais', async () => {
@@ -1724,8 +1752,102 @@ describe('WhatsappService', () => {
     const paymentPending = prismaMock.whatsappConversation.upsert.mock.calls
       .map(([input]) => input.update?.pendingText)
       .find((value) => typeof value === 'string' && value.startsWith('__PAYMENT_SELECTION__:'));
-    expect(paymentPending).toContain('"categoryHint":"Cuidados pessoais"');
+    expect(paymentPending).toContain('"categoryHint":"Itens de higiene"');
     expect(paymentPending).toContain('"description":"Compra de toalha nova"');
+  });
+
+  it('usa preferencia aprendida para sugerir categoria em novos lancamentos', async () => {
+    fetchMock.mockImplementation(async (url: string) => ({
+      ok: true,
+      json: vi.fn().mockResolvedValue(
+        url.endsWith('/status') ? { status: 'conectado' } : { success: true },
+      ),
+    }));
+    prismaMock.user.findFirst.mockResolvedValue({
+      id: 'user-1',
+      name: 'Gustavo',
+      phone: '11999999999',
+    });
+    prismaMock.salesChannel.findMany.mockResolvedValue([]);
+    prismaMock.category.findMany.mockResolvedValue([{ name: 'Itens de higiene' }]);
+    prismaMock.financialAccount.findMany.mockResolvedValue([
+      { id: 'wallet-main', name: 'Carteira', type: 'WALLET' },
+    ]);
+    prismaMock.creditCard.findMany.mockResolvedValue([]);
+    prismaMock.categoryPreference.findFirst.mockResolvedValue({
+      categoryName: 'Itens de higiene',
+    });
+    geminiMock.extractFinancialData.mockResolvedValue({
+      amount: 18,
+      type: 'EXPENSE',
+      description: 'Compra de toalha',
+      categoryHint: 'Toalha',
+      channelHint: null,
+      confidence: 0.98,
+    });
+
+    await service.handleWebhook({
+      from: '5511999999999',
+      text: 'Gastei R$ 18 comprando uma toalha',
+    });
+
+    expect(prismaMock.categoryPreference.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          userId: 'user-1',
+          type: TransactionType.EXPENSE,
+          sourceKey: { in: expect.arrayContaining(['toalha']) },
+        }),
+      }),
+    );
+    const paymentPending = prismaMock.whatsappConversation.upsert.mock.calls
+      .map(([input]) => input.update?.pendingText)
+      .find((value) => typeof value === 'string' && value.startsWith('__PAYMENT_SELECTION__:'));
+    expect(paymentPending).toContain('"categoryHint":"Itens de higiene"');
+  });
+
+  it('reaproveita categoria parecida em vez de criar duplicada', async () => {
+    fetchMock.mockImplementation(async (url: string) => ({
+      ok: true,
+      json: vi.fn().mockResolvedValue(
+        url.endsWith('/status') ? { status: 'conectado' } : { success: true },
+      ),
+    }));
+    prismaMock.user.findFirst.mockResolvedValue({
+      id: 'user-1',
+      name: 'Gustavo',
+      phone: '11999999999',
+    });
+    prismaMock.whatsappConversation.upsert.mockResolvedValue({
+      recentMessages: [],
+      pendingText:
+        '__TRANSACTION_CONFIRMATION__:{"description":"Compra de toalha","amount":20,"type":"EXPENSE","scope":"PERSONAL","categoryHint":"Higiene","paymentLabel":"Carteira - Carteira","accountId":"wallet-main"}',
+    });
+    prismaMock.category.findFirst.mockResolvedValue(null);
+    prismaMock.category.findMany.mockResolvedValue([
+      { id: 'category-hygiene', name: 'Itens de higiene', color: '#22C55E' },
+    ]);
+    transactionServiceMock.create.mockResolvedValue({
+      id: 'expense-hygiene',
+      description: 'Compra de toalha',
+      amount: 20,
+      type: TransactionType.EXPENSE,
+    });
+
+    const result = await service.handleWebhook({
+      from: '5511999999999',
+      text: 'Confirmar',
+    });
+
+    expect(result.reply).toContain('Lançamento registrado');
+    expect(prismaMock.category.create).not.toHaveBeenCalled();
+    expect(transactionServiceMock.create).toHaveBeenCalledWith(
+      'user-1',
+      expect.objectContaining({
+        categoryId: 'category-hygiene',
+        description: 'Compra de toalha',
+      }),
+    );
   });
 
   it('resume os gastos por categoria sem depender da IA', async () => {
