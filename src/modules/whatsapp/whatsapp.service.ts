@@ -1419,8 +1419,7 @@ export class WhatsappService {
       return `${this.transactionDraftConfirmation(draft)}\n\n⚠️ Para evitar duplicidade, preciso que você escreva “Salvar novamente”.`;
     }
 
-    const confirmsTransaction =
-      /^(confirmar|confirmo|sim|salvar|pode salvar)$/.test(command) || confirmsDuplicate;
+    const confirmsTransaction = this.isConfirmationCommand(command) || confirmsDuplicate;
     if (!confirmsTransaction) {
       return `${this.transactionDraftConfirmation(draft)}\n\n🤔 Não reconheci sua escolha.`;
     }
@@ -2136,7 +2135,7 @@ export class WhatsappService {
         ? '✅ Exclusão cancelada. O lançamento foi mantido.'
         : '✅ Correção cancelada. O lançamento não foi alterado.';
     }
-    if (!/^(confirmar|confirmo|sim|pode|pode fazer)$/.test(command)) {
+    if (!this.isConfirmationCommand(command)) {
       return `${this.mutationDraftConfirmation(draft)}\n\n🤔 Não reconheci sua escolha.`;
     }
 
@@ -2615,6 +2614,12 @@ export class WhatsappService {
 
   private isCancelCommand(message: string): boolean {
     return /^(cancelar|cancela)$/i.test(message.trim());
+  }
+
+  private isConfirmationCommand(command: string): boolean {
+    return /^(confirmar|confirmo|sim|salvar|pode|pode salvar|pode fazer|ok|okay|blz|blza|beleza)$/.test(
+      this.normalizeText(command),
+    );
   }
 
   private isMenuCommand(message: string): boolean {

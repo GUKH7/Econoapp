@@ -234,7 +234,7 @@ describe('WhatsappService', () => {
 
     const confirmation = await service.handleWebhook({
       from: '5511999999999',
-      text: 'Confirmar',
+      text: 'blza',
     });
 
     expect(confirmation.reply).toContain('Lançamento registrado');
@@ -303,6 +303,45 @@ describe('WhatsappService', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('aceita ok como confirmacao de lancamento', async () => {
+    fetchMock.mockImplementation(async (url: string) => ({
+      ok: true,
+      json: vi.fn().mockResolvedValue(
+        url.endsWith('/status') ? { status: 'conectado' } : { success: true },
+      ),
+    }));
+    prismaMock.user.findFirst.mockResolvedValue({
+      id: 'user-1',
+      name: 'Gustavo',
+      phone: '11999999999',
+    });
+    prismaMock.whatsappConversation.upsert.mockResolvedValue({
+      recentMessages: [],
+      pendingText:
+        '__TRANSACTION_CONFIRMATION__:{"description":"Compra no mercado","amount":35,"type":"EXPENSE","scope":"PERSONAL","categoryHint":"Alimentação"}',
+    });
+    prismaMock.category.findFirst.mockResolvedValue({
+      id: 'category-food',
+      name: 'Alimentação',
+    });
+    transactionServiceMock.create.mockResolvedValue({
+      id: 'expense-ok',
+      description: 'Compra no mercado',
+      amount: 35,
+      netAmount: 35,
+      type: TransactionType.EXPENSE,
+      date: new Date('2026-06-20T12:00:00Z'),
+    });
+
+    const result = await service.handleWebhook({
+      from: '5511999999999',
+      text: 'ok',
+    });
+
+    expect(result.reply).toContain('Lançamento registrado');
+    expect(transactionServiceMock.create).toHaveBeenCalledTimes(1);
   });
 
   it('alerta sobre duplicidade e exige salvar novamente', async () => {
