@@ -35,7 +35,11 @@ describe('WhatsappService', () => {
       findFirst: ReturnType<typeof vi.fn>;
       findMany: ReturnType<typeof vi.fn>;
     };
-    financialAccount: { findMany: ReturnType<typeof vi.fn>; create: ReturnType<typeof vi.fn> };
+    financialAccount: {
+      findMany: ReturnType<typeof vi.fn>;
+      findUnique: ReturnType<typeof vi.fn>;
+      create: ReturnType<typeof vi.fn>;
+    };
     creditCard: { findMany: ReturnType<typeof vi.fn> };
     categoryBudget: {
       upsert: ReturnType<typeof vi.fn>;
@@ -65,7 +69,7 @@ describe('WhatsappService', () => {
       category: { findMany: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn(), create: vi.fn() },
       categoryPreference: { findFirst: vi.fn(), upsert: vi.fn() },
       transaction: { aggregate: vi.fn(), groupBy: vi.fn(), findFirst: vi.fn(), findMany: vi.fn() },
-      financialAccount: { findMany: vi.fn(), create: vi.fn() },
+      financialAccount: { findMany: vi.fn(), findUnique: vi.fn(), create: vi.fn() },
       creditCard: { findMany: vi.fn() },
       categoryBudget: {
         upsert: vi.fn(),
@@ -77,6 +81,8 @@ describe('WhatsappService', () => {
     };
     prismaMock.categoryPreference.findFirst.mockResolvedValue(null);
     prismaMock.categoryPreference.upsert.mockResolvedValue({});
+    prismaMock.transaction.aggregate.mockResolvedValue({ _sum: { netAmount: 0 } });
+    prismaMock.financialAccount.findUnique.mockResolvedValue(null);
     prismaMock.categoryBudget.findUnique.mockResolvedValue(null);
     prismaMock.whatsappConversation.upsert.mockResolvedValue({
       recentMessages: [],
@@ -240,6 +246,63 @@ describe('WhatsappService', () => {
       scope: FinancialScope.PERSONAL,
       categoryId: 'category-1',
     });
+  });
+
+  it('inclui saldo, gasto mensal da categoria e percentual do limite ao salvar', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-06-20T12:00:00Z'));
+    try {
+      fetchMock.mockImplementation(async (url: string) => ({
+        ok: true,
+        json: vi.fn().mockResolvedValue(
+          url.endsWith('/status') ? { status: 'conectado' } : { success: true },
+        ),
+      }));
+      prismaMock.user.findFirst.mockResolvedValue({
+        id: 'user-1',
+        name: 'Gustavo',
+        phone: '11999999999',
+      });
+      prismaMock.whatsappConversation.upsert.mockResolvedValue({
+        recentMessages: [],
+        pendingText:
+          '__TRANSACTION_CONFIRMATION__:{"description":"Compra de toalha","amount":20,"type":"EXPENSE","scope":"PERSONAL","categoryHint":"Cuidados pessoais","paymentLabel":"Banco/Pix - Nubank","accountId":"account-nubank"}',
+      });
+      prismaMock.category.findFirst.mockResolvedValue({
+        id: 'category-hygiene',
+        name: 'Itens de higiene',
+      });
+      prismaMock.financialAccount.findUnique.mockResolvedValue({
+        name: 'Nubank',
+        balance: 114.7,
+      });
+      prismaMock.transaction.aggregate.mockResolvedValue({ _sum: { netAmount: 60 } });
+      prismaMock.categoryBudget.findUnique.mockResolvedValue({
+        id: 'budget-hygiene',
+        amount: 100,
+        alertLevel: 0,
+      });
+      transactionServiceMock.create.mockResolvedValue({
+        id: 'expense-hygiene',
+        description: 'Compra de toalha',
+        amount: 20,
+        netAmount: 20,
+        type: TransactionType.EXPENSE,
+        date: new Date('2026-06-20T12:00:00Z'),
+      });
+
+      const result = await service.handleWebhook({
+        from: '5511999999999',
+        text: 'Confirmar',
+      });
+
+      const reply = result.reply.replace(/\u00a0/g, ' ');
+      expect(reply).toContain('Saldo agora em Nubank: R$ 114,70');
+      expect(reply).toContain('Você já gastou R$ 60,00 em Itens de higiene este mês');
+      expect(reply).toContain('Isso representa 60% do seu limite de R$ 100,00');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('alerta sobre duplicidade e exige salvar novamente', async () => {
@@ -446,6 +509,52 @@ describe('WhatsappService', () => {
         type: TransactionType.EXPENSE,
       }),
     );
+  });
+
+  it('entende frases naturais de pagamento durante a confirmacao', async () => {
+    fetchMock.mockImplementation(async (url: string) => ({
+      ok: true,
+      json: vi.fn().mockResolvedValue(
+        url.endsWith('/status') ? { status: 'conectado' } : { success: true },
+      ),
+    }));
+    prismaMock.user.findFirst.mockResolvedValue({
+      id: 'user-1',
+      name: 'Gustavo',
+      phone: '11999999999',
+    });
+    prismaMock.financialAccount.findMany.mockResolvedValue([
+      { id: 'account-nubank', name: 'Nubank', type: 'BANK' },
+    ]);
+    prismaMock.creditCard.findMany.mockResolvedValue([
+      { id: 'card-nubank', name: 'Nubank' },
+    ]);
+    prismaMock.whatsappConversation.upsert.mockResolvedValue({
+      recentMessages: [],
+      pendingText:
+        '__TRANSACTION_CONFIRMATION__:{"description":"Compra no mercado","amount":35,"type":"EXPENSE","scope":"PERSONAL","categoryHint":"Alimentação"}',
+    });
+
+    const bankReply = await service.handleWebhook({
+      from: '5511999999999',
+      text: 'paguei no nubank',
+    });
+
+    expect(bankReply.reply).toContain('Pagamento: Banco/Pix - Nubank');
+    expect(bankReply.reply).toContain('Pagamento atualizado');
+
+    prismaMock.whatsappConversation.upsert.mockResolvedValue({
+      recentMessages: [],
+      pendingText:
+        '__TRANSACTION_CONFIRMATION__:{"description":"Compra no mercado","amount":35,"type":"EXPENSE","scope":"PERSONAL","categoryHint":"Alimentação"}',
+    });
+
+    const creditReply = await service.handleWebhook({
+      from: '5511999999999',
+      text: 'foi no crédito',
+    });
+
+    expect(creditReply.reply).toContain('Pagamento: Cartão - Nubank');
   });
 
   it('explica a pendencia de pagamento ao receber saudacao durante um lancamento', async () => {
@@ -1804,6 +1913,59 @@ describe('WhatsappService', () => {
       .map(([input]) => input.update?.pendingText)
       .find((value) => typeof value === 'string' && value.startsWith('__PAYMENT_SELECTION__:'));
     expect(paymentPending).toContain('"categoryHint":"Itens de higiene"');
+  });
+
+  it('pergunta a categoria quando a sugestao ficaria generica demais', async () => {
+    fetchMock.mockImplementation(async (url: string) => ({
+      ok: true,
+      json: vi.fn().mockResolvedValue(
+        url.endsWith('/status') ? { status: 'conectado' } : { success: true },
+      ),
+    }));
+    prismaMock.user.findFirst.mockResolvedValue({
+      id: 'user-1',
+      name: 'Gustavo',
+      phone: '11999999999',
+    });
+    prismaMock.salesChannel.findMany.mockResolvedValue([]);
+    prismaMock.category.findMany.mockResolvedValue([]);
+    prismaMock.financialAccount.findMany.mockResolvedValue([]);
+    prismaMock.creditCard.findMany.mockResolvedValue([]);
+    geminiMock.extractFinancialData.mockResolvedValue({
+      amount: 12,
+      type: 'EXPENSE',
+      description: 'Compra variada',
+      categoryHint: 'Outros',
+      channelHint: null,
+      confidence: 0.88,
+    });
+
+    const question = await service.handleWebhook({
+      from: '5511999999999',
+      text: 'Gastei R$ 12 com umas coisas',
+    });
+
+    expect(question.reply).toContain('Não tenho certeza da categoria');
+    expect(question.reply).toContain('1. Cuidados pessoais');
+    expect(question.reply).toContain('2. Casa');
+    expect(question.reply).toContain('3. Outros');
+    const categoryPending = prismaMock.whatsappConversation.upsert.mock.calls
+      .map(([input]) => input.update?.pendingText)
+      .find((value) => typeof value === 'string' && value.startsWith('__CATEGORY_SELECTION__:'));
+    expect(categoryPending).toContain('"categoryHint":"Outros"');
+
+    prismaMock.whatsappConversation.upsert.mockReset();
+    prismaMock.whatsappConversation.upsert
+      .mockResolvedValueOnce({ recentMessages: [], pendingText: categoryPending })
+      .mockResolvedValue({});
+
+    const selected = await service.handleWebhook({
+      from: '5511999999999',
+      text: '2',
+    });
+
+    expect(selected.reply).toContain('Categoria: Casa');
+    expect(selected.reply).toContain('Despesa pronta para salvar');
   });
 
   it('reaproveita categoria parecida em vez de criar duplicada', async () => {

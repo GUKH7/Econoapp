@@ -54,6 +54,10 @@ type WhatsappPaymentDraft = {
     type: FinancialAccountType;
   };
 };
+type WhatsappCategoryDraft = {
+  transaction: WhatsappTransactionDraft;
+  options: string[];
+};
 type WhatsappDraftEdit =
   | { kind: 'amount'; amount: number; label: 'Valor' }
   | { kind: 'title'; title: string; label: 'Título' }
@@ -86,6 +90,7 @@ type WhatsappConversationState = {
 const TRANSACTION_CONFIRMATION_PREFIX = '__TRANSACTION_CONFIRMATION__:';
 const TRANSACTION_MUTATION_PREFIX = '__TRANSACTION_MUTATION__:';
 const PAYMENT_SELECTION_PREFIX = '__PAYMENT_SELECTION__:';
+const CATEGORY_SELECTION_PREFIX = '__CATEGORY_SELECTION__:';
 
 export interface WhatsappStatusResponse {
   status: WhatsappStatus;
@@ -228,6 +233,14 @@ export class WhatsappService {
     const recentMessages = this.parseRecentMessages(conversation.recentMessages);
     const pendingValue = this.conversationPendingValue(conversation);
 
+    const categoryDraft = this.parseCategoryDraft(pendingValue);
+    if (categoryDraft) {
+      const reply = await this.handleCategorySelection(user.id, phone, message, categoryDraft);
+      await this.appendConversation(user.id, phone, recentMessages, message, reply);
+      await this.safeReply(phone, reply);
+      return { phone, reply };
+    }
+
     if (this.isMenuCommand(message)) {
       await this.clearPendingMessage(user.id);
       const reply = this.helpReply();
@@ -311,6 +324,13 @@ export class WhatsappService {
     const conversation = await this.getConversation(user.id, phone);
     const recentMessages = this.parseRecentMessages(conversation.recentMessages);
     const pendingValue = this.conversationPendingValue(conversation);
+
+    const categoryDraft = this.parseCategoryDraft(pendingValue);
+    if (categoryDraft) {
+      const reply = await this.handleCategorySelection(user.id, phone, cleanMessage, categoryDraft);
+      await this.appendConversation(user.id, phone, recentMessages, cleanMessage, reply);
+      return { reply };
+    }
 
     if (this.isMenuCommand(cleanMessage)) {
       await this.clearPendingMessage(user.id);
@@ -572,6 +592,15 @@ export class WhatsappService {
     const possibleDuplicate = await this.findPossibleDuplicate(userId, draft);
     if (possibleDuplicate) {
       draft.possibleDuplicate = possibleDuplicate;
+    }
+
+    if (this.shouldAskCategoryConfirmation(draft)) {
+      const categoryOptions = this.categorySuggestionOptions(categories.map((item) => item.name));
+      await this.setPendingCategoryDraft(userId, phone, {
+        transaction: draft,
+        options: categoryOptions,
+      });
+      return this.categorySelectionQuestion(draft, categoryOptions);
     }
 
     const paymentOptions = await this.findPaymentOptions(userId, scope, draft.type);
@@ -1254,6 +1283,45 @@ export class WhatsappService {
       .join('\n');
   }
 
+  private async transactionPostSaveSummary(
+    userId: string,
+    transaction: Transaction,
+    categoryId: string,
+    categoryName: string,
+    scope: FinancialScope,
+    accountId?: string,
+  ): Promise<string> {
+    const lines: string[] = [];
+    if (accountId) {
+      const account = await this.prisma.financialAccount.findUnique({
+        where: { id: accountId },
+        select: { name: true, balance: true },
+      });
+      if (account) {
+        lines.push(`💵 *Saldo agora em ${account.name}: ${this.formatMoney(Number(account.balance))}*`);
+      }
+    }
+
+    if (transaction.type === TransactionType.EXPENSE && this.isDateInCurrentMonth(transaction.date)) {
+      const month = this.currentMonthRange().start;
+      const spent = await this.categoryExpenseTotal(userId, categoryId, scope, month);
+      lines.push(`📊 *Você já gastou ${this.formatMoney(spent)} em ${categoryName} este mês.*`);
+
+      const budget = await this.prisma.categoryBudget.findUnique({
+        where: {
+          userId_categoryId_scope_month: { userId, categoryId, scope, month },
+        },
+      });
+      if (budget) {
+        const limit = Number(budget.amount);
+        const percentage = limit > 0 ? Math.round((spent / limit) * 100) : 0;
+        lines.push(`🎯 *Isso representa ${percentage}% do seu limite de ${this.formatMoney(limit)}.*`);
+      }
+    }
+
+    return lines.join('\n');
+  }
+
   private transactionDraftConfirmation(draft: WhatsappTransactionDraft): string {
     const type = draft.type === TransactionType.EXPENSE ? 'Despesa' : 'Receita';
     const headline =
@@ -1411,7 +1479,15 @@ export class WhatsappService {
       this.isDateInCurrentMonth(firstDate)
         ? await this.categoryBudgetAlert(userId, category.id, category.name, draft.scope)
         : null;
-    return [confirmation, installmentMessage, budgetAlert ? `\n${budgetAlert}` : '']
+    const postSummary = await this.transactionPostSaveSummary(
+      userId,
+      transactions[0]!,
+      category.id,
+      category.name,
+      draft.scope,
+      draft.accountId,
+    );
+    return [confirmation, postSummary ? `\n\n${postSummary}` : '', installmentMessage, budgetAlert ? `\n${budgetAlert}` : '']
       .filter(Boolean)
       .join('');
   }
@@ -1460,6 +1536,112 @@ export class WhatsappService {
       minute: '2-digit',
       timeZone: 'America/Sao_Paulo',
     }).format(new Date(value));
+  }
+
+  private shouldAskCategoryConfirmation(draft: WhatsappTransactionDraft): boolean {
+    return (
+      draft.type === TransactionType.EXPENSE &&
+      this.normalizeText(draft.categoryHint) === 'outros'
+    );
+  }
+
+  private categorySuggestionOptions(categoryNames: string[]): string[] {
+    const preferred = ['Cuidados pessoais', 'Casa', 'Outros'];
+    const existing = categoryNames
+      .map((name) => this.formatCategoryName(name, TransactionType.EXPENSE))
+      .filter((name) => ['Itens de higiene', 'Casa', 'Outros'].includes(name));
+    return [...new Set([...existing, ...preferred])].slice(0, 3);
+  }
+
+  private categorySelectionQuestion(
+    draft: WhatsappTransactionDraft,
+    options: string[],
+  ): string {
+    return [
+      '🏷️ *Não tenho certeza da categoria desse gasto.*',
+      '',
+      `📝 *Título: ${draft.description}*`,
+      `💵 *Valor: ${this.formatMoney(draft.amount)}*`,
+      '',
+      'Quer salvar em qual categoria?',
+      ...options.map((option, index) => `${index + 1}. ${option}`),
+      '',
+      '✅ Responda com o número ou nome da categoria.',
+    ].join('\n');
+  }
+
+  private selectCategoryOption(message: string, options: string[]): string | null {
+    const normalized = this.normalizeText(message);
+    const numericIndex = Number.parseInt(normalized, 10);
+    if (Number.isInteger(numericIndex) && String(numericIndex) === normalized) {
+      return options[numericIndex - 1] ?? null;
+    }
+    return (
+      options.find((option) => {
+        const normalizedOption = this.normalizeText(option);
+        return normalizedOption === normalized || normalized.includes(normalizedOption);
+      }) ?? null
+    );
+  }
+
+  private async handleCategorySelection(
+    userId: string,
+    phone: string,
+    message: string,
+    draft: WhatsappCategoryDraft,
+  ): Promise<string> {
+    const normalized = this.normalizeText(message);
+    if (/^(cancelar|cancela|nao|não)$/.test(normalized)) {
+      await this.clearPendingMessage(userId);
+      return '🗑️ Lançamento cancelado. Nenhuma informação foi salva.';
+    }
+    if (this.isMenuCommand(message)) {
+      await this.clearPendingMessage(userId);
+      return this.helpReply();
+    }
+
+    const paymentOptions = await this.findPaymentOptions(
+      userId,
+      draft.transaction.scope,
+      draft.transaction.type,
+    );
+    if (this.isPaymentPhrase(message) && paymentOptions.length) {
+      const selectedPayment = this.selectPaymentOption(message, paymentOptions);
+      if (selectedPayment) {
+        const transaction = {
+          ...this.clearDraftPayment(draft.transaction),
+          paymentLabel: selectedPayment.label,
+          ...(selectedPayment.kind === 'ACCOUNT'
+            ? { accountId: selectedPayment.id }
+            : { creditCardId: selectedPayment.id }),
+        };
+        const updatedDraft = { ...draft, transaction };
+        await this.setPendingCategoryDraft(userId, phone, updatedDraft);
+        return `${this.categorySelectionQuestion(transaction, draft.options)}\n\n🏦 Pagamento anotado: ${selectedPayment.label}.`;
+      }
+    }
+
+    const selectedCategory = this.selectCategoryOption(message, draft.options);
+    if (!selectedCategory) {
+      return `${this.categorySelectionQuestion(draft.transaction, draft.options)}\n\n🤔 Não reconheci essa categoria.`;
+    }
+
+    const transaction = {
+      ...draft.transaction,
+      categoryHint: this.formatCategoryName(selectedCategory, draft.transaction.type),
+    };
+    await this.rememberCategoryPreference(userId, draft.transaction, selectedCategory);
+
+    if (paymentOptions.length && !transaction.paymentLabel) {
+      await this.setPendingPaymentDraft(userId, phone, {
+        transaction,
+        options: paymentOptions,
+      });
+      return `${this.paymentSelectionQuestion(transaction.type, paymentOptions)}\n\n🏷️ Categoria escolhida: ${transaction.categoryHint}.`;
+    }
+
+    await this.setPendingTransactionDraft(userId, phone, transaction);
+    return this.transactionDraftConfirmation(transaction);
   }
 
   private async findPaymentOptions(
@@ -1655,7 +1837,7 @@ export class WhatsappService {
           });
     if (selected) return selected;
 
-    if (normalized.includes('pix') || normalized.includes('banco')) {
+    if (normalized.includes('pix') || normalized.includes('banco') || normalized.includes('nubank')) {
       const bankAccounts = options.filter(
         (option) => option.kind === 'ACCOUNT' && option.accountType === 'BANK',
       );
@@ -1675,6 +1857,18 @@ export class WhatsappService {
     }
 
     return undefined;
+  }
+
+  private isPaymentPhrase(message: string): boolean {
+    const normalized = this.normalizeText(message);
+    return (
+      /\b(paguei|pagamento|usei|foi|debito|credito|cartao|pix|dinheiro|carteira|banco|conta)\b/.test(
+        normalized,
+      ) &&
+      /\b(no|na|pelo|pela|com|em|pix|dinheiro|credito|debito|cartao|carteira|banco|conta)\b/.test(
+        normalized,
+      )
+    );
   }
 
   private async tryCreateFinancialAccount(userId: string, message: string): Promise<string | null> {
@@ -2043,6 +2237,21 @@ export class WhatsappService {
     );
   }
 
+  private async setPendingCategoryDraft(
+    userId: string,
+    phone: string,
+    draft: WhatsappCategoryDraft,
+  ): Promise<void> {
+    await this.setPendingMessage(
+      userId,
+      phone,
+      `${CATEGORY_SELECTION_PREFIX}${JSON.stringify(draft)}`,
+      'CATEGORY',
+      'WAITING_SELECTION',
+      draft as unknown as Prisma.InputJsonValue,
+    );
+  }
+
   private async clearPendingMessage(userId: string): Promise<void> {
     await this.prisma.whatsappConversation.update({
       where: { userId },
@@ -2068,6 +2277,9 @@ export class WhatsappService {
       if (conversation.pendingType === 'PAYMENT') {
         return `${PAYMENT_SELECTION_PREFIX}${serialized}`;
       }
+      if (conversation.pendingType === 'CATEGORY') {
+        return `${CATEGORY_SELECTION_PREFIX}${serialized}`;
+      }
     }
     return conversation.pendingText ?? null;
   }
@@ -2091,7 +2303,8 @@ export class WhatsappService {
     return pendingText &&
       !pendingText.startsWith(TRANSACTION_CONFIRMATION_PREFIX) &&
       !pendingText.startsWith(TRANSACTION_MUTATION_PREFIX) &&
-      !pendingText.startsWith(PAYMENT_SELECTION_PREFIX)
+      !pendingText.startsWith(PAYMENT_SELECTION_PREFIX) &&
+      !pendingText.startsWith(CATEGORY_SELECTION_PREFIX)
       ? pendingText
       : null;
   }
@@ -2167,6 +2380,29 @@ export class WhatsappService {
         return null;
       }
       return draft as WhatsappPaymentDraft;
+    } catch {
+      return null;
+    }
+  }
+
+  private parseCategoryDraft(value: string | null | undefined): WhatsappCategoryDraft | null {
+    if (!value?.startsWith(CATEGORY_SELECTION_PREFIX)) {
+      return null;
+    }
+    try {
+      const draft = JSON.parse(
+        value.slice(CATEGORY_SELECTION_PREFIX.length),
+      ) as Partial<WhatsappCategoryDraft>;
+      if (
+        !draft.transaction ||
+        !Array.isArray(draft.options) ||
+        !draft.options.length ||
+        typeof draft.transaction.description !== 'string' ||
+        typeof draft.transaction.amount !== 'number'
+      ) {
+        return null;
+      }
+      return draft as WhatsappCategoryDraft;
     } catch {
       return null;
     }
@@ -2763,6 +2999,9 @@ export class WhatsappService {
       /\b(?:troque|trocar|altere|alterar|mude|mudar|corrija|corrigir)\b.*\b(?:carteira|cartao|cartão|pix|banco)\b/i,
     );
     if (directPaymentMatch) {
+      return { kind: 'payment', query: message, label: 'Pagamento' };
+    }
+    if (this.isPaymentPhrase(message)) {
       return { kind: 'payment', query: message, label: 'Pagamento' };
     }
 
