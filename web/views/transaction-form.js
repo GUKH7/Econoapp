@@ -1,4 +1,4 @@
-import { colors, state } from '../state.js';
+import { colors, money, state } from '../state.js';
 import { escapeHtml } from '../utils.js';
 import { scopedTransactions, scopeLabel } from '../finance.js';
 import { currentMonth, icon, transactionRow } from './shared.js';
@@ -18,6 +18,54 @@ export function transactionSheet() {
         <button class="icon-button" type="button" data-sheet-close aria-label="Fechar">x</button>
       </div>
       ${transactionFormHtml(type, 'sheet')}
+    </section>
+  `;
+}
+
+export function transactionSuccessSheet() {
+  const success = state.transactionSuccess;
+  if (!success) return '';
+  const isExpense = success.type === 'EXPENSE';
+  const title = isExpense ? 'Gasto registrado' : 'Receita registrada';
+  const amountClass = isExpense ? 'expense' : 'income';
+  const dateLabel = formatSuccessDate(success.date);
+
+  return `
+    <div class="sheet-backdrop success-backdrop" data-success-close></div>
+    <section class="success-sheet" role="dialog" aria-modal="true" aria-label="${title}">
+      <div class="success-icon ${isExpense ? 'expense-bg' : 'income-bg'}">${entryIcon(success.type)}</div>
+      <span class="eyebrow">${scopeLabel()}</span>
+      <h2>${title}</h2>
+      <p>Seu saldo e relatórios foram atualizados com esse lançamento.</p>
+
+      <div class="success-summary">
+        <div>
+          <small>Valor</small>
+          <strong class="${amountClass}">${money.format(success.amount || 0)}</strong>
+        </div>
+        <div>
+          <small>${isExpense ? 'Categoria' : 'Origem'}</small>
+          <strong>${escapeHtml(success.categoryName || 'Não informado')}</strong>
+        </div>
+        <div>
+          <small>${isExpense ? 'Pagamento' : 'Recebido em'}</small>
+          <strong>${escapeHtml(success.paymentLabel || 'Não informado')}</strong>
+        </div>
+        <div>
+          <small>Data</small>
+          <strong>${escapeHtml(dateLabel)}</strong>
+        </div>
+      </div>
+
+      <div class="success-description">
+        <span>${entryIcon(success.type)}</span>
+        <strong>${escapeHtml(success.description || title)}</strong>
+      </div>
+
+      <div class="success-actions">
+        <button class="button secondary" type="button" data-success-flow>Ver fluxo</button>
+        <button class="button" type="button" data-success-new>Novo lançamento</button>
+      </div>
     </section>
   `;
 }
@@ -250,4 +298,14 @@ function entryIcon(type) {
 function todayInputValue() {
   const date = new Date();
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function formatSuccessDate(value) {
+  if (!value) return currentMonth;
+  const [datePart] = String(value).split('T');
+  const [year, month, day] = datePart.split('-').map(Number);
+  if (!year || !month || !day) return currentMonth;
+  return new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'short' }).format(
+    new Date(year, month - 1, day),
+  );
 }

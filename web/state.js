@@ -18,6 +18,7 @@ export const state = {
   scope: localStorage.getItem('econoapp.scope') || 'PERSONAL',
   fabOpen: false,
   sheetOpen: false,
+  transactionSuccess: null,
   quickType: 'EXPENSE',
   scopes: JSON.parse(localStorage.getItem('econoapp.transactionScopes') || '{}'),
   paymentMeta: JSON.parse(localStorage.getItem('econoapp.paymentMeta') || '{}'),

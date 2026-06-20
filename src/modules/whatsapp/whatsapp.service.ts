@@ -1,4 +1,4 @@
-import { BadRequestException, Inject, Injectable, ServiceUnavailableException } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, Optional } from '@nestjs/common';
 import {
   FinancialAccountType,
   FinancialScope,
@@ -7,96 +7,31 @@ import {
   TransactionSource,
   TransactionType,
 } from '@prisma/client';
-import { env } from '@/config/env';
 import { PrismaService } from '@/config/database';
 import { GeminiService, WhatsappConversationMessage } from '@/services/ai/gemini.service';
 import { TransactionService } from '@/modules/transactions/transaction.service';
 import { SendWhatsappMessageDto } from './dto/send-whatsapp-message.dto';
 import { WhatsappWebhookDto } from './dto/whatsapp-webhook.dto';
+import { WhatsappConversationStore } from './whatsapp-conversation.store';
+import { WhatsappProviderClient } from './whatsapp-provider.client';
+import {
+  FinancialPeriod,
+  WhatsappCategoryDraft,
+  WhatsappConversationState,
+  WhatsappDraftEdit,
+  WhatsappMutationDraft,
+  WhatsappPaymentDraft,
+  WhatsappPaymentOption,
+  WhatsappStatusResponse,
+  WhatsappTransactionDraft,
+} from './whatsapp.types';
 
-type WhatsappStatus = 'aguardando_qr' | 'conectado' | 'iniciando' | 'reconectando';
-type FinancialPeriod = {
-  start: Date;
-  end: Date;
-  label: string;
-};
-type WhatsappTransactionDraft = {
-  description: string;
-  amount: number;
-  totalAmount?: number;
-  installmentCount?: number;
-  transactionDate?: string;
-  type: TransactionType;
-  scope: FinancialScope;
-  categoryHint: string;
-  channelHint?: string;
-  accountId?: string;
-  creditCardId?: string;
-  paymentLabel?: string;
-  possibleDuplicate?: {
-    description: string;
-    amount: number;
-    date: string;
-  };
-};
-type WhatsappPaymentOption = {
-  id: string;
-  kind: 'ACCOUNT' | 'CARD';
-  name: string;
-  label: string;
-  accountType?: 'BANK' | 'WALLET';
-};
-type WhatsappPaymentDraft = {
-  transaction: WhatsappTransactionDraft;
-  options: WhatsappPaymentOption[];
-  createPayment?: {
-    waitingForName?: boolean;
-    type: FinancialAccountType;
-  };
-};
-type WhatsappCategoryDraft = {
-  transaction: WhatsappTransactionDraft;
-  options: string[];
-};
-type WhatsappDraftEdit =
-  | { kind: 'amount'; amount: number; label: 'Valor' }
-  | { kind: 'title'; title: string; label: 'Título' }
-  | { kind: 'category'; category: string; label: 'Categoria' }
-  | { kind: 'scope'; scope: FinancialScope; label: 'Modo' }
-  | { kind: 'payment'; query?: string; label: 'Pagamento' };
-type WhatsappMutationDraft =
-  | {
-      action: 'UPDATE_AMOUNT';
-      transactionId: string;
-      description: string;
-      previousAmount: number;
-      newAmount: number;
-      type: TransactionType;
-    }
-  | {
-      action: 'DELETE';
-      transactionId: string;
-      description: string;
-      amount: number;
-      type: TransactionType;
-    };
-type WhatsappConversationState = {
-  pendingText?: string | null;
-  pendingType?: string | null;
-  pendingStep?: string | null;
-  pendingData?: unknown;
-};
+export type { WhatsappStatusResponse } from './whatsapp.types';
 
 const TRANSACTION_CONFIRMATION_PREFIX = '__TRANSACTION_CONFIRMATION__:';
 const TRANSACTION_MUTATION_PREFIX = '__TRANSACTION_MUTATION__:';
 const PAYMENT_SELECTION_PREFIX = '__PAYMENT_SELECTION__:';
 const CATEGORY_SELECTION_PREFIX = '__CATEGORY_SELECTION__:';
-
-export interface WhatsappStatusResponse {
-  status: WhatsappStatus;
-  qrcode?: string;
-}
-
 export interface ProactiveBudgetAlertResult {
   checked: number;
   sent: number;
@@ -106,44 +41,32 @@ export interface ProactiveBudgetAlertResult {
 
 @Injectable()
 export class WhatsappService {
-  private readonly baseUrl = env.WHATSAPP_BOT_API_URL.replace(/\/+$/, '');
-  private readonly sendMessagePath = this.normalizePath(env.WHATSAPP_BOT_SEND_MESSAGE_PATH);
+  private readonly conversationStore: WhatsappConversationStore;
 
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(GeminiService) private readonly geminiService: GeminiService,
     @Inject(TransactionService) private readonly transactionService: TransactionService,
-  ) {}
+    @Optional()
+    @Inject(WhatsappProviderClient)
+    private readonly providerClient: WhatsappProviderClient = new WhatsappProviderClient(),
+    @Optional()
+    @Inject(WhatsappConversationStore)
+    conversationStore?: WhatsappConversationStore,
+  ) {
+    this.conversationStore = conversationStore ?? new WhatsappConversationStore(prisma);
+  }
 
   async getStatus(): Promise<WhatsappStatusResponse> {
-    const response = await this.request<unknown>('/status');
-    return this.normalizeStatusResponse(response);
+    return this.providerClient.getStatus();
   }
 
   async restart(): Promise<WhatsappStatusResponse> {
-    const response = await this.request<unknown>('/restart');
-    return this.normalizeStatusResponse(response);
+    return this.providerClient.restart();
   }
 
   async sendMessage(dto: SendWhatsappMessageDto): Promise<unknown> {
-    const phone = String(dto.phone || dto.number || dto.to || '').replace(/\D/g, '');
-    const message = String(dto.message || dto.text || '').trim();
-
-    if (!phone) throw new BadRequestException('Informe o telefone com DDI, exemplo: 5511999999999.');
-    if (!message) throw new BadRequestException('Informe a mensagem para envio.');
-    if (!phone.startsWith('55') || phone.length < 12) {
-      throw new BadRequestException('O telefone deve incluir DDI do Brasil, exemplo: 5511999999999.');
-    }
-
-    const status = await this.getStatus();
-    if (status.status !== 'conectado') {
-      throw new ServiceUnavailableException('WhatsApp nao esta pronto.');
-    }
-
-    return this.request(this.sendMessagePath, {
-      method: 'POST',
-      body: JSON.stringify({ phone, message }),
-    });
+    return this.providerClient.sendMessage(dto);
   }
 
   async runProactiveBudgetAlerts(): Promise<ProactiveBudgetAlertResult> {
@@ -2161,11 +2084,7 @@ export class WhatsappService {
   }
 
   private async getConversation(userId: string, phone: string) {
-    return this.prisma.whatsappConversation.upsert({
-      where: { userId },
-      create: { userId, phone, recentMessages: [] },
-      update: { phone },
-    });
+    return this.conversationStore.get(userId, phone);
   }
 
   private async setPendingMessage(
@@ -2176,18 +2095,13 @@ export class WhatsappService {
     pendingStep = 'WAITING_INPUT',
     pendingData: Prisma.InputJsonValue = { text: pendingText },
   ): Promise<void> {
-    await this.prisma.whatsappConversation.upsert({
-      where: { userId },
-      create: {
-        userId,
-        phone,
-        pendingText,
-        pendingType,
-        pendingStep,
-        pendingData,
-        recentMessages: [],
-      },
-      update: { phone, pendingText, pendingType, pendingStep, pendingData },
+    await this.conversationStore.setPending({
+      userId,
+      phone,
+      pendingText,
+      pendingType,
+      pendingStep,
+      pendingData,
     });
   }
 
@@ -2252,15 +2166,7 @@ export class WhatsappService {
   }
 
   private async clearPendingMessage(userId: string): Promise<void> {
-    await this.prisma.whatsappConversation.update({
-      where: { userId },
-      data: {
-        pendingText: null,
-        pendingType: null,
-        pendingStep: null,
-        pendingData: Prisma.JsonNull,
-      },
-    });
+    await this.conversationStore.clearPending(userId);
   }
 
   private conversationPendingValue(conversation: WhatsappConversationState): string | null {
@@ -2414,16 +2320,12 @@ export class WhatsappService {
     userMessage: string,
     assistantMessage: string,
   ): Promise<void> {
-    const recentMessages = [
-      ...current,
-      { role: 'user' as const, text: userMessage },
-      { role: 'assistant' as const, text: assistantMessage },
-    ].slice(-10);
-    const messagesJson = recentMessages as unknown as Prisma.InputJsonValue;
-    await this.prisma.whatsappConversation.upsert({
-      where: { userId },
-      create: { userId, phone, recentMessages: messagesJson },
-      update: { phone, recentMessages: messagesJson },
+    await this.conversationStore.append({
+      userId,
+      phone,
+      current,
+      userMessage,
+      assistantMessage,
     });
   }
 
@@ -2488,22 +2390,6 @@ export class WhatsappService {
 
   private asRecord(value: unknown): Record<string, unknown> | null {
     return value && typeof value === 'object' ? (value as Record<string, unknown>) : null;
-  }
-
-  private normalizeStatusResponse(response: unknown): WhatsappStatusResponse {
-    const data = this.asRecord(response) ?? {};
-    const rawStatus = String(data.status || 'iniciando');
-    const qrCandidate = data.qrcode ?? data.qrCode ?? data.qr ?? data.base64;
-    const qrcode = typeof qrCandidate === 'string' && qrCandidate.trim() ? qrCandidate.trim() : undefined;
-
-    return {
-      status: this.isKnownStatus(rawStatus) ? rawStatus : 'iniciando',
-      ...(qrcode ? { qrcode } : {}),
-    };
-  }
-
-  private isKnownStatus(value: string): value is WhatsappStatus {
-    return ['aguardando_qr', 'conectado', 'iniciando', 'reconectando'].includes(value);
   }
 
   private isQuestion(message: string): boolean {
@@ -3330,49 +3216,4 @@ export class WhatsappService {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
   }
 
-  private async request<T>(path: string, init: RequestInit = {}): Promise<T> {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 12000);
-
-    try {
-      const response = await fetch(`${this.baseUrl}${this.normalizePath(path)}`, {
-        ...init,
-        headers: {
-          'Content-Type': 'application/json',
-          ...init.headers,
-        },
-        signal: controller.signal,
-      });
-      const body = (await response.json().catch(() => null)) as unknown;
-      const bodyRecord = this.asRecord(body);
-
-      if (!response.ok) {
-        const message =
-          String(bodyRecord?.message || bodyRecord?.error || '') || 'Falha ao comunicar com a API WhatsApp.';
-        throw new ServiceUnavailableException(message);
-      }
-
-      return this.unwrapProviderData<T>(body);
-    } catch (error) {
-      if (error instanceof ServiceUnavailableException) throw error;
-      if (error instanceof Error && error.name === 'AbortError') {
-        throw new ServiceUnavailableException('A API WhatsApp demorou para responder.');
-      }
-      throw new ServiceUnavailableException('Nao foi possivel comunicar com a API WhatsApp.');
-    } finally {
-      clearTimeout(timeout);
-    }
-  }
-
-  private normalizePath(path: string): string {
-    return `/${path.replace(/^\/+/, '')}`;
-  }
-
-  private unwrapProviderData<T>(body: unknown): T {
-    const record = this.asRecord(body);
-    if (record && 'data' in record && record.data !== undefined) {
-      return record.data as T;
-    }
-    return body as T;
-  }
 }

@@ -1,7 +1,7 @@
 export { metricCard, balanceCard, tabButton, fabMenu } from './views/chrome.js';
 export { dashboardView } from './views/dashboard.js';
 export { transactionsView, transactionListHtml } from './views/transactions.js';
-export { transactionSheet, launchView } from './views/transaction-form.js';
+export { transactionSheet, transactionSuccessSheet, launchView } from './views/transaction-form.js';
 export { reportsView } from './views/reports.js';
 export { assistantView } from './views/assistant.js';
 export { budgetView, manageView, moreView } from './views/manage.js';

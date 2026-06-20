@@ -23,6 +23,7 @@ import {
   tabButton,
   transactionListHtml,
   transactionSheet,
+  transactionSuccessSheet,
   viewHtml,
 } from './views.js';
 import { icon } from './views/shared.js';
@@ -117,6 +118,7 @@ function switchTab(targetTab) {
       renderWithTransition(() => {
         state.manageSection = '';
         state.fabOpen = false;
+        state.transactionSuccess = null;
       }, 'back');
     }
     return;
@@ -125,6 +127,7 @@ function switchTab(targetTab) {
     state.tab = targetTab;
     if (targetTab === 'more') state.manageSection = '';
     state.fabOpen = false;
+    state.transactionSuccess = null;
   }, transitionDirectionForTab(targetTab));
 }
 
@@ -457,6 +460,7 @@ function renderApp() {
       ${state.tab === 'assistant' ? assistantInputHtml() : ''}
       ${state.fabOpen ? fabMenu() : ''}
       ${state.sheetOpen ? transactionSheet() : ''}
+      ${state.transactionSuccess ? transactionSuccessSheet() : ''}
     </section>
   `;
 
@@ -497,6 +501,7 @@ function bindShellEvents() {
 
   document.querySelector('[data-fab]')?.addEventListener('click', () => {
     state.fabOpen = !state.fabOpen;
+    state.transactionSuccess = null;
     renderApp();
   });
 
@@ -510,6 +515,7 @@ function bindShellEvents() {
       state.quickType = button.dataset.actionType;
       state.fabOpen = false;
       state.sheetOpen = true;
+      state.transactionSuccess = null;
       renderApp();
     });
   });
@@ -519,6 +525,29 @@ function bindShellEvents() {
       state.sheetOpen = false;
       renderApp();
     });
+  });
+
+  document.querySelectorAll('[data-success-close]').forEach((element) => {
+    element.addEventListener('click', () => {
+      state.transactionSuccess = null;
+      renderApp();
+    });
+  });
+
+  document.querySelector('[data-success-flow]')?.addEventListener('click', () => {
+    state.transactionSuccess = null;
+    if (state.tab === 'transactions') {
+      renderApp();
+      return;
+    }
+    switchTab('transactions');
+  });
+
+  document.querySelector('[data-success-new]')?.addEventListener('click', () => {
+    state.transactionSuccess = null;
+    state.fabOpen = false;
+    state.sheetOpen = true;
+    renderApp();
   });
 
   bindSwipeNavigation();
@@ -969,11 +998,13 @@ async function handleTransactionSubmit(event) {
     }
 
     let categoryId = data.categoryId;
+    let createdCategory = null;
     if (String(data.newCategoryName || '').trim()) {
       const category = await api().createCategory({
         name: String(data.newCategoryName).trim(),
         color: state.categoryColor,
       });
+      createdCategory = category.data;
       categoryId = category.data.id;
       state.categoryKinds[categoryId] = data.type;
       saveCategoryKinds();
@@ -991,10 +1022,16 @@ async function handleTransactionSubmit(event) {
 
     const paymentTarget =
       data.type === 'EXPENSE' ? paymentTargetFromValue(data.paymentMethod) : { accountId: data.receiveAccount };
+    const amount = parseAmount(data.amount);
+    const selectedCategory = state.categories.find((category) => category.id === categoryId);
+    const paymentMeta =
+      data.type === 'EXPENSE'
+        ? paymentMetaFromValue(data.paymentMethod)
+        : paymentMetaFromValue(`account:${data.receiveAccount}`, 'RECEIVE');
 
     const response = await api().createTransaction({
       description: data.description,
-      amount: parseAmount(data.amount),
+      amount,
       type: data.type,
       source: 'MANUAL',
       scope: state.scope,
@@ -1005,22 +1042,27 @@ async function handleTransactionSubmit(event) {
       date: data.date || undefined,
     });
     if (data.type === 'EXPENSE' && data.paymentMethod) {
-      state.paymentMeta[response.data.id] = paymentMetaFromValue(data.paymentMethod);
+      state.paymentMeta[response.data.id] = paymentMeta;
     }
     if (data.type === 'INCOME' && data.receiveAccount) {
-      state.paymentMeta[response.data.id] = paymentMetaFromValue(`account:${data.receiveAccount}`, 'RECEIVE');
+      state.paymentMeta[response.data.id] = paymentMeta;
     }
     saveScopes();
     savePaymentData();
     await loadData();
     state.sheetOpen = false;
+    state.fabOpen = false;
+    state.quickType = data.type;
+    state.transactionSuccess = {
+      id: response.data.id,
+      type: data.type,
+      description: response.data.description || data.description,
+      amount,
+      categoryName: response.data.category?.name || createdCategory?.name || selectedCategory?.name || '',
+      paymentLabel: paymentMeta?.label || '',
+      date: response.data.date || data.date,
+    };
     renderApp();
-    showToast(
-      `${data.type === 'INCOME' ? 'Receita' : 'Gasto'} registrado: ${parseAmount(data.amount).toLocaleString('pt-BR', {
-        style: 'currency',
-        currency: 'BRL',
-      })}`,
-    );
   } catch (error) {
     setFormBusy(form, false);
     showToast(error.message, 'error');
