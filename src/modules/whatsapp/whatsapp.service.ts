@@ -39,6 +39,12 @@ export interface ProactiveBudgetAlertResult {
   failed: number;
 }
 
+type WhatsappAudioInput = {
+  base64?: string;
+  url?: string;
+  mimeType: string;
+};
+
 @Injectable()
 export class WhatsappService {
   private readonly conversationStore: WhatsappConversationStore;
@@ -138,9 +144,17 @@ export class WhatsappService {
 
   async handleWebhook(dto: WhatsappWebhookDto): Promise<{ phone: string; reply: string }> {
     const phone = this.extractPhone(dto);
-    const message = this.extractMessage(dto);
 
-    if (!phone || !message) {
+    if (!phone) {
+      throw new BadRequestException('Webhook WhatsApp precisa informar telefone e mensagem.');
+    }
+
+    const message = await this.extractMessageOrTranscribeAudio(dto, phone);
+    if (message === null) {
+      const reply = this.audioTranscriptionFailedReply();
+      return { phone, reply };
+    }
+    if (!message) {
       throw new BadRequestException('Webhook WhatsApp precisa informar telefone e mensagem.');
     }
 
@@ -2386,6 +2400,99 @@ export class WhatsappService {
       nestedMessage?.conversation ??
       nestedMessage?.text;
     return typeof value === 'string' ? value.trim() : '';
+  }
+
+  private async extractMessageOrTranscribeAudio(
+    payload: WhatsappWebhookDto,
+    phone: string,
+  ): Promise<string | null> {
+    const message = this.extractMessage(payload);
+    if (message) return message;
+
+    const audio = this.extractAudioInput(payload);
+    if (!audio) return '';
+
+    try {
+      const audioBase64 = audio.base64 ?? (await this.downloadAudioBase64(audio.url));
+      if (!audioBase64) return '';
+      return await this.geminiService.transcribeAudioBase64(audioBase64, audio.mimeType);
+    } catch {
+      const reply = this.audioTranscriptionFailedReply();
+      await this.safeReply(phone, reply);
+      return null;
+    }
+  }
+
+  private audioTranscriptionFailedReply(): string {
+    return '🎙️ *Não consegui entender esse áudio agora.*\n\nPode tentar enviar novamente ou escrever a mensagem em texto?';
+  }
+
+  private extractAudioInput(payload: WhatsappWebhookDto): WhatsappAudioInput | null {
+    const data = this.asRecord(payload.data);
+    const nestedMessage = this.asRecord(data?.message);
+    const audioRecord =
+      this.asRecord(payload.audio) ??
+      this.asRecord(payload.voice) ??
+      this.asRecord(payload.media) ??
+      this.asRecord(data?.audio) ??
+      this.asRecord(data?.voice) ??
+      this.asRecord(data?.media) ??
+      this.asRecord(nestedMessage?.audio) ??
+      this.asRecord(nestedMessage?.voice) ??
+      this.asRecord(nestedMessage?.media);
+
+    const directAudio = this.stringValue(payload.audio ?? payload.voice ?? data?.audio ?? data?.voice);
+    const directMedia = this.stringValue(payload.media ?? data?.media);
+    const directValue = directAudio || directMedia;
+    const base64 = this.cleanAudioBase64(
+      this.stringValue(audioRecord?.base64 ?? audioRecord?.data ?? audioRecord?.body) ??
+        (directValue && !this.isHttpUrl(directValue) ? directValue : null),
+    );
+    const url =
+      this.stringValue(
+        payload.mediaUrl ??
+          payload.url ??
+          data?.mediaUrl ??
+          data?.url ??
+          audioRecord?.mediaUrl ??
+          audioRecord?.url ??
+          audioRecord?.downloadUrl ??
+          audioRecord?.fileUrl,
+      ) ?? (directValue && this.isHttpUrl(directValue) ? directValue : undefined);
+    const mimeType =
+      this.stringValue(
+        payload.mimeType ??
+          payload.mimetype ??
+          data?.mimeType ??
+          data?.mimetype ??
+          audioRecord?.mimeType ??
+          audioRecord?.mimetype,
+      ) ?? 'audio/ogg';
+
+    if (!base64 && !url) return null;
+    return { ...(base64 ? { base64 } : {}), ...(url ? { url } : {}), mimeType };
+  }
+
+  private async downloadAudioBase64(url?: string): Promise<string | null> {
+    if (!url || !this.isHttpUrl(url)) return null;
+
+    const response = await fetch(url);
+    if (!response.ok) return null;
+
+    return Buffer.from(await response.arrayBuffer()).toString('base64');
+  }
+
+  private cleanAudioBase64(value?: string | null): string | null {
+    if (!value) return null;
+    return value.replace(/^data:audio\/[^;]+;base64,/i, '').trim() || null;
+  }
+
+  private stringValue(value: unknown): string | null {
+    return typeof value === 'string' && value.trim() ? value.trim() : null;
+  }
+
+  private isHttpUrl(value: string): boolean {
+    return /^https?:\/\//i.test(value.trim());
   }
 
   private asRecord(value: unknown): Record<string, unknown> | null {

@@ -51,6 +51,7 @@ describe('WhatsappService', () => {
   };
   let geminiMock: {
     extractFinancialData: ReturnType<typeof vi.fn>;
+    transcribeAudioBase64: ReturnType<typeof vi.fn>;
     classifyWhatsappMessage: ReturnType<typeof vi.fn>;
     generateWhatsappReply: ReturnType<typeof vi.fn>;
   };
@@ -90,6 +91,7 @@ describe('WhatsappService', () => {
     });
     geminiMock = {
       extractFinancialData: vi.fn(),
+      transcribeAudioBase64: vi.fn(),
       classifyWhatsappMessage: vi.fn(),
       generateWhatsappReply: vi.fn(),
     };
@@ -246,6 +248,127 @@ describe('WhatsappService', () => {
       scope: FinancialScope.PERSONAL,
       categoryId: 'category-1',
     });
+  });
+
+  it('transcreve audio em base64 antes de processar o webhook', async () => {
+    fetchMock.mockImplementation(async (url: string) => ({
+      ok: true,
+      json: vi.fn().mockResolvedValue(
+        url.endsWith('/status') ? { status: 'conectado' } : { success: true },
+      ),
+    }));
+    prismaMock.user.findFirst.mockResolvedValue({
+      id: 'user-1',
+      name: 'Usuario',
+      phone: '11999999999',
+    });
+    prismaMock.salesChannel.findMany.mockResolvedValue([]);
+    prismaMock.category.findMany.mockResolvedValue([{ name: 'Alimentacao' }]);
+    prismaMock.category.findFirst.mockResolvedValue({
+      id: 'category-1',
+      name: 'Alimentacao',
+    });
+    geminiMock.transcribeAudioBase64.mockResolvedValue('Gastei 35 reais no mercado');
+    geminiMock.extractFinancialData.mockResolvedValue({
+      amount: 35,
+      type: 'EXPENSE',
+      description: 'Compra no mercado',
+      categoryHint: 'Alimentacao',
+      channelHint: null,
+      confidence: 0.95,
+    });
+
+    const audioBase64 = Buffer.from('audio-test').toString('base64');
+    const result = await service.handleWebhook({
+      from: '5511999999999',
+      audio: { base64: audioBase64, mimeType: 'audio/ogg' },
+    });
+
+    expect(geminiMock.transcribeAudioBase64).toHaveBeenCalledWith(audioBase64, 'audio/ogg');
+    expect(geminiMock.extractFinancialData).toHaveBeenCalledWith(
+      'Gastei 35 reais no mercado',
+      expect.objectContaining({ categoryNames: ['Alimentacao'] }),
+    );
+    expect(result.reply).toContain('Despesa pronta para salvar');
+  });
+
+  it('baixa audio por URL antes de transcrever o webhook', async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === 'https://files.test/audio.ogg') {
+        return {
+          ok: true,
+          arrayBuffer: vi.fn().mockResolvedValue(Buffer.from('audio-url')),
+        };
+      }
+      return {
+        ok: true,
+        json: vi.fn().mockResolvedValue(
+          url.endsWith('/status') ? { status: 'conectado' } : { success: true },
+        ),
+      };
+    });
+    prismaMock.user.findFirst.mockResolvedValue({
+      id: 'user-1',
+      name: 'Usuario',
+      phone: '11999999999',
+    });
+    prismaMock.salesChannel.findMany.mockResolvedValue([]);
+    prismaMock.category.findMany.mockResolvedValue([{ name: 'Alimentacao' }]);
+    prismaMock.category.findFirst.mockResolvedValue({
+      id: 'category-1',
+      name: 'Alimentacao',
+    });
+    geminiMock.transcribeAudioBase64.mockResolvedValue('Gastei 40 reais no restaurante');
+    geminiMock.extractFinancialData.mockResolvedValue({
+      amount: 40,
+      type: 'EXPENSE',
+      description: 'Restaurante',
+      categoryHint: 'Alimentacao',
+      channelHint: null,
+      confidence: 0.95,
+    });
+
+    const result = await service.handleWebhook({
+      data: {
+        from: '5511999999999',
+        message: {
+          audio: {
+            url: 'https://files.test/audio.ogg',
+            mimetype: 'audio/ogg',
+          },
+        },
+      },
+    });
+
+    expect(geminiMock.transcribeAudioBase64).toHaveBeenCalledWith(
+      Buffer.from('audio-url').toString('base64'),
+      'audio/ogg',
+    );
+    expect(result.reply).toContain('Despesa pronta para salvar');
+  });
+
+  it('responde com orientacao quando nao consegue transcrever audio', async () => {
+    fetchMock.mockImplementation(async (url: string) => ({
+      ok: true,
+      json: vi.fn().mockResolvedValue(
+        url.endsWith('/status') ? { status: 'conectado' } : { success: true },
+      ),
+    }));
+    geminiMock.transcribeAudioBase64.mockRejectedValue(new Error('audio invalido'));
+
+    const result = await service.handleWebhook({
+      from: '5511999999999',
+      audio: { base64: Buffer.from('ruido').toString('base64'), mimeType: 'audio/ogg' },
+    });
+
+    expect(result.reply).toContain('Não consegui entender esse áudio');
+    expect(prismaMock.user.findFirst).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      'http://whatsapp-api.test/econoapp/send-message',
+      expect.objectContaining({
+        body: expect.stringContaining('Não consegui entender esse áudio'),
+      }),
+    );
   });
 
   it('inclui saldo, gasto mensal da categoria e percentual do limite ao salvar', async () => {

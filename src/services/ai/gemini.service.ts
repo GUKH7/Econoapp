@@ -20,6 +20,10 @@ const geminiAudioOutputSchema = geminiOutputSchema.extend({
 });
 export type GeminiAudioOutput = z.infer<typeof geminiAudioOutputSchema>;
 
+const geminiAudioTranscriptionSchema = z.object({
+  transcription: z.string().min(1),
+});
+
 export const whatsappIntentSchema = z.object({
   intent: z.enum(['TRANSACTION', 'FINANCIAL_QUERY', 'GENERAL_CONVERSATION', 'HELP', 'UNKNOWN']),
   confidence: z.number().min(0).max(1),
@@ -127,6 +131,40 @@ export class GeminiService {
       return parsed.data;
     } catch {
       throw new BadRequestException('Não consegui processar seu áudio agora. Por favor, tente novamente em instantes.');
+    }
+  }
+
+  async transcribeAudioBase64(audioBase64: string, mimeType: string): Promise<string> {
+    const model = this.client.getGenerativeModel({ model: 'gemini-2.5-flash' });
+    const prompt = [
+      'Transcreva este audio em portugues do Brasil.',
+      'Responda SOMENTE JSON valido, sem markdown e sem texto adicional.',
+      'Se houver valores monetarios, escreva com palavras, por exemplo "20 reais".',
+      'Formato obrigatorio:',
+      '{"transcription": string}',
+    ].join('\n');
+
+    const result = await model.generateContent([
+      { inlineData: { data: audioBase64, mimeType } },
+      prompt,
+    ]);
+
+    const rawText = result.response.text().trim();
+    const cleaned = rawText
+      .replace(/^```json\s*/i, '')
+      .replace(/^```\s*/i, '')
+      .replace(/```$/i, '')
+      .trim();
+
+    try {
+      const parsedJson = JSON.parse(cleaned);
+      const parsed = geminiAudioTranscriptionSchema.safeParse(parsedJson);
+      if (!parsed.success) {
+        throw new BadRequestException('Resposta do Gemini (transcricao) fora do schema esperado');
+      }
+      return parsed.data.transcription.trim();
+    } catch {
+      throw new BadRequestException('Nao consegui transcrever seu audio agora. Por favor, tente novamente em instantes.');
     }
   }
 
