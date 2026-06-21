@@ -371,6 +371,38 @@ describe('WhatsappService', () => {
     );
   });
 
+  it('responde quando recebe audio sem arquivo baixavel no payload', async () => {
+    fetchMock.mockImplementation(async (url: string) => ({
+      ok: true,
+      json: vi.fn().mockResolvedValue(
+        url.endsWith('/status') ? { status: 'conectado' } : { success: true },
+      ),
+    }));
+
+    const result = await service.handleWebhook({
+      from: '5511999999999',
+      messageType: 'audio',
+      message: {
+        audioMessage: {
+          mimetype: 'audio/ogg; codecs=opus',
+          mediaKey: 'encrypted-media-key',
+          seconds: 4,
+          ptt: true,
+        },
+      },
+    });
+
+    expect(result.reply).toContain('Recebi seu áudio');
+    expect(result.reply).toContain('base64');
+    expect(prismaMock.user.findFirst).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      'http://whatsapp-api.test/econoapp/send-message',
+      expect.objectContaining({
+        body: expect.stringContaining('Recebi seu áudio'),
+      }),
+    );
+  });
+
   it('inclui saldo, gasto mensal da categoria e percentual do limite ao salvar', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-06-20T12:00:00Z'));

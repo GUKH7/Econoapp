@@ -32,6 +32,7 @@ const TRANSACTION_CONFIRMATION_PREFIX = '__TRANSACTION_CONFIRMATION__:';
 const TRANSACTION_MUTATION_PREFIX = '__TRANSACTION_MUTATION__:';
 const PAYMENT_SELECTION_PREFIX = '__PAYMENT_SELECTION__:';
 const CATEGORY_SELECTION_PREFIX = '__CATEGORY_SELECTION__:';
+const MEDIA_WITHOUT_DOWNLOADABLE_AUDIO = '__WHATSAPP_MEDIA_WITHOUT_DOWNLOADABLE_AUDIO__';
 export interface ProactiveBudgetAlertResult {
   checked: number;
   sent: number;
@@ -152,6 +153,11 @@ export class WhatsappService {
     const message = await this.extractMessageOrTranscribeAudio(dto, phone);
     if (message === null) {
       const reply = this.audioTranscriptionFailedReply();
+      return { phone, reply };
+    }
+    if (message === MEDIA_WITHOUT_DOWNLOADABLE_AUDIO) {
+      const reply = this.audioWithoutDownloadableFileReply();
+      await this.safeReply(phone, reply);
       return { phone, reply };
     }
     if (!message) {
@@ -2410,11 +2416,11 @@ export class WhatsappService {
     if (message) return message;
 
     const audio = this.extractAudioInput(payload);
-    if (!audio) return '';
+    if (!audio) return this.hasAudioOrMediaSignal(payload) ? MEDIA_WITHOUT_DOWNLOADABLE_AUDIO : '';
 
     try {
       const audioBase64 = audio.base64 ?? (await this.downloadAudioBase64(audio.url));
-      if (!audioBase64) return '';
+      if (!audioBase64) return MEDIA_WITHOUT_DOWNLOADABLE_AUDIO;
       return await this.geminiService.transcribeAudioBase64(audioBase64, audio.mimeType);
     } catch {
       const reply = this.audioTranscriptionFailedReply();
@@ -2427,31 +2433,54 @@ export class WhatsappService {
     return '🎙️ *Não consegui entender esse áudio agora.*\n\nPode tentar enviar novamente ou escrever a mensagem em texto?';
   }
 
+  private audioWithoutDownloadableFileReply(): string {
+    return [
+      '🎙️ *Recebi seu áudio, mas ainda não consegui acessar o arquivo para transcrever.*',
+      '',
+      'A API do WhatsApp precisa enviar o áudio como *base64* ou uma *URL baixável* no webhook.',
+      'Enquanto ajustamos isso, pode escrever a mensagem em texto?',
+    ].join('\n');
+  }
+
   private extractAudioInput(payload: WhatsappWebhookDto): WhatsappAudioInput | null {
     const data = this.asRecord(payload.data);
+    const messageRecord = this.asRecord(payload.message);
     const nestedMessage = this.asRecord(data?.message);
     const audioRecord =
       this.asRecord(payload.audio) ??
       this.asRecord(payload.voice) ??
       this.asRecord(payload.media) ??
+      this.asRecord(messageRecord?.audio) ??
+      this.asRecord(messageRecord?.voice) ??
+      this.asRecord(messageRecord?.media) ??
+      this.asRecord(messageRecord?.audioMessage) ??
+      this.asRecord(messageRecord?.voiceMessage) ??
       this.asRecord(data?.audio) ??
       this.asRecord(data?.voice) ??
       this.asRecord(data?.media) ??
       this.asRecord(nestedMessage?.audio) ??
       this.asRecord(nestedMessage?.voice) ??
-      this.asRecord(nestedMessage?.media);
+      this.asRecord(nestedMessage?.media) ??
+      this.asRecord(nestedMessage?.audioMessage) ??
+      this.asRecord(nestedMessage?.voiceMessage);
 
-    const directAudio = this.stringValue(payload.audio ?? payload.voice ?? data?.audio ?? data?.voice);
-    const directMedia = this.stringValue(payload.media ?? data?.media);
+    const directAudio = this.stringValue(
+      payload.audio ?? payload.voice ?? messageRecord?.audio ?? messageRecord?.voice ?? data?.audio ?? data?.voice,
+    );
+    const directMedia = this.stringValue(payload.media ?? messageRecord?.media ?? data?.media);
     const directValue = directAudio || directMedia;
     const base64 = this.cleanAudioBase64(
-      this.stringValue(audioRecord?.base64 ?? audioRecord?.data ?? audioRecord?.body) ??
+      this.stringValue(
+        audioRecord?.base64 ?? audioRecord?.data ?? audioRecord?.body ?? audioRecord?.buffer ?? audioRecord?.file,
+      ) ??
         (directValue && !this.isHttpUrl(directValue) ? directValue : null),
     );
     const url =
       this.stringValue(
         payload.mediaUrl ??
           payload.url ??
+          messageRecord?.mediaUrl ??
+          messageRecord?.url ??
           data?.mediaUrl ??
           data?.url ??
           audioRecord?.mediaUrl ??
@@ -2463,6 +2492,8 @@ export class WhatsappService {
       this.stringValue(
         payload.mimeType ??
           payload.mimetype ??
+          messageRecord?.mimeType ??
+          messageRecord?.mimetype ??
           data?.mimeType ??
           data?.mimetype ??
           audioRecord?.mimeType ??
@@ -2471,6 +2502,39 @@ export class WhatsappService {
 
     if (!base64 && !url) return null;
     return { ...(base64 ? { base64 } : {}), ...(url ? { url } : {}), mimeType };
+  }
+
+  private hasAudioOrMediaSignal(payload: WhatsappWebhookDto): boolean {
+    const values = [
+      payload.type,
+      payload.messageType,
+      payload.audio,
+      payload.voice,
+      payload.media,
+      payload.mediaUrl,
+      payload.url,
+      payload.message,
+      payload.data,
+    ];
+    return values.some((value) => this.containsAudioOrMediaSignal(value, 0));
+  }
+
+  private containsAudioOrMediaSignal(value: unknown, depth: number): boolean {
+    if (depth > 4 || value === null || value === undefined) return false;
+    if (typeof value === 'string') {
+      const normalized = this.normalizeText(value);
+      return /\b(audio|voice|ptt|media|audio_message|audiomessage)\b/.test(normalized);
+    }
+    if (typeof value !== 'object') return false;
+
+    return Object.entries(value as Record<string, unknown>).some(([key, child]) => {
+      const normalizedKey = this.normalizeText(key);
+      return (
+        /\b(audio|voice|ptt|media|audio_message|audiomessage|mimetype|mime_type|mediakey|media_key)\b/.test(
+          normalizedKey,
+        ) || this.containsAudioOrMediaSignal(child, depth + 1)
+      );
+    });
   }
 
   private async downloadAudioBase64(url?: string): Promise<string | null> {

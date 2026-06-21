@@ -23,6 +23,12 @@ export class WhatsappWebhookDto {
   body?: unknown;
 
   @IsOptional()
+  type?: unknown;
+
+  @IsOptional()
+  messageType?: unknown;
+
+  @IsOptional()
   audio?: unknown;
 
   @IsOptional()
