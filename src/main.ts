@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import { ValidationPipe, RequestMethod } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { json, urlencoded } from 'express';
 import helmet from 'helmet';
 import { Logger } from 'nestjs-pino';
 import { apiReference } from '@scalar/nestjs-api-reference';
@@ -9,7 +10,10 @@ import { AppModule } from '@/app.module';
 import { env } from '@/config/env';
 
 async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create(AppModule, { bufferLogs: true });
+  const app = await NestFactory.create(AppModule, { bodyParser: false, bufferLogs: true });
+
+  app.use(json({ limit: '15mb' }));
+  app.use(urlencoded({ extended: true, limit: '15mb' }));
 
   app.enableCors({
     origin: process.env.CORS_ORIGIN ?? '*',
