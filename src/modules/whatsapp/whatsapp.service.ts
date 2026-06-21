@@ -232,6 +232,17 @@ export class WhatsappService {
     }
 
     const pendingDetails = this.pendingDetailsText(conversation);
+    if (
+      pendingDetails &&
+      conversation.pendingStep === 'WAITING_AMOUNT' &&
+      this.isAudioReferenceMessage(message)
+    ) {
+      const reply = this.audioAmountNotCapturedReply(pendingDetails);
+      await this.appendConversation(user.id, phone, recentMessages, message, reply);
+      await this.safeReply(phone, reply);
+      return { phone, reply };
+    }
+
     const textToProcess = pendingDetails ? `${pendingDetails}. ${message}` : message;
     if (pendingValue || pendingDetails) {
       await this.clearPendingMessage(user.id);
@@ -313,6 +324,16 @@ export class WhatsappService {
     }
 
     const pendingDetails = this.pendingDetailsText(conversation);
+    if (
+      pendingDetails &&
+      conversation.pendingStep === 'WAITING_AMOUNT' &&
+      this.isAudioReferenceMessage(cleanMessage)
+    ) {
+      const reply = this.audioAmountNotCapturedReply(pendingDetails);
+      await this.appendConversation(user.id, phone, recentMessages, cleanMessage, reply);
+      return { reply };
+    }
+
     const textToProcess = pendingDetails ? `${pendingDetails}. ${cleanMessage}` : cleanMessage;
     if (pendingValue || pendingDetails) {
       await this.clearPendingMessage(user.id);
@@ -2685,6 +2706,28 @@ export class WhatsappService {
 
   private isGreeting(message: string): boolean {
     return /^(oi|ola|bom dia|boa tarde|boa noite|tudo bem)[!,. ]*$/.test(this.normalizeText(message));
+  }
+
+  private isAudioReferenceMessage(message: string): boolean {
+    const lower = this.normalizeText(message);
+    return (
+      /\b(falei|disse|mandei|enviei|respondi)\b.*\b(audio|voz)\b/.test(lower) ||
+      /\b(no audio|nesse audio|na mensagem de voz|por audio|em audio)\b/.test(lower)
+    );
+  }
+
+  private audioAmountNotCapturedReply(pendingText: string): string {
+    return [
+      '🎙️ *Eu recebi seu áudio, mas não consegui captar o valor com segurança.*',
+      '',
+      `Estou registrando: *${this.compactPendingSummary(pendingText)}*`,
+      '',
+      'Me envie só o valor em número, por exemplo: *20* ou *R$ 20,00*.',
+    ].join('\n');
+  }
+
+  private compactPendingSummary(text: string): string {
+    return text.replace(/\s+/g, ' ').trim().slice(0, 120);
   }
 
   private looksLikeTransaction(message: string): boolean {

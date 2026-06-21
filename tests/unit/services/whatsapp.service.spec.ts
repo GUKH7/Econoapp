@@ -1993,6 +1993,39 @@ describe('WhatsappService', () => {
     });
   });
 
+  it('avisa quando o valor citado no audio nao foi captado', async () => {
+    fetchMock.mockImplementation(async (url: string) => ({
+      ok: true,
+      json: vi.fn().mockResolvedValue(
+        url.endsWith('/status') ? { status: 'conectado' } : { success: true },
+      ),
+    }));
+    prismaMock.user.findFirst.mockResolvedValue({
+      id: 'user-1',
+      name: 'Gustavo',
+      phone: '11999999999',
+    });
+    prismaMock.whatsappConversation.upsert.mockResolvedValue({
+      recentMessages: [],
+      pendingText: 'Gastei comprando uma toalha',
+      pendingType: 'TRANSACTION_DETAILS',
+      pendingStep: 'WAITING_AMOUNT',
+      pendingData: { text: 'Gastei comprando uma toalha' },
+    });
+
+    const result = await service.handleWebhook({
+      from: '5511999999999',
+      text: 'Eu falei no audio',
+    });
+
+    expect(result.reply).toMatch(/recebi seu/i);
+    expect(result.reply).toMatch(/n.o consegui captar o valor/i);
+    expect(result.reply).toContain('Gastei comprando uma toalha');
+    expect(result.reply).toContain('R$ 20,00');
+    expect(prismaMock.whatsappConversation.update).not.toHaveBeenCalled();
+    expect(geminiMock.extractFinancialData).not.toHaveBeenCalled();
+  });
+
   it('usa resposta natural de descricao pendente para completar um gasto', async () => {
     fetchMock.mockImplementation(async (url: string) => ({
       ok: true,

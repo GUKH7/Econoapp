@@ -137,9 +137,12 @@ export class GeminiService {
   async transcribeAudioBase64(audioBase64: string, mimeType: string): Promise<string> {
     const model = this.client.getGenerativeModel({ model: 'gemini-2.5-flash' });
     const prompt = [
-      'Transcreva este audio em portugues do Brasil.',
+      'Transcreva este audio em portugues do Brasil para um assistente financeiro.',
+      'Preserve todos os dados financeiros mencionados: valor, item, categoria, forma de pagamento, data, conta, cartao e se e pessoal ou negocio.',
+      'Converta numeros falados para algarismos quando forem valores. Exemplo: "vinte reais" deve virar "20 reais".',
+      'Nunca omita valores monetarios. Se o valor nao estiver audivel, escreva "valor nao identificado" dentro da transcricao.',
+      'Se o usuario falar de gasto, receita, venda ou pagamento, mantenha a frase completa com acao + valor + descricao.',
       'Responda SOMENTE JSON valido, sem markdown e sem texto adicional.',
-      'Se houver valores monetarios, escreva com palavras, por exemplo "20 reais".',
       'Formato obrigatorio:',
       '{"transcription": string}',
     ].join('\n');
