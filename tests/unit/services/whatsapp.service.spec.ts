@@ -371,6 +371,39 @@ describe('WhatsappService', () => {
     );
   });
 
+  it('responde com orientacao quando transcreve audio mas nao extrai os dados', async () => {
+    fetchMock.mockImplementation(async (url: string) => ({
+      ok: true,
+      json: vi.fn().mockResolvedValue(
+        url.endsWith('/status') ? { status: 'conectado' } : { success: true },
+      ),
+    }));
+    prismaMock.user.findFirst.mockResolvedValue({
+      id: 'user-1',
+      name: 'Gustavo',
+      phone: '11999999999',
+    });
+    prismaMock.salesChannel.findMany.mockResolvedValue([]);
+    prismaMock.category.findMany.mockResolvedValue([]);
+    geminiMock.transcribeAudioBase64.mockResolvedValue('Gastei 20 reais comprando uma toalha');
+    geminiMock.extractFinancialData.mockRejectedValue(new Error('schema invalido'));
+
+    const result = await service.handleWebhook({
+      from: '5511999999999',
+      audio: { base64: Buffer.from('audio').toString('base64'), mimeType: 'audio/ogg' },
+    });
+
+    expect(result.reply).toContain('recebi sua mensagem');
+    expect(result.reply).toContain('valor');
+    expect(result.reply).toContain('Gastei R$ 20');
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      'http://whatsapp-api.test/econoapp/send-message',
+      expect.objectContaining({
+        body: expect.stringContaining('Gastei R$ 20'),
+      }),
+    );
+  });
+
   it('responde quando recebe audio sem arquivo baixavel no payload', async () => {
     fetchMock.mockImplementation(async (url: string) => ({
       ok: true,

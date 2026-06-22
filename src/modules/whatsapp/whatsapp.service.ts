@@ -449,10 +449,15 @@ export class WhatsappService {
       this.prisma.category.findMany({ where: { userId }, select: { name: true } }),
     ]);
 
-    const extracted = await this.geminiService.extractFinancialData(message, {
-      channelNames: channels.map((item) => item.name),
-      categoryNames: categories.map((item) => item.name),
-    });
+    let extracted;
+    try {
+      extracted = await this.geminiService.extractFinancialData(message, {
+        channelNames: channels.map((item) => item.name),
+        categoryNames: categories.map((item) => item.name),
+      });
+    } catch {
+      return this.transactionExtractionFailedReply();
+    }
 
     if (extracted.confidence <= 0 || extracted.amount <= 0) {
       return '🤔 Não entendi se isso é uma receita, gasto, venda ou pergunta. Pode mandar com valor e descrição?';
@@ -1245,6 +1250,18 @@ export class WhatsappService {
     ]
       .filter(Boolean)
       .join('\n');
+  }
+
+  private transactionExtractionFailedReply(): string {
+    return [
+      '🤔 *Eu recebi sua mensagem, mas não consegui identificar todos os dados do lançamento.*',
+      '',
+      'Pode mandar de novo com *valor* e *descrição*?',
+      '',
+      'Exemplos:',
+      '• *Gastei R$ 20 comprando uma toalha no Nubank*',
+      '• *Recebi R$ 150 de um serviço por Pix*',
+    ].join('\n');
   }
 
   private async transactionPostSaveSummary(
