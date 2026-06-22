@@ -1292,18 +1292,35 @@ export class WhatsappService {
       draft.type === TransactionType.EXPENSE
         ? '🧾 *Despesa pronta para salvar*'
         : '🧾 *Receita pronta para salvar*';
+    const amountLine =
+      draft.installmentCount && draft.totalAmount
+        ? `💵 *Valor: ${this.formatMoney(draft.totalAmount)} em ${draft.installmentCount}x de ${this.formatMoney(draft.amount)}*`
+        : `💵 *Valor: ${this.formatMoney(draft.amount)}*`;
+    const actionLines = draft.possibleDuplicate
+      ? [
+          '✅ Para criar mesmo assim, responda *Salvar novamente*.',
+          '🗑️ Para desistir, responda *Cancelar*.',
+        ]
+      : [
+          '✅ Para salvar, responda *Confirmar*.',
+          '✏️ Para ajustar, responda algo como:',
+          '• "altere o valor para R$ 25"',
+          '• "mude o título para compra de toalha"',
+          '• "troque o pagamento para Nubank"',
+          '🗑️ Para desistir, responda *Cancelar*.',
+        ];
+
     return [
-      draft.possibleDuplicate ? '⚠️ Possível lançamento duplicado' : '',
+      draft.possibleDuplicate ? '⚠️ *Possível lançamento duplicado*' : '',
       draft.possibleDuplicate
-        ? `Já existe: ${draft.possibleDuplicate.description} — ${this.formatMoney(draft.possibleDuplicate.amount)} em ${this.formatDateTime(draft.possibleDuplicate.date)}.`
+        ? `Já existe: *${draft.possibleDuplicate.description}* — ${this.formatMoney(draft.possibleDuplicate.amount)} em ${this.formatDateTime(draft.possibleDuplicate.date)}.`
         : '',
       headline,
+      'Revise antes de salvar:',
       '',
       `${draft.type === TransactionType.EXPENSE ? '💸' : '💰'} *Tipo: ${type}*`,
       `📝 *Título: ${draft.description}*`,
-      draft.installmentCount && draft.totalAmount
-        ? `💵 *Valor: ${this.formatMoney(draft.totalAmount)} em ${draft.installmentCount}x de ${this.formatMoney(draft.amount)}*`
-        : `💵 *Valor: ${this.formatMoney(draft.amount)}*`,
+      amountLine,
       draft.transactionDate
         ? `📅 *Data: ${this.formatDateOnly(draft.transactionDate)}*`
         : '',
@@ -1314,9 +1331,7 @@ export class WhatsappService {
         : '🏦 *Pagamento: não informado*',
       `👤 *Modo: ${draft.scope === FinancialScope.BUSINESS ? 'Negócio' : 'Pessoal'}*`,
       '',
-      draft.possibleDuplicate
-        ? '✅ Para criar mesmo assim, responda: Salvar novamente. Ou responda: Cancelar.'
-        : '✅ Responda: Confirmar, Editar ou Cancelar. Você também pode pedir: "altere o valor", "mude o título", "troque o pagamento" ou "coloque como negócio".',
+      ...actionLines,
     ]
       .filter(Boolean)
       .join('\n');

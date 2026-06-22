@@ -554,6 +554,9 @@ describe('WhatsappService', () => {
         text: 'Gastei R$ 35 no mercado',
       });
       expect(warning.reply).toContain('Possível lançamento duplicado');
+      expect(warning.reply).toContain('Revise antes de salvar');
+      expect(warning.reply).toContain('Título: Compra no mercado');
+      expect(warning.reply).toContain('Para criar mesmo assim');
       expect(warning.reply).toContain('Salvar novamente');
       expect(transactionServiceMock.create).not.toHaveBeenCalled();
 
