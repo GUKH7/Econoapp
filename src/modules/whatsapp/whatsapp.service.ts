@@ -2474,7 +2474,10 @@ export class WhatsappService {
     try {
       const audioBase64 = audio.base64 ?? (await this.downloadAudioBase64(audio.url));
       if (!audioBase64) return MEDIA_WITHOUT_DOWNLOADABLE_AUDIO;
-      return await this.geminiService.transcribeAudioBase64(audioBase64, audio.mimeType);
+      return await this.geminiService.transcribeAudioBase64(
+        audioBase64,
+        this.normalizeAudioMimeType(audio.mimeType),
+      );
     } catch {
       const reply = this.audioTranscriptionFailedReply();
       await this.safeReply(phone, reply);
@@ -2493,6 +2496,14 @@ export class WhatsappService {
       'A API do WhatsApp precisa enviar o áudio como *base64* ou uma *URL baixável* no webhook.',
       'Enquanto ajustamos isso, pode escrever a mensagem em texto?',
     ].join('\n');
+  }
+
+  private normalizeAudioMimeType(mimeType: string): string {
+    const normalized = mimeType.toLowerCase().split(';')[0]?.trim();
+    if (!normalized) return 'audio/ogg';
+    if (normalized === 'audio/oga') return 'audio/ogg';
+    if (normalized === 'audio/mpeg') return 'audio/mp3';
+    return normalized;
   }
 
   private extractAudioInput(payload: WhatsappWebhookDto): WhatsappAudioInput | null {

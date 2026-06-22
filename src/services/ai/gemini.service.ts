@@ -167,6 +167,9 @@ export class GeminiService {
       }
       return parsed.data.transcription.trim();
     } catch {
+      if (cleaned && !cleaned.startsWith('{') && !cleaned.startsWith('[')) {
+        return cleaned;
+      }
       throw new BadRequestException('Nao consegui transcrever seu audio agora. Por favor, tente novamente em instantes.');
     }
   }

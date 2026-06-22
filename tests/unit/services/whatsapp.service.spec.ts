@@ -281,7 +281,7 @@ describe('WhatsappService', () => {
     const audioBase64 = Buffer.from('audio-test').toString('base64');
     const result = await service.handleWebhook({
       from: '5511999999999',
-      audio: { base64: audioBase64, mimeType: 'audio/ogg' },
+      audio: { base64: audioBase64, mimeType: 'audio/ogg; codecs=opus' },
     });
 
     expect(geminiMock.transcribeAudioBase64).toHaveBeenCalledWith(audioBase64, 'audio/ogg');
