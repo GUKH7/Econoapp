@@ -50,5 +50,11 @@ export class WhatsappWebhookDto {
   mimetype?: unknown;
 
   @IsOptional()
+  seconds?: unknown;
+
+  @IsOptional()
+  duration?: unknown;
+
+  @IsOptional()
   data?: unknown;
 }

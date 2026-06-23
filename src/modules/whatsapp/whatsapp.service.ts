@@ -44,6 +44,7 @@ type WhatsappAudioInput = {
   base64?: string;
   url?: string;
   mimeType: string;
+  seconds?: number | null;
 };
 
 @Injectable()
@@ -2474,10 +2475,14 @@ export class WhatsappService {
     try {
       const audioBase64 = audio.base64 ?? (await this.downloadAudioBase64(audio.url));
       if (!audioBase64) return MEDIA_WITHOUT_DOWNLOADABLE_AUDIO;
-      return await this.geminiService.transcribeAudioBase64(
+      const transcription = await this.geminiService.transcribeAudioBase64(
         audioBase64,
         this.normalizeAudioMimeType(audio.mimeType),
       );
+      if (this.isSuspiciousAudioTranscription(transcription, audio.seconds)) {
+        return null;
+      }
+      return transcription;
     } catch {
       const reply = this.audioTranscriptionFailedReply();
       await this.safeReply(phone, reply);
@@ -2563,9 +2568,41 @@ export class WhatsappService {
           audioRecord?.mimeType ??
           audioRecord?.mimetype,
       ) ?? 'audio/ogg';
+    const seconds = this.numberValue(
+      payload.seconds ??
+        payload.duration ??
+        messageRecord?.seconds ??
+        messageRecord?.duration ??
+        data?.seconds ??
+        data?.duration ??
+        audioRecord?.seconds ??
+        audioRecord?.duration,
+    );
 
     if (!base64 && !url) return null;
-    return { ...(base64 ? { base64 } : {}), ...(url ? { url } : {}), mimeType };
+    return {
+      ...(base64 ? { base64 } : {}),
+      ...(url ? { url } : {}),
+      mimeType,
+      ...(seconds !== null ? { seconds } : {}),
+    };
+  }
+
+  private isSuspiciousAudioTranscription(transcription: string, seconds?: number | null): boolean {
+    const normalized = this.normalizeText(transcription);
+    if (!normalized) return true;
+    if (/\b(audio incompreensivel|nao identificado|inaudivel|ininteligivel)\b/.test(normalized)) {
+      return true;
+    }
+    if (!seconds || seconds > 2) return false;
+
+    const words = normalized.split(/\s+/).filter(Boolean);
+    const hasLongFinancialDetails =
+      /\b(transferencia|pagamento|vencimento|outubro|novembro|dezembro|janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro)\b/.test(
+        normalized,
+      ) && /\b\d{3,}\b/.test(normalized);
+
+    return words.length > 8 || hasLongFinancialDetails;
   }
 
   private hasAudioOrMediaSignal(payload: WhatsappWebhookDto): boolean {
@@ -2617,6 +2654,17 @@ export class WhatsappService {
 
   private stringValue(value: unknown): string | null {
     return typeof value === 'string' && value.trim() ? value.trim() : null;
+  }
+
+  private numberValue(value: unknown): number | null {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return value;
+    }
+    if (typeof value === 'string' && value.trim()) {
+      const parsed = Number(value.replace(',', '.'));
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+    return null;
   }
 
   private isHttpUrl(value: string): boolean {

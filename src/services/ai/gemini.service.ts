@@ -139,6 +139,8 @@ export class GeminiService {
     const prompt = [
       'Transcreva este audio em portugues do Brasil para um assistente financeiro.',
       'Preserve todos os dados financeiros mencionados: valor, item, categoria, forma de pagamento, data, conta, cartao e se e pessoal ou negocio.',
+      'NAO invente nomes, datas, valores, pessoas, bancos ou descricoes. Se nao ouvir claramente, escreva exatamente "audio incompreensivel".',
+      'Para audio muito curto ou ruidoso, prefira "audio incompreensivel" em vez de tentar adivinhar.',
       'Converta numeros falados para algarismos quando forem valores. Exemplo: "vinte reais" deve virar "20 reais".',
       'Nunca omita valores monetarios. Se o valor nao estiver audivel, escreva "valor nao identificado" dentro da transcricao.',
       'Se o usuario falar de gasto, receita, venda ou pagamento, mantenha a frase completa com acao + valor + descricao.',

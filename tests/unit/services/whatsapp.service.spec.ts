@@ -371,6 +371,31 @@ describe('WhatsappService', () => {
     );
   });
 
+  it('descarta transcricao suspeita de audio curto para evitar dados inventados', async () => {
+    fetchMock.mockImplementation(async (url: string) => ({
+      ok: true,
+      json: vi.fn().mockResolvedValue(
+        url.endsWith('/status') ? { status: 'conectado' } : { success: true },
+      ),
+    }));
+    geminiMock.transcribeAudioBase64.mockResolvedValue(
+      'Transferencia 1500 reais a Joao em 25 outubro 2023 pelo banco',
+    );
+
+    const result = await service.handleWebhook({
+      from: '5511999999999',
+      audio: {
+        base64: Buffer.from('audio-curto').toString('base64'),
+        mimeType: 'audio/ogg',
+        seconds: 1,
+      },
+    });
+
+    expect(result.reply).toMatch(/n.o consegui entender esse .udio/i);
+    expect(prismaMock.user.findFirst).not.toHaveBeenCalled();
+    expect(geminiMock.extractFinancialData).not.toHaveBeenCalled();
+  });
+
   it('responde com orientacao quando transcreve audio mas nao extrai os dados', async () => {
     fetchMock.mockImplementation(async (url: string) => ({
       ok: true,
