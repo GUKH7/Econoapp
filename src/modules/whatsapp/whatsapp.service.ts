@@ -1329,7 +1329,7 @@ export class WhatsappService {
         : `💵 *Valor: ${this.formatMoney(draft.amount)}*`;
     const actionLines = draft.possibleDuplicate
       ? [
-          '✅ Para criar mesmo assim, responda *Salvar novamente*.',
+          '✅ Para criar mesmo assim, responda *Ok*, *Sim* ou *Confirmar*.',
           '🗑️ Para desistir, responda *Cancelar*.',
         ]
       : [
@@ -1375,7 +1375,8 @@ export class WhatsappService {
     draft: WhatsappTransactionDraft,
   ): Promise<string> {
     const command = this.normalizeText(message);
-    const confirmsDuplicate = /^(salvar novamente|criar novamente)$/.test(command);
+    const confirmsDuplicate =
+      this.isConfirmationCommand(command) || /^(salvar novamente|criar novamente)$/.test(command);
 
     if (/^(cancelar|cancela|nao|não)$/.test(command)) {
       await this.clearPendingMessage(userId);
@@ -1423,10 +1424,6 @@ export class WhatsappService {
       const updatedDraft = this.applyDraftEdit(draft, draftEdit);
       await this.setPendingTransactionDraft(userId, phone, updatedDraft);
       return `${this.transactionDraftConfirmation(updatedDraft)}\n\n✨ ${this.draftEditUpdatedMessage(draftEdit)}.`;
-    }
-
-    if (draft.possibleDuplicate && !confirmsDuplicate) {
-      return `${this.transactionDraftConfirmation(draft)}\n\n⚠️ Para evitar duplicidade, preciso que você escreva “Salvar novamente”.`;
     }
 
     const confirmsTransaction = this.isConfirmationCommand(command) || confirmsDuplicate;
@@ -2804,7 +2801,7 @@ export class WhatsappService {
   }
 
   private isConfirmationCommand(command: string): boolean {
-    return /^(confirmar|confirmo|sim|salvar|pode|pode salvar|pode fazer|ok|okay|blz|blza|beleza)$/.test(
+    return /^(confirmar|confirmo|confirmado|sim|isso|isso mesmo|certo|salvar|salva|salvar isso|pode|pode sim|pode salvar|pode fazer|manda|mande|ok|okay|blz|blza|beleza)$/.test(
       this.normalizeText(command),
     );
   }

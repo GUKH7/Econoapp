@@ -615,7 +615,7 @@ describe('WhatsappService', () => {
       expect(warning.reply).toContain('Revise antes de salvar');
       expect(warning.reply).toContain('Título: Compra no mercado');
       expect(warning.reply).toContain('Para criar mesmo assim');
-      expect(warning.reply).toContain('Salvar novamente');
+      expect(warning.reply).toContain('Ok');
       expect(transactionServiceMock.create).not.toHaveBeenCalled();
 
       const pendingText = prismaMock.whatsappConversation.upsert.mock.calls
@@ -633,8 +633,8 @@ describe('WhatsappService', () => {
         from: '5511999999999',
         text: 'Confirmar',
       });
-      expect(normalConfirmation.reply).toContain('preciso que você escreva “Salvar novamente”');
-      expect(transactionServiceMock.create).not.toHaveBeenCalled();
+      expect(normalConfirmation.reply).toContain('Lançamento registrado');
+      expect(transactionServiceMock.create).toHaveBeenCalledTimes(1);
 
       prismaMock.whatsappConversation.upsert.mockReset();
       prismaMock.whatsappConversation.upsert
@@ -646,7 +646,20 @@ describe('WhatsappService', () => {
         text: 'Salvar novamente',
       });
       expect(explicitConfirmation.reply).toContain('Lançamento registrado');
-      expect(transactionServiceMock.create).toHaveBeenCalledTimes(1);
+      expect(transactionServiceMock.create).toHaveBeenCalledTimes(2);
+
+      prismaMock.whatsappConversation.upsert.mockReset();
+      prismaMock.whatsappConversation.upsert
+        .mockResolvedValueOnce({ recentMessages: [], pendingText })
+        .mockResolvedValue({});
+      geminiMock.transcribeAudioBase64.mockResolvedValue('ok');
+
+      const audioConfirmation = await service.handleWebhook({
+        from: '5511999999999',
+        audio: { base64: Buffer.from('ok-audio').toString('base64'), mimeType: 'audio/ogg' },
+      });
+      expect(audioConfirmation.reply).toContain('Lançamento registrado');
+      expect(transactionServiceMock.create).toHaveBeenCalledTimes(3);
     } finally {
       vi.useRealTimers();
     }
@@ -810,6 +823,21 @@ describe('WhatsappService', () => {
     });
 
     expect(creditReply.reply).toContain('Pagamento: Cartão - Nubank');
+
+    prismaMock.whatsappConversation.upsert.mockResolvedValue({
+      recentMessages: [],
+      pendingText:
+        '__TRANSACTION_CONFIRMATION__:{"description":"Compra no mercado","amount":35,"type":"EXPENSE","scope":"PERSONAL","categoryHint":"Alimentação"}',
+    });
+    geminiMock.transcribeAudioBase64.mockResolvedValue('foi no nubank');
+
+    const audioPaymentReply = await service.handleWebhook({
+      from: '5511999999999',
+      audio: { base64: Buffer.from('payment-audio').toString('base64'), mimeType: 'audio/ogg' },
+    });
+
+    expect(audioPaymentReply.reply).toContain('Pagamento: Banco/Pix - Nubank');
+    expect(audioPaymentReply.reply).toContain('Pagamento atualizado');
   });
 
   it('explica a pendencia de pagamento ao receber saudacao durante um lancamento', async () => {
