@@ -937,12 +937,22 @@ export class WhatsappService {
       });
     }
     if (spent > limit) {
-      return `🚨 Orçamento excedido em ${categoryName}: ${this.formatMoney(spent)} de ${this.formatMoney(limit)} (${percentage}%). Excesso de ${this.formatMoney(spent - limit)}.`;
+      return [
+        `🚨 *Orçamento excedido em ${categoryName}*`,
+        `${this.formatMoney(spent)} de ${this.formatMoney(limit)} usados (${percentage}%).`,
+        `Excesso de ${this.formatMoney(spent - limit)}.`,
+      ].join('\n');
     }
     if (spent === limit) {
-      return `🚨 Orçamento atingiu o limite em ${categoryName}: ${this.formatMoney(spent)} de ${this.formatMoney(limit)} (100%).`;
+      return [
+        `🚨 *Orçamento atingiu o limite em ${categoryName}*`,
+        `${this.formatMoney(spent)} de ${this.formatMoney(limit)} usados (100%).`,
+      ].join('\n');
     }
-    return `⚠️ Orçamento próximo do limite em ${categoryName}: ${this.formatMoney(spent)} de ${this.formatMoney(limit)} (${percentage}%).`;
+    return [
+      `⚠️ *Orçamento próximo do limite em ${categoryName}*`,
+      `${this.formatMoney(spent)} de ${this.formatMoney(limit)} usados (${percentage}%).`,
+    ].join('\n');
   }
 
   private proactiveBudgetAlertMessage(input: {
@@ -1240,14 +1250,15 @@ export class WhatsappService {
     return [
       '✅ *Lançamento registrado*',
       '',
-      `${transaction.type === TransactionType.EXPENSE ? '💸' : '💰'} *${type}: ${transaction.description}*`,
-      `💵 *Valor: ${this.formatMoney(Number(transaction.amount))}*`,
-      `🏷️ *Categoria: ${categoryName}*`,
-      channelName ? `🛒 *Canal: ${channelName}*` : '',
+      `${transaction.type === TransactionType.EXPENSE ? '💸' : '💰'} *${type}*`,
+      `📝 Título: ${transaction.description}`,
+      `💵 Valor: ${this.formatMoney(Number(transaction.amount))}`,
+      `🏷️ Categoria: ${categoryName}`,
+      channelName ? `🛒 Canal: ${channelName}` : '',
       paymentLabel
-        ? `🏦 *${transaction.type === TransactionType.INCOME ? 'Recebido em' : 'Pagamento'}: ${paymentLabel}*`
+        ? `🏦 ${transaction.type === TransactionType.INCOME ? 'Recebido em' : 'Pagamento'}: ${paymentLabel}`
         : '',
-      `👤 *Modo: ${scope === 'BUSINESS' ? 'Negocio' : 'Pessoal'}*`,
+      `👤 Modo: ${scope === 'BUSINESS' ? 'Negócio' : 'Pessoal'}`,
     ]
       .filter(Boolean)
       .join('\n');
@@ -1280,14 +1291,14 @@ export class WhatsappService {
         select: { name: true, balance: true },
       });
       if (account) {
-        lines.push(`💵 *Saldo agora em ${account.name}: ${this.formatMoney(Number(account.balance))}*`);
+        lines.push(`💵 Saldo agora em ${account.name}: ${this.formatMoney(Number(account.balance))}`);
       }
     }
 
     if (transaction.type === TransactionType.EXPENSE && this.isDateInCurrentMonth(transaction.date)) {
       const month = this.currentMonthRange().start;
       const spent = await this.categoryExpenseTotal(userId, categoryId, scope, month);
-      lines.push(`📊 *Você já gastou ${this.formatMoney(spent)} em ${categoryName} este mês.*`);
+      lines.push(`📊 Você já gastou ${this.formatMoney(spent)} em ${categoryName} este mês.`);
 
       const budget = await this.prisma.categoryBudget.findUnique({
         where: {
@@ -1297,11 +1308,13 @@ export class WhatsappService {
       if (budget) {
         const limit = Number(budget.amount);
         const percentage = limit > 0 ? Math.round((spent / limit) * 100) : 0;
-        lines.push(`🎯 *Isso representa ${percentage}% do seu limite de ${this.formatMoney(limit)}.*`);
+        lines.push(`🎯 Isso representa ${percentage}% do seu limite de ${this.formatMoney(limit)}.`);
       }
     }
 
-    return lines.join('\n');
+    if (lines.length === 0) return '';
+
+    return ['📌 *Resumo rápido*', ...lines].join('\n');
   }
 
   private transactionDraftConfirmation(draft: WhatsappTransactionDraft): string {
@@ -1483,7 +1496,12 @@ export class WhatsappService {
       draft.scope,
       draft.accountId,
     );
-    return [confirmation, postSummary ? `\n\n${postSummary}` : '', installmentMessage, budgetAlert ? `\n${budgetAlert}` : '']
+    return [
+      confirmation,
+      postSummary ? `\n\n${postSummary}` : '',
+      installmentMessage,
+      budgetAlert ? `\n\n${budgetAlert}` : '',
+    ]
       .filter(Boolean)
       .join('');
   }
