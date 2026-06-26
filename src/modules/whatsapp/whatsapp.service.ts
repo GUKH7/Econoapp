@@ -2077,6 +2077,11 @@ export class WhatsappService {
       return null;
     }
 
+    const accountDeleteReply = await this.tryCreateAccountDeleteDraft(userId, phone, message);
+    if (accountDeleteReply) {
+      return accountDeleteReply;
+    }
+
     const searchTerm = normalized
       .replace(/\b(apague|apagar|exclua|excluir|delete|deletar|remova|remover)\b/g, '')
       .replace(/\b(o|a|um|uma|meu|minha|lancamento|transacao|gasto|despesa|receita|do|da|de)\b/g, '')
@@ -2111,7 +2116,91 @@ export class WhatsappService {
     return this.mutationDraftConfirmation(draft);
   }
 
+  private async tryCreateAccountDeleteDraft(
+    userId: string,
+    phone: string,
+    message: string,
+  ): Promise<string | null> {
+    const normalized = this.normalizeText(message);
+    if (!/\b(conta|banco|carteira)\b/.test(normalized)) {
+      return null;
+    }
+
+    const requestedType = normalized.includes('carteira')
+      ? FinancialAccountType.WALLET
+      : /\b(conta|banco|pix)\b/.test(normalized)
+        ? FinancialAccountType.BANK
+        : null;
+    const searchTerm = this.accountDeleteSearchTerm(normalized);
+    if (!searchTerm) {
+      return '🔎 Qual conta ou carteira você quer excluir? Ex: *Excluir conta Nubank* ou *Excluir carteira Dinheiro*.';
+    }
+
+    const accounts = await this.prisma.financialAccount.findMany({
+      where: { userId, ...(requestedType ? { type: requestedType } : {}) },
+      orderBy: { createdAt: 'desc' },
+    });
+    const account = this.findAccountBySearchTerm(accounts, searchTerm);
+    if (!account) {
+      return `🔎 Não encontrei conta ou carteira relacionada a “${searchTerm}”.`;
+    }
+
+    const draft: WhatsappMutationDraft = {
+      action: 'DELETE_ACCOUNT',
+      accountId: account.id,
+      accountName: account.name,
+      accountType: account.type,
+      balance: Number(account.balance || 0),
+      scope: account.scope,
+    };
+    await this.setPendingMutationDraft(userId, phone, draft);
+    return this.mutationDraftConfirmation(draft);
+  }
+
+  private accountDeleteSearchTerm(normalizedMessage: string): string {
+    return normalizedMessage
+      .replace(/\b(apague|apagar|exclua|excluir|delete|deletar|remova|remover)\b/g, ' ')
+      .replace(/\b(o|a|os|as|um|uma|meu|minha|meus|minhas|do|da|de|dos|das)\b/g, ' ')
+      .replace(/\b(conta|banco|carteira|pix|forma|pagamento)\b/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  private findAccountBySearchTerm<
+    T extends {
+      name: string;
+    },
+  >(accounts: T[], searchTerm: string): T | null {
+    const normalizedSearch = this.normalizeText(searchTerm);
+    const searchParts = normalizedSearch.split(/\s+/).filter(Boolean);
+    return (
+      accounts.find((account) => {
+        const normalizedName = this.normalizeText(account.name);
+        return (
+          normalizedName === normalizedSearch ||
+          normalizedName.includes(normalizedSearch) ||
+          normalizedSearch.includes(normalizedName) ||
+          searchParts.every((part) => normalizedName.includes(part))
+        );
+      }) ?? null
+    );
+  }
+
   private mutationDraftConfirmation(draft: WhatsappMutationDraft): string {
+    if (draft.action === 'DELETE_ACCOUNT') {
+      const type = draft.accountType === FinancialAccountType.BANK ? 'Conta' : 'Carteira';
+      return [
+        `🗑️ *Confirme a exclusão da ${type.toLowerCase()}*`,
+        '',
+        `🏦 *${type}: ${draft.accountName}*`,
+        `💵 *Saldo atual: ${this.formatMoney(draft.balance)}*`,
+        `👤 *Modo: ${draft.scope === FinancialScope.BUSINESS ? 'Negócio' : 'Pessoal'}*`,
+        '',
+        '⚠️ Os lançamentos antigos serão mantidos, mas ficarão sem essa conta vinculada.',
+        '✅ *Responda:* Confirmar, Ok, Sim ou Cancelar.',
+      ].join('\n');
+    }
+
     const type = draft.type === TransactionType.EXPENSE ? 'Despesa' : 'Receita';
     if (draft.action === 'UPDATE_AMOUNT') {
       return [
@@ -2143,7 +2232,9 @@ export class WhatsappService {
     const command = this.normalizeText(message);
     if (/^(cancelar|cancela|nao|não)$/.test(command)) {
       await this.clearPendingMessage(userId);
-      return draft.action === 'DELETE'
+      return draft.action === 'DELETE_ACCOUNT'
+        ? '✅ Exclusão cancelada. A conta ou carteira foi mantida.'
+        : draft.action === 'DELETE'
         ? '✅ Exclusão cancelada. O lançamento foi mantido.'
         : '✅ Correção cancelada. O lançamento não foi alterado.';
     }
@@ -2160,6 +2251,19 @@ export class WhatsappService {
         '✅ *Lançamento corrigido*',
         `${draft.type === TransactionType.EXPENSE ? '💸 *Despesa:' : '💰 *Receita:'} ${draft.description}*`,
         `💵 *Novo valor: ${this.formatMoney(draft.newAmount)}*`,
+      ].join('\n');
+    }
+
+    if (draft.action === 'DELETE_ACCOUNT') {
+      await this.prisma.financialAccount.deleteMany({
+        where: { id: draft.accountId, userId },
+      });
+      await this.clearPendingMessage(userId);
+      const type = draft.accountType === FinancialAccountType.BANK ? 'Conta' : 'Carteira';
+      return [
+        `✅ *${type} excluída*`,
+        `🏦 *${type}: ${draft.accountName}*`,
+        `💵 *Saldo removido: ${this.formatMoney(draft.balance)}*`,
       ].join('\n');
     }
 
@@ -2333,6 +2437,18 @@ export class WhatsappService {
       const draft = JSON.parse(
         value.slice(TRANSACTION_MUTATION_PREFIX.length),
       ) as Partial<WhatsappMutationDraft>;
+      if (draft.action === 'DELETE_ACCOUNT') {
+        if (
+          typeof draft.accountId !== 'string' ||
+          typeof draft.accountName !== 'string' ||
+          typeof draft.balance !== 'number' ||
+          !Object.values(FinancialAccountType).includes(draft.accountType as FinancialAccountType) ||
+          !Object.values(FinancialScope).includes(draft.scope as FinancialScope)
+        ) {
+          return null;
+        }
+        return draft as WhatsappMutationDraft;
+      }
       if (
         (draft.action !== 'UPDATE_AMOUNT' && draft.action !== 'DELETE') ||
         typeof draft.transactionId !== 'string' ||

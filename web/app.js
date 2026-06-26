@@ -154,16 +154,24 @@ async function bootstrap() {
 function renderLoading() {
   app.innerHTML = `
     <section class="loading-shell" role="status" aria-live="polite">
-      <div class="loading-copy">
-        <strong>Carregando suas finanças</strong>
-        <span>O servidor pode levar alguns segundos para iniciar.</span>
+      <div class="loading-brand">
+        <span class="brand-mark compact" aria-hidden="true"><span></span><span></span><span></span></span>
+        <div class="loading-copy">
+          <strong>Preparando seu resumo</strong>
+          <span>Buscando saldos, lançamentos e insights do Din.</span>
+        </div>
       </div>
-      <div class="loading-skeleton wide"></div>
+      <div class="loading-skeleton balance-preview"></div>
       <div class="loading-grid">
-        <div class="loading-skeleton"></div>
-        <div class="loading-skeleton"></div>
+        <div class="loading-skeleton metric-preview"></div>
+        <div class="loading-skeleton metric-preview"></div>
       </div>
-      <div class="loading-skeleton tall"></div>
+      <div class="loading-skeleton assistant-preview"></div>
+      <div class="loading-list">
+        <div class="loading-row"></div>
+        <div class="loading-row"></div>
+        <div class="loading-row"></div>
+      </div>
     </section>
   `;
 }
@@ -660,6 +668,9 @@ function bindViewEvents() {
   document.querySelector('[data-channel-form]')?.addEventListener('submit', handleChannelSubmit);
   document.querySelector('[data-wallet-form]')?.addEventListener('submit', handleWalletSubmit);
   document.querySelector('[data-card-form]')?.addEventListener('submit', handleCardSubmit);
+  document.querySelectorAll('[data-account-delete]').forEach((button) => {
+    button.addEventListener('click', () => handleAccountDelete(button));
+  });
   document.querySelector('[data-budget-form]')?.addEventListener('submit', handleBudgetSubmit);
   document.querySelectorAll('[data-budget-delete]').forEach((button) => {
     button.addEventListener('click', () => handleBudgetDelete(button.dataset.budgetDelete));
@@ -754,6 +765,12 @@ function bindViewEvents() {
     });
   });
 
+  document.querySelector('[data-clear-transaction-filters]')?.addEventListener('click', () => {
+    state.transactionFilter = 'ALL';
+    state.transactionSearch = '';
+    renderApp();
+  });
+
   document.querySelectorAll('[data-report-type]').forEach((button) => {
     button.addEventListener('click', () => {
       if (button.dataset.reportType === state.reportType) return;
@@ -816,6 +833,27 @@ function handleAssistantAction(action) {
     loadData()
       .then(() => renderApp())
       .catch((error) => showToast(error.message, 'error'));
+    return;
+  }
+
+  if (action === 'wallet') {
+    renderWithTransition(() => {
+      state.tab = 'more';
+      state.manageSection = 'accounts';
+      state.manageAccountTab = 'wallets';
+      state.manageModal = 'wallet';
+      state.fabOpen = false;
+    });
+    return;
+  }
+
+  if (action === 'categories') {
+    renderWithTransition(() => {
+      state.tab = 'more';
+      state.manageSection = 'categories';
+      state.manageModal = '';
+      state.fabOpen = false;
+    });
     return;
   }
 
@@ -1152,6 +1190,29 @@ async function handleWalletSubmit(event) {
     showToast('Conta ou carteira criada.');
   } catch (error) {
     setFormBusy(form, false);
+    showToast(error.message, 'error');
+  }
+}
+
+async function handleAccountDelete(button) {
+  const id = button.dataset.accountDelete;
+  const name = button.dataset.accountName || 'esta conta';
+  const kind = button.dataset.accountKind || 'conta';
+  if (!id) return;
+
+  const confirmed = window.confirm(
+    `Excluir ${kind} "${name}"?\n\nOs lançamentos antigos serão mantidos, mas ficarão sem essa conta vinculada.`,
+  );
+  if (!confirmed) return;
+
+  button.disabled = true;
+  try {
+    await api().deleteAccount(id);
+    await loadData();
+    renderApp();
+    showToast(`${kind === 'carteira' ? 'Carteira' : 'Conta'} excluída.`);
+  } catch (error) {
+    button.disabled = false;
     showToast(error.message, 'error');
   }
 }

@@ -29,7 +29,15 @@ export function dashboardView() {
         </div>
         <button class="button secondary compact-action" type="button" data-tab-jump="transactions">Ver fluxo</button>
       </div>
-      ${rows || emptyState('Nenhum lançamento no período', 'Toque no + para adicionar uma receita ou gasto.', '+')}
+      ${
+        rows ||
+        emptyState(
+          'Comece seu histórico financeiro',
+          'Adicione uma receita ou gasto para o Din montar seu resumo do mês.',
+          icon('plus'),
+          { label: 'Adicionar lançamento', attrs: 'data-assistant-action="expense"' },
+        )
+      }
     </article>
   `;
 }

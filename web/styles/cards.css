@@ -523,38 +523,65 @@ textarea:focus {
 
 .empty {
   color: var(--muted);
+  background: var(--surface-2);
+  border: 1px dashed var(--line-strong);
+  border-radius: 16px;
   line-height: 1.45;
+  margin: 8px 0 0;
+  padding: 16px;
+  text-align: center;
 }
 
 .empty-state {
   align-items: center;
+  background:
+    radial-gradient(circle at top, rgba(34, 197, 94, 0.08), transparent 130px),
+    var(--surface);
+  border: 1px dashed var(--line-strong);
+  border-radius: 18px;
   color: var(--muted);
   display: grid;
   justify-items: center;
-  min-height: 310px;
-  padding: 28px 10px;
+  min-height: 220px;
+  padding: 24px 16px;
   text-align: center;
 }
 
 .empty-state strong {
   color: var(--text);
   display: block;
-  font-size: 24px;
+  font-size: 21px;
   line-height: 1.15;
   margin-bottom: 8px;
+}
+
+.empty-state span {
+  display: block;
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1.4;
+  margin: 0 auto;
+  max-width: 320px;
 }
 
 .empty-icon {
   align-items: center;
   background: var(--green-soft);
+  border: 1px solid #bbf7d0;
   border-radius: 999px;
+  box-shadow: 0 12px 28px rgba(34, 197, 94, 0.12);
   color: var(--green-dark);
   display: flex;
-  font-size: 34px;
-  height: 92px;
+  font-size: 28px;
+  height: 74px;
   justify-content: center;
-  margin-bottom: 18px;
-  width: 92px;
+  margin-bottom: 16px;
+  width: 74px;
+}
+
+.empty-action {
+  margin-top: 16px;
+  width: auto;
 }
 
 .split {
@@ -774,6 +801,72 @@ textarea:focus {
   padding-bottom: calc(var(--bottom-nav-height) + 92px);
 }
 
+.assistant-command-panel {
+  animation: cardIn 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  background:
+    radial-gradient(circle at top right, rgba(34, 197, 94, 0.2), transparent 132px),
+    linear-gradient(145deg, #ffffff, #f0fdf4);
+  border: 1px solid #bbf7d0;
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+}
+
+.assistant-command-head {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  min-width: 0;
+}
+
+.assistant-command-head h2,
+.assistant-command-head p {
+  margin: 0;
+}
+
+.assistant-command-head h2 {
+  color: var(--text);
+  font-size: 24px;
+  line-height: 1;
+}
+
+.assistant-command-head p {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.35;
+  margin-top: 7px;
+}
+
+.assistant-command-meta {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.assistant-command-meta span,
+.assistant-command-meta strong {
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 950;
+  min-height: 32px;
+  padding: 8px 12px;
+}
+
+.assistant-command-meta span {
+  background: var(--green);
+  color: white;
+}
+
+.assistant-command-meta strong {
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid var(--line);
+  color: var(--green-dark);
+}
+
 .assistant-hero-panel {
   align-items: flex-start;
   animation: cardIn 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
@@ -859,6 +952,169 @@ textarea:focus {
   white-space: nowrap;
 }
 
+.assistant-summary-strip {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.assistant-summary-strip article {
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: 0 10px 24px rgba(31, 41, 55, 0.07);
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 12px 10px;
+}
+
+.assistant-summary-strip span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.assistant-summary-strip strong {
+  font-size: clamp(14px, 4vw, 18px);
+  line-height: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.assistant-action-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.assistant-action-grid button {
+  align-items: flex-start;
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  box-shadow: 0 12px 30px rgba(31, 41, 55, 0.07);
+  color: var(--text);
+  display: grid;
+  gap: 6px;
+  min-height: 108px;
+  padding: 13px;
+  text-align: left;
+}
+
+.assistant-action-grid button:active,
+.assistant-suggestion-list button:active,
+.assistant-next-card button:active {
+  transform: scale(0.98);
+}
+
+.assistant-action-grid button span {
+  align-items: center;
+  background: var(--green-soft);
+  border-radius: 14px;
+  color: var(--green-dark);
+  display: inline-flex;
+  height: 38px;
+  justify-content: center;
+  width: 38px;
+}
+
+.assistant-action-grid svg {
+  fill: currentColor;
+  height: 21px;
+  width: 21px;
+}
+
+.assistant-action-grid strong {
+  font-size: 14px;
+  font-weight: 950;
+}
+
+.assistant-action-grid small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.assistant-next-card,
+.assistant-suggestions-panel,
+.assistant-history-card,
+.assistant-recent-context {
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  padding: 14px;
+}
+
+.assistant-next-card {
+  align-items: flex-start;
+  display: flex;
+  gap: 12px;
+}
+
+.assistant-next-card small {
+  color: var(--green-dark);
+  display: block;
+  font-size: 11px;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.assistant-next-card strong {
+  color: var(--text);
+  display: block;
+  font-size: 16px;
+  font-weight: 950;
+  margin-top: 3px;
+}
+
+.assistant-next-card p {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.35;
+  margin: 7px 0 0;
+}
+
+.assistant-next-card button {
+  background: var(--green);
+  border: 0;
+  border-radius: 999px;
+  color: white;
+  font-size: 12px;
+  font-weight: 950;
+  margin-top: 12px;
+  min-height: 36px;
+  padding: 0 15px;
+}
+
+.assistant-suggestion-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.assistant-suggestion-list button {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 850;
+  min-height: 34px;
+  padding: 0 12px;
+}
+
+.assistant-history-card .panel-title small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+
 .assistant-thread {
   display: grid;
   gap: 14px;
@@ -929,7 +1185,17 @@ textarea:focus {
   align-items: center;
   display: inline-flex;
   gap: 5px;
-  min-height: 42px;
+  min-height: 46px;
+  min-width: 74px;
+  position: relative;
+}
+
+.assistant-typing::before {
+  color: var(--muted);
+  content: "Pensando";
+  font-size: 12px;
+  font-weight: 850;
+  margin-right: 4px;
 }
 
 .assistant-typing span {
@@ -1031,6 +1297,53 @@ textarea:focus {
   padding: 0 14px;
 }
 
+.assistant-recent-context {
+  display: grid;
+  gap: 10px;
+}
+
+.assistant-context-row {
+  align-items: center;
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 38px 1fr auto;
+  min-width: 0;
+  padding-top: 10px;
+}
+
+.assistant-context-row:first-of-type {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.assistant-context-row strong,
+.assistant-context-row small {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.assistant-context-row strong {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 950;
+}
+
+.assistant-context-row small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  margin-top: 2px;
+}
+
+.assistant-context-row b {
+  font-size: 13px;
+  white-space: nowrap;
+}
+
 .assistant-input {
   align-items: center;
   background: rgba(255, 255, 255, 0.94);
@@ -1078,6 +1391,10 @@ textarea:focus {
 }
 
 @media (max-width: 430px) {
+  .assistant-command-head {
+    align-items: flex-start;
+  }
+
   .assistant-hero-panel {
     align-items: stretch;
     display: grid;
@@ -1093,6 +1410,23 @@ textarea:focus {
 
   .assistant-digest article {
     padding: 10px 8px;
+  }
+
+  .assistant-summary-strip {
+    gap: 7px;
+  }
+
+  .assistant-summary-strip article {
+    padding: 10px 8px;
+  }
+
+  .assistant-action-grid {
+    gap: 8px;
+  }
+
+  .assistant-action-grid button {
+    min-height: 104px;
+    padding: 12px;
   }
 
   .quick-suggestions {
@@ -1141,6 +1475,15 @@ textarea:focus {
 .account-limits {
   flex: 0 0 auto;
   text-align: right;
+}
+
+.account-delete-button {
+  background: rgba(239, 68, 68, 0.08);
+  border-color: rgba(239, 68, 68, 0.18);
+  color: var(--red);
+  font-size: 18px;
+  height: 34px;
+  width: 34px;
 }
 
 .account-limits {

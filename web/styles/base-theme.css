@@ -259,27 +259,34 @@ summary:focus-visible {
 
 .loading-shell {
   display: grid;
-  gap: 16px;
+  align-content: start;
+  gap: 14px;
   margin: 0 auto;
   max-width: 640px;
   min-height: 100dvh;
-  padding: 34px 16px;
+  padding: 30px 18px;
 }
 
-.loading-copy {
-  display: grid;
-  gap: 6px;
-  margin-bottom: 10px;
+.loading-brand {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  margin-bottom: 4px;
 }
 
 .loading-copy strong {
+  display: block;
   font-size: 24px;
   font-weight: 950;
+  line-height: 1.05;
 }
 
 .loading-copy span {
   color: var(--muted);
+  display: block;
   font-size: 14px;
+  font-weight: 750;
+  margin-top: 5px;
 }
 
 .loading-grid {
@@ -290,19 +297,75 @@ summary:focus-visible {
 
 .loading-skeleton {
   animation: loadingPulse 1.25s ease-in-out infinite alternate;
-  background: linear-gradient(100deg, var(--surface-2), #ffffff, var(--surface-2));
+  background:
+    linear-gradient(100deg, rgba(241, 245, 243, 0.92), #ffffff, rgba(241, 245, 243, 0.92)),
+    var(--surface);
   background-size: 220% 100%;
   border: 1px solid var(--line);
   border-radius: var(--radius-card);
   min-height: 112px;
+  overflow: hidden;
+  position: relative;
 }
 
-.loading-skeleton.wide {
-  min-height: 210px;
+.loading-skeleton::before,
+.loading-skeleton::after {
+  background: rgba(207, 216, 211, 0.58);
+  border-radius: 999px;
+  content: "";
+  left: 18px;
+  position: absolute;
 }
 
-.loading-skeleton.tall {
-  min-height: 260px;
+.loading-skeleton::before {
+  height: 14px;
+  top: 18px;
+  width: 42%;
+}
+
+.loading-skeleton::after {
+  height: 28px;
+  top: 48px;
+  width: 62%;
+}
+
+.loading-skeleton.balance-preview {
+  background:
+    radial-gradient(circle at 86% 10%, rgba(255, 255, 255, 0.22), transparent 92px),
+    linear-gradient(135deg, #22c55e, #166534);
+  border: 0;
+  min-height: 196px;
+}
+
+.loading-skeleton.balance-preview::before,
+.loading-skeleton.balance-preview::after {
+  background: rgba(255, 255, 255, 0.62);
+}
+
+.loading-skeleton.metric-preview {
+  min-height: 116px;
+}
+
+.loading-skeleton.assistant-preview {
+  min-height: 96px;
+}
+
+.loading-list {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+
+.loading-row {
+  animation: loadingPulse 1.25s ease-in-out infinite alternate;
+  background: linear-gradient(100deg, var(--surface-2), #ffffff, var(--surface-2));
+  background-size: 220% 100%;
+  border-radius: 14px;
+  height: 52px;
 }
 
 @keyframes loadingPulse {

@@ -6,6 +6,7 @@ import {
   changeText,
   comparisonText,
   currentMonth,
+  emptyState,
   icon,
   nextMonth,
   percentChange,
@@ -126,7 +127,18 @@ export function reportsView() {
               </div>`
             : ''
         }
-        ${categoryRows(categories, reportTotal) || '<p class="empty">Não há dados disponíveis no período.</p>'}
+        ${
+          categoryRows(categories, reportTotal) ||
+          emptyState(
+            `Sem ${reportLabel.toLowerCase()} em ${currentMonth}`,
+            `Registre ${reportType === 'INCOME' ? 'uma receita' : 'um gasto'} para o Din montar esse relatório por categoria.`,
+            icon(reportType === 'INCOME' ? 'plus' : 'minus'),
+            {
+              label: reportType === 'INCOME' ? 'Registrar receita' : 'Registrar gasto',
+              attrs: `data-assistant-action="${reportType === 'INCOME' ? 'income' : 'expense'}"`,
+            },
+          )
+        }
       </article>
     </div>
   `;

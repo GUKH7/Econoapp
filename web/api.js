@@ -56,6 +56,7 @@ export function api() {
       request('/channels', { method: 'POST', body: JSON.stringify(payload) }),
     createAccount: (payload) =>
       request('/accounts', { method: 'POST', body: JSON.stringify(payload) }),
+    deleteAccount: (id) => request(`/accounts/${id}`, { method: 'DELETE' }),
     createCard: (payload) =>
       request('/accounts/cards', { method: 'POST', body: JSON.stringify(payload) }),
     assistantMessage: (payload) =>

@@ -52,7 +52,17 @@ function filteredTransactions() {
 export function transactionListHtml() {
   const transactions = filteredTransactions();
   if (!transactions.length) {
-    return emptyState('Nenhum lançamento encontrado', 'Ajuste a busca ou toque no + para adicionar um lançamento.', '+');
+    const isFiltered = state.transactionSearch.trim() || state.transactionFilter !== 'ALL';
+    return emptyState(
+      isFiltered ? 'Nada encontrado nesse filtro' : 'Seu fluxo ainda está vazio',
+      isFiltered
+        ? 'Tente buscar por outro termo ou volte para todos os lançamentos.'
+        : 'Registre uma receita ou gasto para acompanhar seu dinheiro por data.',
+      '+',
+      isFiltered
+        ? { label: 'Ver todos', attrs: 'data-clear-transaction-filters' }
+        : { label: 'Novo lançamento', attrs: 'data-assistant-action="expense"' },
+    );
   }
 
   const groups = new Map();

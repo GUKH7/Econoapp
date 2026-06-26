@@ -39,7 +39,11 @@ export function budgetView() {
              <div class="budget-progress"><span style="width:${used}%"></span></div>
              <p class="muted">${money.format(spent)} usados de ${money.format(currentBudget)}</p>
              <div class="menu-list budget-list">${budgetRows}</div>`
-          : emptyState('Nenhum limite definido', 'Defina um teto de gastos para acompanhar o mês.', 'O')
+          : emptyState(
+              'Nenhum limite definido',
+              'Defina um teto mensal para acompanhar seus gastos antes do fim do mês.',
+              icon('target'),
+            )
       }
       <form class="form" data-budget-form style="margin-top:18px">
         <label class="field">Categoria
@@ -235,14 +239,24 @@ function accountTab(id, label, activeTab) {
 }
 
 function walletRow(wallet) {
+  const typeLabel = wallet.type === 'BANK' ? 'Banco' : 'Carteira';
+  const deleteLabel = `Excluir ${typeLabel.toLowerCase()} ${wallet.name}`;
   return `
     <div class="row account-row">
       <span class="row-icon neutral-bg">${icon('wallet')}</span>
       <div class="row-main">
         <div class="row-title">${escapeHtml(wallet.name)}</div>
-        <div class="row-meta">${wallet.type === 'BANK' ? 'Banco' : 'Carteira'} - ${scopeLabel()}</div>
+        <div class="row-meta">${typeLabel} - ${scopeLabel()}</div>
       </div>
       <strong>${money.format(Number(wallet.balance || 0))}</strong>
+      <button
+        class="icon-button account-delete-button"
+        type="button"
+        data-account-delete="${escapeHtml(wallet.id)}"
+        data-account-name="${escapeHtml(wallet.name)}"
+        data-account-kind="${escapeHtml(typeLabel.toLowerCase())}"
+        aria-label="${escapeHtml(deleteLabel)}"
+      >x</button>
     </div>
   `;
 }

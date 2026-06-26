@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { BadRequestException, ServiceUnavailableException } from '@nestjs/common';
-import { FinancialScope, TransactionSource, TransactionType } from '@prisma/client';
+import { FinancialAccountType, FinancialScope, TransactionSource, TransactionType } from '@prisma/client';
 
 vi.mock('@/config/env', () => ({
   env: {
@@ -39,6 +39,7 @@ describe('WhatsappService', () => {
       findMany: ReturnType<typeof vi.fn>;
       findUnique: ReturnType<typeof vi.fn>;
       create: ReturnType<typeof vi.fn>;
+      deleteMany: ReturnType<typeof vi.fn>;
     };
     creditCard: { findMany: ReturnType<typeof vi.fn> };
     categoryBudget: {
@@ -70,7 +71,7 @@ describe('WhatsappService', () => {
       category: { findMany: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn(), create: vi.fn() },
       categoryPreference: { findFirst: vi.fn(), upsert: vi.fn() },
       transaction: { aggregate: vi.fn(), groupBy: vi.fn(), findFirst: vi.fn(), findMany: vi.fn() },
-      financialAccount: { findMany: vi.fn(), findUnique: vi.fn(), create: vi.fn() },
+      financialAccount: { findMany: vi.fn(), findUnique: vi.fn(), create: vi.fn(), deleteMany: vi.fn() },
       creditCard: { findMany: vi.fn() },
       categoryBudget: {
         upsert: vi.fn(),
@@ -1790,6 +1791,59 @@ describe('WhatsappService', () => {
     expect(confirmation.reply).toContain('Lançamento excluído');
     expect(transactionServiceMock.delete).toHaveBeenCalledWith('user-1', 'expense-1');
     expect(transactionServiceMock.update).not.toHaveBeenCalled();
+  });
+
+  it('localiza e exclui uma carteira pelo whatsapp somente depois da confirmacao', async () => {
+    fetchMock.mockImplementation(async (url: string) => ({
+      ok: true,
+      json: vi.fn().mockResolvedValue(
+        url.endsWith('/status') ? { status: 'conectado' } : { success: true },
+      ),
+    }));
+    prismaMock.user.findFirst.mockResolvedValue({
+      id: 'user-1',
+      name: 'Gustavo',
+      phone: '11999999999',
+    });
+    prismaMock.financialAccount.findMany.mockResolvedValue([
+      {
+        id: 'wallet-1',
+        userId: 'user-1',
+        name: 'Dinheiro',
+        balance: 50,
+        type: FinancialAccountType.WALLET,
+        scope: FinancialScope.PERSONAL,
+        createdAt: new Date(),
+      },
+    ]);
+    prismaMock.financialAccount.deleteMany.mockResolvedValue({ count: 1 });
+
+    const draftReply = await service.handleWebhook({
+      from: '5511999999999',
+      text: 'Excluir carteira dinheiro',
+    });
+
+    expect(draftReply.reply).toContain('Confirme a exclusão da carteira');
+    expect(draftReply.reply).toContain('Dinheiro');
+    expect(prismaMock.financialAccount.deleteMany).not.toHaveBeenCalled();
+
+    const pendingText = prismaMock.whatsappConversation.upsert.mock.calls
+      .map(([input]) => input.update?.pendingText)
+      .find((value) => typeof value === 'string' && value.startsWith('__TRANSACTION_MUTATION__:'));
+    prismaMock.whatsappConversation.upsert.mockReset();
+    prismaMock.whatsappConversation.upsert
+      .mockResolvedValueOnce({ recentMessages: [], pendingText })
+      .mockResolvedValue({});
+
+    const confirmation = await service.handleWebhook({
+      from: '5511999999999',
+      text: 'ok',
+    });
+
+    expect(confirmation.reply).toContain('Carteira excluída');
+    expect(prismaMock.financialAccount.deleteMany).toHaveBeenCalledWith({
+      where: { id: 'wallet-1', userId: 'user-1' },
+    });
   });
 
   it('cancela a exclusao e preserva o lancamento', async () => {

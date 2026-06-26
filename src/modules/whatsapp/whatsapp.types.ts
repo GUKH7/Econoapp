@@ -72,6 +72,14 @@ export type WhatsappMutationDraft =
       description: string;
       amount: number;
       type: TransactionType;
+    }
+  | {
+      action: 'DELETE_ACCOUNT';
+      accountId: string;
+      accountName: string;
+      accountType: FinancialAccountType;
+      balance: number;
+      scope: FinancialScope;
     };
 
 export type WhatsappConversationState = {

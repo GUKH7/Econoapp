@@ -97,11 +97,15 @@ export function icon(name) {
   return icons[name] || icons.more;
 }
 
-export function emptyState(title, copy, icon) {
+export function emptyState(title, copy, icon, action = null) {
+  const actionHtml = action
+    ? `<button class="button secondary empty-action" type="button" ${action.attrs || ''}>${escapeHtml(action.label)}</button>`
+    : '';
   return `
     <div class="empty-state">
       <div class="empty-icon">${icon}</div>
-      <div><strong>${title}</strong><span>${copy}</span></div>
+      <div><strong>${escapeHtml(title)}</strong><span>${escapeHtml(copy)}</span></div>
+      ${actionHtml}
     </div>
   `;
 }
