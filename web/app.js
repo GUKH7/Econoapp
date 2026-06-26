@@ -520,6 +520,13 @@ function bindShellEvents() {
 
   document.querySelectorAll('[data-action-type]').forEach((button) => {
     button.addEventListener('click', () => {
+      if (button.dataset.actionType === 'DIN') {
+        state.fabOpen = false;
+        state.sheetOpen = false;
+        state.transactionSuccess = null;
+        switchTab('assistant');
+        return;
+      }
       state.quickType = button.dataset.actionType;
       state.fabOpen = false;
       state.sheetOpen = true;
