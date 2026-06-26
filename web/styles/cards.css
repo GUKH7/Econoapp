@@ -798,6 +798,7 @@ textarea:focus {
   display: grid;
   gap: 12px;
   min-height: calc(100dvh - var(--content-safe-bottom) - 64px);
+  overflow-x: hidden;
   padding-bottom: calc(var(--bottom-nav-height) + 92px);
 }
 
@@ -814,7 +815,7 @@ textarea:focus {
 
 .assistant-chat-focused .assistant-command-panel {
   background: linear-gradient(145deg, #ffffff, #f4fdf7);
-  gap: 10px;
+  gap: 12px;
   padding: 14px;
 }
 
@@ -830,9 +831,18 @@ textarea:focus {
 }
 
 .assistant-chat-focused .assistant-command-head p {
+  display: -webkit-box;
   font-size: 12px;
   font-weight: 760;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
   margin-top: 5px;
+}
+
+.assistant-chat-focused .assistant-command-head > div {
+  min-width: 0;
+  overflow: hidden;
 }
 
 .assistant-chat-focused .assistant-command-meta span,
@@ -1174,6 +1184,29 @@ textarea:focus {
   white-space: nowrap;
 }
 
+.assistant-suggestion-list.compact-inline {
+  flex-wrap: nowrap;
+  margin-top: 0;
+  overflow-x: auto;
+  padding-bottom: 1px;
+  scrollbar-width: none;
+}
+
+.assistant-suggestion-list.compact-inline::-webkit-scrollbar {
+  display: none;
+}
+
+.assistant-suggestion-list.compact-inline button {
+  background: rgba(255, 255, 255, 0.82);
+  border-color: #d9f8e5;
+  color: var(--green-dark);
+  flex: 0 0 auto;
+  max-width: 230px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .assistant-history-card .panel-title small {
   color: var(--muted);
   font-size: 12px;
@@ -1191,7 +1224,8 @@ textarea:focus {
 }
 
 .assistant-chat-focused .assistant-history-card {
-  min-height: 42dvh;
+  min-height: 36dvh;
+  padding-bottom: 18px;
 }
 
 .chat-row {

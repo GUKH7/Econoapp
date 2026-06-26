@@ -27,16 +27,12 @@ export function assistantView() {
           <span>${scopeLabel()}</span>
           <strong>${transactions.length} lançamentos</strong>
         </div>
-      </article>
-
-      <section class="assistant-suggestions-panel compact-only">
-        <span class="eyebrow">Sugestões rápidas</span>
-        <div class="assistant-suggestion-list">
+        <div class="assistant-suggestion-list compact-inline" aria-label="Sugestões rápidas">
           ${suggestions
             .map((suggestion) => `<button type="button" data-assistant-message="${escapeHtml(suggestion)}">${escapeHtml(suggestion)}</button>`)
             .join('')}
         </div>
-      </section>
+      </article>
 
       <section class="assistant-history-card">
         <div class="panel-title compact">
