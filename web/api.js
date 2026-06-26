@@ -1,6 +1,31 @@
-import { state } from './state.js';
+import { clearSession, saveSession, state } from './state.js';
 
-async function request(path, options = {}) {
+let refreshPromise = null;
+
+async function refreshSession() {
+  if (!state.refreshToken) return false;
+  if (!refreshPromise) {
+    refreshPromise = fetch(`${state.apiUrl}/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken: state.refreshToken }),
+    })
+      .then(async (response) => {
+        if (!response.ok) return false;
+        const payload = await response.json();
+        if (!payload?.data?.accessToken || !payload?.data?.refreshToken) return false;
+        saveSession(payload.data);
+        return true;
+      })
+      .catch(() => false)
+      .finally(() => {
+        refreshPromise = null;
+      });
+  }
+  return refreshPromise;
+}
+
+async function request(path, options = {}, retrying = false) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), options.timeoutMs || 75000);
   const headers = new Headers(options.headers);
@@ -13,6 +38,14 @@ async function request(path, options = {}) {
       headers,
       signal: controller.signal,
     });
+
+    if (response.status === 401 && !retrying && !path.startsWith('/auth/')) {
+      clearTimeout(timeout);
+      const refreshed = await refreshSession();
+      if (refreshed) return request(path, options, true);
+      clearSession();
+      throw new Error('Sua sessão expirou. Entre novamente para continuar.');
+    }
 
     if (!response.ok) {
       const body = await response.json().catch(() => null);
