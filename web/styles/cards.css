@@ -801,6 +801,46 @@ textarea:focus {
   padding-bottom: calc(var(--bottom-nav-height) + 92px);
 }
 
+.assistant-chat-focused {
+  align-content: start;
+  gap: 10px;
+}
+
+.assistant-chat-focused .assistant-command-panel,
+.assistant-chat-focused .assistant-history-card,
+.assistant-chat-focused .assistant-suggestions-panel {
+  box-shadow: 0 10px 26px rgba(31, 41, 55, 0.06);
+}
+
+.assistant-chat-focused .assistant-command-panel {
+  background: linear-gradient(145deg, #ffffff, #f4fdf7);
+  gap: 10px;
+  padding: 14px;
+}
+
+.assistant-chat-focused .assistant-face {
+  border-radius: 16px;
+  flex-basis: 48px;
+  height: 48px;
+  width: 48px;
+}
+
+.assistant-chat-focused .assistant-command-head h2 {
+  font-size: 21px;
+}
+
+.assistant-chat-focused .assistant-command-head p {
+  font-size: 12px;
+  font-weight: 760;
+  margin-top: 5px;
+}
+
+.assistant-chat-focused .assistant-command-meta span,
+.assistant-chat-focused .assistant-command-meta strong {
+  min-height: 28px;
+  padding: 6px 10px;
+}
+
 .assistant-command-panel {
   animation: cardIn 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
   background:
@@ -1098,6 +1138,22 @@ textarea:focus {
   margin-top: 12px;
 }
 
+.assistant-suggestions-panel.compact-only {
+  padding: 12px;
+}
+
+.assistant-suggestions-panel.compact-only .assistant-suggestion-list {
+  flex-wrap: nowrap;
+  margin-top: 8px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+}
+
+.assistant-suggestions-panel.compact-only .assistant-suggestion-list::-webkit-scrollbar {
+  display: none;
+}
+
 .assistant-suggestion-list button {
   background: var(--surface-2);
   border: 1px solid var(--line);
@@ -1107,6 +1163,15 @@ textarea:focus {
   font-weight: 850;
   min-height: 34px;
   padding: 0 12px;
+}
+
+.assistant-suggestions-panel.compact-only .assistant-suggestion-list button {
+  background: white;
+  flex: 0 0 auto;
+  max-width: 245px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .assistant-history-card .panel-title small {
@@ -1119,6 +1184,14 @@ textarea:focus {
   display: grid;
   gap: 14px;
   scroll-margin-bottom: calc(var(--bottom-nav-height) + 92px);
+}
+
+.assistant-chat-focused .assistant-thread {
+  gap: 10px;
+}
+
+.assistant-chat-focused .assistant-history-card {
+  min-height: 42dvh;
 }
 
 .chat-row {
