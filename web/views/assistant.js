@@ -136,8 +136,85 @@ function assistantMessageHtml(message) {
     <article class="chat-row ${role}">
       ${role === 'bot' ? `<span class="assistant-avatar">${icon('chat')}</span>` : ''}
       <div class="chat-bubble">
-        <p>${escapeHtml(message.text).replace(/\n/g, '<br>')}</p>
+        ${role === 'bot' ? assistantBotMessageHtml(message.text) : `<p>${formatInlineMessage(message.text)}</p>`}
       </div>
     </article>
   `;
+}
+
+function assistantBotMessageHtml(text) {
+  const structured = transactionSummaryHtml(text);
+  if (structured) return structured;
+  return `<p>${formatInlineMessage(text)}</p>`;
+}
+
+function transactionSummaryHtml(text) {
+  const lines = String(text || '')
+    .split('\n')
+    .map((line) => cleanAssistantLine(line))
+    .filter(Boolean);
+
+  const isTransactionSummary = lines.some((line) =>
+    /lançamento registrado|pronta para salvar|possível lançamento duplicado/i.test(line),
+  );
+
+  if (!isTransactionSummary) return '';
+
+  const duplicate = lines.find((line) => /possível lançamento duplicado/i.test(line));
+  const duplicateDetail = lines.find((line) => /^já existe:/i.test(line));
+  const title = lines.find((line) => /lançamento registrado|pronta para salvar/i.test(line)) || 'Lançamento';
+  const fields = lines
+    .map((line) => {
+      const match = line.match(/^(Tipo|Título|Titulo|Valor|Data|Categoria|Canal|Pagamento|Modo):\s*(.+)$/i);
+      if (!match) return null;
+      return {
+        label: normalizeFieldLabel(match[1]),
+        value: match[2],
+      };
+    })
+    .filter(Boolean);
+  const duplicateFlow = Boolean(duplicate);
+
+  return `
+    <div class="assistant-finance-card">
+      ${duplicate ? `<div class="assistant-finance-alert">${escapeHtml(duplicate)}</div>` : ''}
+      ${duplicateDetail ? `<p class="assistant-finance-note">${escapeHtml(duplicateDetail)}</p>` : ''}
+      <strong class="assistant-finance-title">${escapeHtml(title)}</strong>
+      <div class="assistant-finance-fields">
+        ${fields
+          .map(
+            (field) => `
+              <div>
+                <span>${escapeHtml(field.label)}</span>
+                <strong>${escapeHtml(field.value)}</strong>
+              </div>
+            `,
+          )
+          .join('')}
+      </div>
+      <div class="assistant-finance-actions">
+        <span><b>${duplicateFlow ? 'Ok' : 'Confirmar'}</b> para salvar</span>
+        <span><b>Editar</b> para ajustar</span>
+        <span><b>Cancelar</b> para desistir</span>
+      </div>
+    </div>
+  `;
+}
+
+function cleanAssistantLine(line) {
+  return String(line || '')
+    .replace(/\*/g, '')
+    .replace(/^[^\wÀ-ÿ]+/u, '')
+    .trim();
+}
+
+function normalizeFieldLabel(label) {
+  if (/titulo/i.test(label)) return 'Título';
+  return label.charAt(0).toUpperCase() + label.slice(1).toLowerCase();
+}
+
+function formatInlineMessage(text) {
+  return escapeHtml(text)
+    .replace(/\*(.*?)\*/g, '<strong>$1</strong>')
+    .replace(/\n/g, '<br>');
 }
