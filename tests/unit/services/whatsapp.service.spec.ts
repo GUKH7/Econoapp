@@ -661,6 +661,19 @@ describe('WhatsappService', () => {
       });
       expect(audioConfirmation.reply).toContain('Lançamento registrado');
       expect(transactionServiceMock.create).toHaveBeenCalledTimes(3);
+
+      prismaMock.whatsappConversation.upsert.mockReset();
+      prismaMock.whatsappConversation.upsert
+        .mockResolvedValueOnce({ recentMessages: [], pendingText })
+        .mockResolvedValue({});
+      geminiMock.transcribeAudioBase64.mockResolvedValueOnce('sim, pode salvar.');
+
+      const naturalAudioConfirmation = await service.handleWebhook({
+        from: '5511999999999',
+        audio: { base64: Buffer.from('natural-audio').toString('base64'), mimeType: 'audio/ogg' },
+      });
+      expect(naturalAudioConfirmation.reply).toContain('Lançamento registrado');
+      expect(transactionServiceMock.create).toHaveBeenCalledTimes(4);
     } finally {
       vi.useRealTimers();
     }

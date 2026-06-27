@@ -1374,7 +1374,7 @@ export class WhatsappService {
     message: string,
     draft: WhatsappTransactionDraft,
   ): Promise<string> {
-    const command = this.normalizeText(message);
+    const command = this.normalizeCommand(message);
     const confirmsDuplicate =
       this.isConfirmationCommand(command) || /^(salvar novamente|criar novamente)$/.test(command);
 
@@ -2229,7 +2229,7 @@ export class WhatsappService {
     message: string,
     draft: WhatsappMutationDraft,
   ): Promise<string> {
-    const command = this.normalizeText(message);
+    const command = this.normalizeCommand(message);
     if (/^(cancelar|cancela|nao|não)$/.test(command)) {
       await this.clearPendingMessage(userId);
       return draft.action === 'DELETE_ACCOUNT'
@@ -2917,9 +2917,19 @@ export class WhatsappService {
   }
 
   private isConfirmationCommand(command: string): boolean {
-    return /^(confirmar|confirmo|confirmado|sim|isso|isso mesmo|certo|salvar|salva|salvar isso|pode|pode sim|pode salvar|pode fazer|manda|mande|ok|okay|blz|blza|beleza)$/.test(
-      this.normalizeText(command),
-    );
+    const normalized = this.normalizeCommand(command);
+    if (!normalized || /\b(nao|cancelar|cancela|desistir)\b/.test(normalized)) return false;
+
+    if (
+      /^(confirmar|confirmo|confirmado|sim|isso|isso mesmo|certo|salvar|salva|salvar isso|pode|pode sim|pode salvar|pode confirmar|pode fazer|manda|mande|ok|okay|blz|blza|beleza)$/.test(
+        normalized,
+      )
+    ) {
+      return true;
+    }
+
+    return /^(eu )?(confirmo|confirmar|confirmado)$/.test(normalized) ||
+      /^(sim )?(pode|pode sim) (salvar|confirmar|fazer)$/.test(normalized);
   }
 
   private isMenuCommand(message: string): boolean {
@@ -3622,6 +3632,13 @@ export class WhatsappService {
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '')
       .toLowerCase()
+      .trim();
+  }
+
+  private normalizeCommand(value: string): string {
+    return this.normalizeText(value)
+      .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+      .replace(/\s+/g, ' ')
       .trim();
   }
 
