@@ -53,6 +53,11 @@ describe('WhatsappService', () => {
       upsert: ReturnType<typeof vi.fn>;
       update: ReturnType<typeof vi.fn>;
     };
+    dinActivityEvent: {
+      create: ReturnType<typeof vi.fn>;
+      update: ReturnType<typeof vi.fn>;
+      findMany: ReturnType<typeof vi.fn>;
+    };
   };
   let geminiMock: {
     extractFinancialData: ReturnType<typeof vi.fn>;
@@ -84,6 +89,7 @@ describe('WhatsappService', () => {
         update: vi.fn(),
       },
       whatsappConversation: { findUnique: vi.fn(), upsert: vi.fn(), update: vi.fn() },
+      dinActivityEvent: { create: vi.fn(), update: vi.fn(), findMany: vi.fn() },
     };
     prismaMock.categoryPreference.findFirst.mockResolvedValue(null);
     prismaMock.categoryPreference.upsert.mockResolvedValue({});
@@ -95,6 +101,9 @@ describe('WhatsappService', () => {
       pendingText: null,
     });
     prismaMock.whatsappConversation.findUnique.mockResolvedValue(null);
+    prismaMock.dinActivityEvent.create.mockResolvedValue({ id: 'din-event-1' });
+    prismaMock.dinActivityEvent.update.mockResolvedValue({});
+    prismaMock.dinActivityEvent.findMany.mockResolvedValue([]);
     geminiMock = {
       extractFinancialData: vi.fn(),
       transcribeAudioBase64: vi.fn(),
@@ -301,6 +310,35 @@ describe('WhatsappService', () => {
         JSON.stringify(input.update?.recentMessages || '').includes('Áudio transcrito: Gastei 35 reais no mercado'),
       ),
     ).toBe(true);
+    expect(prismaMock.dinActivityEvent.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          phone: '5511999999999',
+          eventType: 'WEBHOOK_RECEIVED',
+          status: 'RECEIVED',
+        }),
+      }),
+    );
+    expect(prismaMock.dinActivityEvent.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'din-event-1' },
+        data: expect.objectContaining({
+          eventType: 'AUDIO_TRANSCRIBED',
+          messageText: 'Áudio transcrito: Gastei 35 reais no mercado',
+          audioTranscription: 'Gastei 35 reais no mercado',
+        }),
+      }),
+    );
+    expect(prismaMock.dinActivityEvent.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'din-event-1' },
+        data: expect.objectContaining({
+          status: 'PROCESSED',
+          sendStatus: 'SENT',
+          attempts: 1,
+        }),
+      }),
+    );
   });
 
   it('baixa audio por URL antes de transcrever o webhook', async () => {
@@ -625,11 +663,36 @@ describe('WhatsappService', () => {
       },
       updatedAt: new Date('2026-06-27T11:00:00Z'),
     });
+    prismaMock.dinActivityEvent.findMany.mockResolvedValue([
+      {
+        id: 'event-1',
+        channel: 'WHATSAPP',
+        eventType: 'AUDIO_TRANSCRIBED',
+        status: 'PROCESSED',
+        sendStatus: 'SENT',
+        phone: '5511999999999',
+        messageText: 'Áudio transcrito: Gastei 25 reais em frutas',
+        audioTranscription: 'Gastei 25 reais em frutas',
+        replyText: 'Despesa pronta para salvar',
+        errorMessage: null,
+        attempts: 1,
+        createdAt: new Date('2026-06-27T11:00:00Z'),
+        updatedAt: new Date('2026-06-27T11:00:01Z'),
+      },
+    ]);
 
     const activity = await service.getAssistantActivity('user-1');
 
     expect(activity.phone).toBe('5511999999999');
     expect(activity.messages).toHaveLength(2);
+    expect(activity.events).toEqual([
+      expect.objectContaining({
+        id: 'event-1',
+        eventType: 'AUDIO_TRANSCRIBED',
+        sendStatus: 'SENT',
+        audioTranscription: 'Gastei 25 reais em frutas',
+      }),
+    ]);
     const pending = activity.pending
       ? { ...activity.pending, summary: activity.pending.summary.replace(/\u00a0/g, ' ') }
       : null;

@@ -1267,6 +1267,67 @@ textarea:focus {
   padding: 7px 10px;
 }
 
+.assistant-activity-log {
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  margin-bottom: 14px;
+  padding: 10px 12px;
+}
+
+.assistant-activity-log summary {
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.assistant-activity-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.assistant-activity-list article {
+  background: #fff;
+  border: 1px solid #eef2f7;
+  border-radius: 12px;
+  display: grid;
+  gap: 5px;
+  padding: 9px;
+}
+
+.assistant-activity-list article div {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.assistant-activity-list strong {
+  color: var(--text);
+  font-size: 12px;
+}
+
+.assistant-activity-list span,
+.assistant-activity-list small {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.assistant-activity-list p {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.35;
+  margin: 0;
+}
+
+.assistant-activity-list small {
+  color: #dc2626;
+}
+
 .chat-row {
   align-items: flex-start;
   display: flex;

@@ -9,6 +9,7 @@ export function assistantView() {
   const topExpense = totalsByCategory('EXPENSE').sort((a, b) => b.total - a.total)[0];
   const suggestions = assistantSuggestions(totals, topExpense);
   const pending = state.assistantActivity?.pending;
+  const events = state.assistantActivity?.events || [];
   const historyHtml = state.assistantMessages.length
     ? state.assistantMessages.map(assistantMessageHtml).join('')
     : emptyHistoryHtml();
@@ -44,6 +45,7 @@ export function assistantView() {
           <small>${state.assistantMessages.length ? `${state.assistantMessages.length} mensagens` : 'Pronto para começar'}</small>
         </div>
         ${pending ? assistantPendingHtml(pending) : ''}
+        ${events.length ? assistantActivityEventsHtml(events) : ''}
         <div class="assistant-thread">
           ${historyHtml}
           ${assistantLoadingHtml()}
@@ -52,6 +54,44 @@ export function assistantView() {
       </section>
     </section>
   `;
+}
+
+function assistantActivityEventsHtml(events) {
+  return `
+    <details class="assistant-activity-log">
+      <summary>Ver atividade técnica</summary>
+      <div class="assistant-activity-list">
+        ${events.map(assistantActivityEventHtml).join('')}
+      </div>
+    </details>
+  `;
+}
+
+function assistantActivityEventHtml(event) {
+  const status = [event.status, event.sendStatus].filter(Boolean).join(' / ');
+  const text = event.audioTranscription || event.messageText || event.replyText || event.errorMessage || 'Sem detalhes';
+
+  return `
+    <article>
+      <div>
+        <strong>${escapeHtml(activityEventLabel(event.eventType))}</strong>
+        <span>${escapeHtml(status || 'Registrado')}</span>
+      </div>
+      <p>${escapeHtml(text)}</p>
+      ${event.errorMessage ? `<small>${escapeHtml(event.errorMessage)}</small>` : ''}
+    </article>
+  `;
+}
+
+function activityEventLabel(type) {
+  const labels = {
+    WEBHOOK_RECEIVED: 'Mensagem recebida',
+    MESSAGE_RECEIVED: 'Texto recebido',
+    AUDIO_TRANSCRIBED: 'Áudio transcrito',
+    AUDIO_TRANSCRIPTION_FAILED: 'Falha no áudio',
+    AUDIO_WITHOUT_FILE: 'Áudio sem arquivo',
+  };
+  return labels[type] || type || 'Evento';
 }
 
 function assistantPendingHtml(pending) {

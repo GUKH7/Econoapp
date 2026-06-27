@@ -40,6 +40,22 @@ export interface ProactiveBudgetAlertResult {
   failed: number;
 }
 
+type DinActivityEventView = {
+  id: string;
+  channel: string;
+  eventType: string;
+  status: string;
+  sendStatus: string | null;
+  phone: string | null;
+  messageText: string | null;
+  audioTranscription: string | null;
+  replyText: string | null;
+  errorMessage: string | null;
+  attempts: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
 type WhatsappAudioInput = {
   base64?: string;
   url?: string;
@@ -146,44 +162,83 @@ export class WhatsappService {
 
   async handleWebhook(dto: WhatsappWebhookDto): Promise<{ phone: string; reply: string }> {
     const phone = this.extractPhone(dto);
+    const activityId = await this.createDinActivityEvent({
+      phone: phone || null,
+      channel: 'WHATSAPP',
+      eventType: 'WEBHOOK_RECEIVED',
+      status: 'RECEIVED',
+      payload: this.toJsonValue(dto),
+    });
 
     if (!phone) {
+      await this.updateDinActivityEvent(activityId, {
+        status: 'FAILED',
+        errorMessage: 'Webhook WhatsApp precisa informar telefone e mensagem.',
+      });
       throw new BadRequestException('Webhook WhatsApp precisa informar telefone e mensagem.');
     }
 
     const receivedAudio = this.hasAudioOrMediaSignal(dto);
-    const message = await this.extractMessageOrTranscribeAudio(dto, phone);
+    const message = await this.extractMessageOrTranscribeAudio(dto);
     if (message === null) {
       const reply = this.audioTranscriptionFailedReply();
+      await this.finishDinActivityEvent(activityId, phone, {
+        eventType: receivedAudio ? 'AUDIO_TRANSCRIPTION_FAILED' : 'MESSAGE_FAILED',
+        status: 'FAILED',
+        replyText: reply,
+        errorMessage: 'Não foi possível transcrever o áudio recebido.',
+      });
       return { phone, reply };
     }
     if (message === MEDIA_WITHOUT_DOWNLOADABLE_AUDIO) {
       const reply = this.audioWithoutDownloadableFileReply();
-      await this.safeReply(phone, reply);
+      await this.finishDinActivityEvent(activityId, phone, {
+        eventType: 'AUDIO_WITHOUT_FILE',
+        status: 'FAILED',
+        replyText: reply,
+        errorMessage: 'Payload de áudio sem base64 ou URL baixável.',
+      });
       return { phone, reply };
     }
     if (!message) {
+      await this.updateDinActivityEvent(activityId, {
+        status: 'FAILED',
+        errorMessage: 'Webhook WhatsApp precisa informar telefone e mensagem.',
+      });
       throw new BadRequestException('Webhook WhatsApp precisa informar telefone e mensagem.');
     }
+    const activityMessage = this.activityUserMessage(message, receivedAudio);
+    await this.updateDinActivityEvent(activityId, {
+      eventType: receivedAudio ? 'AUDIO_TRANSCRIBED' : 'MESSAGE_RECEIVED',
+      status: 'PROCESSING',
+      messageText: activityMessage,
+      audioTranscription: receivedAudio ? message : null,
+    });
 
     const user = await this.findUserByPhone(phone);
     if (!user) {
       const reply =
         'Nao encontrei seu cadastro no EconoApp. Entre no app e cadastre este telefone para usar o chatbot.';
-      await this.safeReply(phone, reply);
+      await this.finishDinActivityEvent(activityId, phone, {
+        status: 'USER_NOT_FOUND',
+        replyText: reply,
+      });
       return { phone, reply };
     }
 
     const conversation = await this.getConversation(user.id, phone);
     const recentMessages = this.parseRecentMessages(conversation.recentMessages);
     const pendingValue = this.conversationPendingValue(conversation);
-    const activityMessage = this.activityUserMessage(message, receivedAudio);
+    await this.updateDinActivityEvent(activityId, {
+      userId: user.id,
+      conversationId: conversation.id,
+    });
 
     const categoryDraft = this.parseCategoryDraft(pendingValue);
     if (categoryDraft) {
       const reply = await this.handleCategorySelection(user.id, phone, message, categoryDraft);
       await this.appendConversation(user.id, phone, recentMessages, activityMessage, reply);
-      await this.safeReply(phone, reply);
+      await this.finishDinActivityEvent(activityId, phone, { status: 'PROCESSED', replyText: reply });
       return { phone, reply };
     }
 
@@ -191,7 +246,7 @@ export class WhatsappService {
       await this.clearPendingMessage(user.id);
       const reply = this.helpReply();
       await this.appendConversation(user.id, phone, recentMessages, activityMessage, reply);
-      await this.safeReply(phone, reply);
+      await this.finishDinActivityEvent(activityId, phone, { status: 'PROCESSED', replyText: reply });
       return { phone, reply };
     }
 
@@ -199,7 +254,7 @@ export class WhatsappService {
     if (paymentDraft) {
       const reply = await this.handlePaymentSelection(user.id, phone, message, paymentDraft);
       await this.appendConversation(user.id, phone, recentMessages, activityMessage, reply);
-      await this.safeReply(phone, reply);
+      await this.finishDinActivityEvent(activityId, phone, { status: 'PROCESSED', replyText: reply });
       return { phone, reply };
     }
 
@@ -207,7 +262,7 @@ export class WhatsappService {
     if (mutationDraft) {
       const reply = await this.handleMutationConfirmation(user.id, message, mutationDraft);
       await this.appendConversation(user.id, phone, recentMessages, activityMessage, reply);
-      await this.safeReply(phone, reply);
+      await this.finishDinActivityEvent(activityId, phone, { status: 'PROCESSED', replyText: reply });
       return { phone, reply };
     }
 
@@ -220,7 +275,7 @@ export class WhatsappService {
         transactionDraft,
       );
       await this.appendConversation(user.id, phone, recentMessages, activityMessage, reply);
-      await this.safeReply(phone, reply);
+      await this.finishDinActivityEvent(activityId, phone, { status: 'PROCESSED', replyText: reply });
       return { phone, reply };
     }
 
@@ -230,7 +285,7 @@ export class WhatsappService {
         ? 'Conversa cancelada. Nenhuma informação pendente foi salva.'
         : 'Não há nenhuma conversa pendente para cancelar.';
       await this.appendConversation(user.id, phone, recentMessages, activityMessage, reply);
-      await this.safeReply(phone, reply);
+      await this.finishDinActivityEvent(activityId, phone, { status: 'PROCESSED', replyText: reply });
       return { phone, reply };
     }
 
@@ -242,7 +297,7 @@ export class WhatsappService {
     ) {
       const reply = this.audioAmountNotCapturedReply(pendingDetails);
       await this.appendConversation(user.id, phone, recentMessages, activityMessage, reply);
-      await this.safeReply(phone, reply);
+      await this.finishDinActivityEvent(activityId, phone, { status: 'PROCESSED', replyText: reply });
       return { phone, reply };
     }
 
@@ -259,7 +314,7 @@ export class WhatsappService {
       recentMessages,
     );
     await this.appendConversation(user.id, phone, recentMessages, activityMessage, reply);
-    await this.safeReply(phone, reply);
+    await this.finishDinActivityEvent(activityId, phone, { status: 'PROCESSED', replyText: reply });
     return { phone, reply };
   }
 
@@ -364,6 +419,7 @@ export class WhatsappService {
       action: string;
       updatedAt: string;
     } | null;
+    events: DinActivityEventView[];
   }> {
     const conversation = await this.prisma.whatsappConversation.findUnique({
       where: { userId },
@@ -379,13 +435,20 @@ export class WhatsappService {
     });
 
     if (!conversation) {
-      return { phone: null, messages: [], pending: null };
+      return { phone: null, messages: [], pending: null, events: [] };
     }
+
+    const events = await this.prisma.dinActivityEvent.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      take: 25,
+    });
 
     return {
       phone: conversation.phone,
       messages: this.parseRecentMessages(conversation.recentMessages),
       pending: this.assistantPendingSummary(conversation),
+      events: events.map((event) => this.dinActivityEventView(event)),
     };
   }
 
@@ -2697,12 +2760,160 @@ export class WhatsappService {
     ].join('\n');
   }
 
-  private async safeReply(phone: string, reply: string): Promise<void> {
+  private async createDinActivityEvent(input: {
+    userId?: string | null;
+    conversationId?: string | null;
+    phone?: string | null;
+    channel: string;
+    eventType: string;
+    status: string;
+    messageText?: string | null;
+    audioTranscription?: string | null;
+    replyText?: string | null;
+    errorMessage?: string | null;
+    payload?: Prisma.InputJsonValue;
+    attempts?: number;
+  }): Promise<string | null> {
+    try {
+      const event = await this.prisma.dinActivityEvent.create({
+        data: {
+          userId: input.userId ?? null,
+          conversationId: input.conversationId ?? null,
+          phone: input.phone ?? null,
+          channel: input.channel,
+          eventType: input.eventType,
+          status: input.status,
+          messageText: input.messageText ?? null,
+          audioTranscription: input.audioTranscription ?? null,
+          replyText: input.replyText ?? null,
+          errorMessage: input.errorMessage ?? null,
+          payload: input.payload ?? Prisma.JsonNull,
+          attempts: input.attempts ?? 0,
+        },
+      });
+      return event.id;
+    } catch {
+      return null;
+    }
+  }
+
+  private async updateDinActivityEvent(
+    id: string | null,
+    input: {
+      userId?: string | null;
+      conversationId?: string | null;
+      eventType?: string;
+      status?: string;
+      sendStatus?: string | null;
+      messageText?: string | null;
+      audioTranscription?: string | null;
+      replyText?: string | null;
+      errorMessage?: string | null;
+      payload?: Prisma.InputJsonValue;
+      attempts?: number;
+    },
+  ): Promise<void> {
+    if (!id) return;
+
+    try {
+      await this.prisma.dinActivityEvent.update({
+        where: { id },
+        data: {
+          ...(input.userId !== undefined ? { userId: input.userId } : {}),
+          ...(input.conversationId !== undefined ? { conversationId: input.conversationId } : {}),
+          ...(input.eventType !== undefined ? { eventType: input.eventType } : {}),
+          ...(input.status !== undefined ? { status: input.status } : {}),
+          ...(input.sendStatus !== undefined ? { sendStatus: input.sendStatus } : {}),
+          ...(input.messageText !== undefined ? { messageText: input.messageText } : {}),
+          ...(input.audioTranscription !== undefined
+            ? { audioTranscription: input.audioTranscription }
+            : {}),
+          ...(input.replyText !== undefined ? { replyText: input.replyText } : {}),
+          ...(input.errorMessage !== undefined ? { errorMessage: input.errorMessage } : {}),
+          ...(input.payload !== undefined ? { payload: input.payload } : {}),
+          ...(input.attempts !== undefined ? { attempts: input.attempts } : {}),
+        },
+      });
+    } catch {
+      // A auditoria nao deve impedir o Din de responder.
+    }
+  }
+
+  private async finishDinActivityEvent(
+    id: string | null,
+    phone: string,
+    input: {
+      eventType?: string;
+      status: string;
+      replyText: string;
+      errorMessage?: string | null;
+    },
+  ): Promise<void> {
+    const delivery = await this.safeReply(phone, input.replyText);
+    await this.updateDinActivityEvent(id, {
+      ...(input.eventType !== undefined ? { eventType: input.eventType } : {}),
+      status: input.status,
+      sendStatus: delivery.sent ? 'SENT' : 'FAILED',
+      replyText: input.replyText,
+      errorMessage: delivery.errorMessage ?? input.errorMessage ?? null,
+      attempts: delivery.attempts,
+    });
+  }
+
+  private dinActivityEventView(event: {
+    id: string;
+    channel: string;
+    eventType: string;
+    status: string;
+    sendStatus: string | null;
+    phone: string | null;
+    messageText: string | null;
+    audioTranscription: string | null;
+    replyText: string | null;
+    errorMessage: string | null;
+    attempts: number;
+    createdAt: Date;
+    updatedAt: Date;
+  }): DinActivityEventView {
+    return {
+      id: event.id,
+      channel: event.channel,
+      eventType: event.eventType,
+      status: event.status,
+      sendStatus: event.sendStatus,
+      phone: event.phone,
+      messageText: event.messageText,
+      audioTranscription: event.audioTranscription,
+      replyText: event.replyText,
+      errorMessage: event.errorMessage,
+      attempts: event.attempts,
+      createdAt: event.createdAt.toISOString(),
+      updatedAt: event.updatedAt.toISOString(),
+    };
+  }
+
+  private toJsonValue(value: unknown): Prisma.InputJsonValue {
+    try {
+      return JSON.parse(JSON.stringify(value ?? null)) as Prisma.InputJsonValue;
+    } catch {
+      return { serializationError: 'Nao foi possivel serializar o payload bruto.' };
+    }
+  }
+
+  private async safeReply(
+    phone: string,
+    reply: string,
+  ): Promise<{ sent: boolean; attempts: number; errorMessage?: string }> {
     try {
       await this.sendMessage({ phone, message: reply });
-    } catch {
-      // O webhook deve registrar/processar a entrada mesmo se o provedor estiver temporariamente indisponivel.
+      return { sent: true, attempts: 1 };
+    } catch (error) {
+      return { sent: false, attempts: 1, errorMessage: this.errorMessage(error) };
     }
+  }
+
+  private errorMessage(error: unknown): string {
+    return error instanceof Error ? error.message : String(error);
   }
 
   private activityUserMessage(message: string, receivedAudio: boolean): string {
@@ -2729,10 +2940,7 @@ export class WhatsappService {
     return typeof value === 'string' ? value.trim() : '';
   }
 
-  private async extractMessageOrTranscribeAudio(
-    payload: WhatsappWebhookDto,
-    phone: string,
-  ): Promise<string | null> {
+  private async extractMessageOrTranscribeAudio(payload: WhatsappWebhookDto): Promise<string | null> {
     const message = this.extractMessage(payload);
     if (message) return message;
 
@@ -2751,8 +2959,6 @@ export class WhatsappService {
       }
       return transcription;
     } catch {
-      const reply = this.audioTranscriptionFailedReply();
-      await this.safeReply(phone, reply);
       return null;
     }
   }

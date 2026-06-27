@@ -37,24 +37,25 @@ enum ScheduledNotificationType {
 }
 
 model User {
-  id                   String                @id @default(uuid()) @db.Uuid
-  name                 String
-  phone                String                @unique
-  telegramId           String?               @unique
-  email                String?               @unique
-  passwordHash         String?
-  googleSubject        String?               @unique
-  createdAt            DateTime              @default(now()) @db.Timestamptz(6)
-  updatedAt            DateTime              @updatedAt @db.Timestamptz(6)
-  refreshTokens        RefreshToken[]
-  channels             SalesChannel[]
-  categories           Category[]
-  categoryPreferences  CategoryPreference[]
-  transactions         Transaction[]
-  accounts             FinancialAccount[]
-  creditCards          CreditCard[]
-  categoryBudgets      CategoryBudget[]
-  whatsappConversation WhatsappConversation?
+  id                     String                          @id @default(uuid()) @db.Uuid
+  name                   String
+  phone                  String                          @unique
+  telegramId             String?                         @unique
+  email                  String?                         @unique
+  passwordHash           String?
+  googleSubject          String?                         @unique
+  createdAt              DateTime                        @default(now()) @db.Timestamptz(6)
+  updatedAt              DateTime                        @updatedAt @db.Timestamptz(6)
+  refreshTokens          RefreshToken[]
+  channels               SalesChannel[]
+  categories             Category[]
+  categoryPreferences    CategoryPreference[]
+  transactions           Transaction[]
+  accounts               FinancialAccount[]
+  creditCards            CreditCard[]
+  categoryBudgets        CategoryBudget[]
+  whatsappConversation   WhatsappConversation?
+  dinActivityEvents      DinActivityEvent[]
   notificationDeliveries ScheduledNotificationDelivery[]
 }
 
@@ -84,16 +85,16 @@ model SalesChannel {
 }
 
 model CategoryBudget {
-  id         String         @id @default(uuid()) @db.Uuid
-  userId     String         @db.Uuid
-  categoryId String         @db.Uuid
-  scope      FinancialScope @default(PERSONAL)
-  month      DateTime       @db.Timestamptz(6)
-  amount     Decimal        @db.Decimal(15, 4)
-  alertLevel Int            @default(0)
-  lastAlertAt DateTime?     @db.Timestamptz(6)
-  createdAt  DateTime       @default(now()) @db.Timestamptz(6)
-  updatedAt  DateTime       @updatedAt @db.Timestamptz(6)
+  id          String         @id @default(uuid()) @db.Uuid
+  userId      String         @db.Uuid
+  categoryId  String         @db.Uuid
+  scope       FinancialScope @default(PERSONAL)
+  month       DateTime       @db.Timestamptz(6)
+  amount      Decimal        @db.Decimal(15, 4)
+  alertLevel  Int            @default(0)
+  lastAlertAt DateTime?      @db.Timestamptz(6)
+  createdAt   DateTime       @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime       @updatedAt @db.Timestamptz(6)
 
   user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
@@ -103,12 +104,12 @@ model CategoryBudget {
 }
 
 model Category {
-  id           String        @id @default(uuid()) @db.Uuid
+  id           String           @id @default(uuid()) @db.Uuid
   name         String
-  color        String        @default("#6366f1")
-  userId       String        @db.Uuid
-  createdAt    DateTime      @default(now()) @db.Timestamptz(6)
-  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  color        String           @default("#6366f1")
+  userId       String           @db.Uuid
+  createdAt    DateTime         @default(now()) @db.Timestamptz(6)
+  user         User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   transactions Transaction[]
   budgets      CategoryBudget[]
 
@@ -207,9 +208,36 @@ model WhatsappConversation {
   createdAt      DateTime @default(now()) @db.Timestamptz(6)
   updatedAt      DateTime @updatedAt @db.Timestamptz(6)
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user           User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  activityEvents DinActivityEvent[]
 
   @@index([phone])
+}
+
+model DinActivityEvent {
+  id                 String   @id @default(uuid()) @db.Uuid
+  userId             String?  @db.Uuid
+  conversationId     String?  @db.Uuid
+  phone              String?
+  channel            String   @default("WHATSAPP")
+  eventType          String
+  status             String
+  sendStatus         String?
+  messageText        String?
+  audioTranscription String?
+  replyText          String?
+  errorMessage       String?
+  payload            Json?
+  attempts           Int      @default(0)
+  createdAt          DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt          DateTime @updatedAt @db.Timestamptz(6)
+
+  user         User?                 @relation(fields: [userId], references: [id], onDelete: SetNull)
+  conversation WhatsappConversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([phone, createdAt])
+  @@index([status, createdAt])
 }
 
 model ScheduledNotificationDelivery {
