@@ -94,6 +94,7 @@ export function api() {
       request('/accounts/cards', { method: 'POST', body: JSON.stringify(payload) }),
     assistantMessage: (payload) =>
       request('/assistant/message', { method: 'POST', body: JSON.stringify(payload) }),
+    assistantActivity: () => request('/assistant/activity'),
     whatsappStatus: () => request('/whatsapp/status'),
     whatsappRestart: () => request('/whatsapp/restart'),
     sendWhatsappMessage: (payload) =>
@@ -103,7 +104,7 @@ export function api() {
 
 export async function loadData() {
   const client = api();
-  const [me, dashboard, transactions, categories, channels, accounts, cards, budgets] = await Promise.all([
+  const [me, dashboard, transactions, categories, channels, accounts, cards, budgets, assistantActivity] = await Promise.all([
     client.me(),
     client.dashboard(),
     client.transactions(),
@@ -112,6 +113,7 @@ export async function loadData() {
     client.accounts(),
     client.cards(),
     client.budgets(),
+    client.assistantActivity(),
   ]);
   state.user = me.data;
   state.dashboard = dashboard.data;
@@ -123,5 +125,7 @@ export async function loadData() {
   state.budgetSummary = budgets.data;
   state.categoryBudgets = budgets.data.items || [];
   state.budgets[state.scope] = Number(budgets.data.totalLimit || 0);
+  state.assistantActivity = assistantActivity.data;
+  state.assistantMessages = assistantActivity.data?.messages || [];
   localStorage.removeItem('econoapp.budgets');
 }

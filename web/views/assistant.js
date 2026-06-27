@@ -8,6 +8,7 @@ export function assistantView() {
   const transactions = scopedTransactions();
   const topExpense = totalsByCategory('EXPENSE').sort((a, b) => b.total - a.total)[0];
   const suggestions = assistantSuggestions(totals, topExpense);
+  const pending = state.assistantActivity?.pending;
   const historyHtml = state.assistantMessages.length
     ? state.assistantMessages.map(assistantMessageHtml).join('')
     : emptyHistoryHtml();
@@ -37,11 +38,12 @@ export function assistantView() {
       <section class="assistant-history-card">
         <div class="panel-title compact">
           <div>
-            <span class="eyebrow">Histórico</span>
-            <h2>Conversa com o Din</h2>
+            <span class="eyebrow">Atividade do Din</span>
+            <h2>App e WhatsApp</h2>
           </div>
           <small>${state.assistantMessages.length ? `${state.assistantMessages.length} mensagens` : 'Pronto para começar'}</small>
         </div>
+        ${pending ? assistantPendingHtml(pending) : ''}
         <div class="assistant-thread">
           ${historyHtml}
           ${assistantLoadingHtml()}
@@ -49,6 +51,19 @@ export function assistantView() {
         </div>
       </section>
     </section>
+  `;
+}
+
+function assistantPendingHtml(pending) {
+  return `
+    <article class="assistant-pending-card">
+      <div>
+        <span class="eyebrow">Pendente</span>
+        <strong>${escapeHtml(pending.title || 'Conversa em andamento')}</strong>
+        <p>${escapeHtml(pending.summary || 'Há uma etapa aguardando resposta.')}</p>
+      </div>
+      <small>${escapeHtml(pending.action || 'Continue pelo app ou pelo WhatsApp.')}</small>
+    </article>
   `;
 }
 

@@ -151,6 +151,7 @@ export class WhatsappService {
       throw new BadRequestException('Webhook WhatsApp precisa informar telefone e mensagem.');
     }
 
+    const receivedAudio = this.hasAudioOrMediaSignal(dto);
     const message = await this.extractMessageOrTranscribeAudio(dto, phone);
     if (message === null) {
       const reply = this.audioTranscriptionFailedReply();
@@ -176,11 +177,12 @@ export class WhatsappService {
     const conversation = await this.getConversation(user.id, phone);
     const recentMessages = this.parseRecentMessages(conversation.recentMessages);
     const pendingValue = this.conversationPendingValue(conversation);
+    const activityMessage = this.activityUserMessage(message, receivedAudio);
 
     const categoryDraft = this.parseCategoryDraft(pendingValue);
     if (categoryDraft) {
       const reply = await this.handleCategorySelection(user.id, phone, message, categoryDraft);
-      await this.appendConversation(user.id, phone, recentMessages, message, reply);
+      await this.appendConversation(user.id, phone, recentMessages, activityMessage, reply);
       await this.safeReply(phone, reply);
       return { phone, reply };
     }
@@ -188,7 +190,7 @@ export class WhatsappService {
     if (this.isMenuCommand(message)) {
       await this.clearPendingMessage(user.id);
       const reply = this.helpReply();
-      await this.appendConversation(user.id, phone, recentMessages, message, reply);
+      await this.appendConversation(user.id, phone, recentMessages, activityMessage, reply);
       await this.safeReply(phone, reply);
       return { phone, reply };
     }
@@ -196,7 +198,7 @@ export class WhatsappService {
     const paymentDraft = this.parsePaymentDraft(pendingValue);
     if (paymentDraft) {
       const reply = await this.handlePaymentSelection(user.id, phone, message, paymentDraft);
-      await this.appendConversation(user.id, phone, recentMessages, message, reply);
+      await this.appendConversation(user.id, phone, recentMessages, activityMessage, reply);
       await this.safeReply(phone, reply);
       return { phone, reply };
     }
@@ -204,7 +206,7 @@ export class WhatsappService {
     const mutationDraft = this.parseMutationDraft(pendingValue);
     if (mutationDraft) {
       const reply = await this.handleMutationConfirmation(user.id, message, mutationDraft);
-      await this.appendConversation(user.id, phone, recentMessages, message, reply);
+      await this.appendConversation(user.id, phone, recentMessages, activityMessage, reply);
       await this.safeReply(phone, reply);
       return { phone, reply };
     }
@@ -217,7 +219,7 @@ export class WhatsappService {
         message,
         transactionDraft,
       );
-      await this.appendConversation(user.id, phone, recentMessages, message, reply);
+      await this.appendConversation(user.id, phone, recentMessages, activityMessage, reply);
       await this.safeReply(phone, reply);
       return { phone, reply };
     }
@@ -227,7 +229,7 @@ export class WhatsappService {
       const reply = pendingValue || this.pendingDetailsText(conversation)
         ? 'Conversa cancelada. Nenhuma informação pendente foi salva.'
         : 'Não há nenhuma conversa pendente para cancelar.';
-      await this.appendConversation(user.id, phone, recentMessages, message, reply);
+      await this.appendConversation(user.id, phone, recentMessages, activityMessage, reply);
       await this.safeReply(phone, reply);
       return { phone, reply };
     }
@@ -239,7 +241,7 @@ export class WhatsappService {
       this.isAudioReferenceMessage(message)
     ) {
       const reply = this.audioAmountNotCapturedReply(pendingDetails);
-      await this.appendConversation(user.id, phone, recentMessages, message, reply);
+      await this.appendConversation(user.id, phone, recentMessages, activityMessage, reply);
       await this.safeReply(phone, reply);
       return { phone, reply };
     }
@@ -256,7 +258,7 @@ export class WhatsappService {
       textToProcess,
       recentMessages,
     );
-    await this.appendConversation(user.id, phone, recentMessages, message, reply);
+    await this.appendConversation(user.id, phone, recentMessages, activityMessage, reply);
     await this.safeReply(phone, reply);
     return { phone, reply };
   }
@@ -349,6 +351,42 @@ export class WhatsappService {
     );
     await this.appendConversation(user.id, phone, recentMessages, cleanMessage, reply);
     return { reply };
+  }
+
+  async getAssistantActivity(userId: string): Promise<{
+    phone: string | null;
+    messages: WhatsappConversationMessage[];
+    pending: {
+      type: string;
+      step: string;
+      title: string;
+      summary: string;
+      action: string;
+      updatedAt: string;
+    } | null;
+  }> {
+    const conversation = await this.prisma.whatsappConversation.findUnique({
+      where: { userId },
+      select: {
+        phone: true,
+        recentMessages: true,
+        pendingText: true,
+        pendingType: true,
+        pendingStep: true,
+        pendingData: true,
+        updatedAt: true,
+      },
+    });
+
+    if (!conversation) {
+      return { phone: null, messages: [], pending: null };
+    }
+
+    return {
+      phone: conversation.phone,
+      messages: this.parseRecentMessages(conversation.recentMessages),
+      pending: this.assistantPendingSummary(conversation),
+    };
   }
 
   private async processUserMessage(
@@ -558,6 +596,7 @@ export class WhatsappService {
       ...(scope === FinancialScope.BUSINESS && extracted.channelHint
         ? { channelHint: extracted.channelHint }
         : {}),
+      ...(extracted.confidence < 0.7 ? { lowConfidence: true } : {}),
     };
     const possibleDuplicate = await this.findPossibleDuplicate(userId, draft);
     if (possibleDuplicate) {
@@ -1340,6 +1379,13 @@ export class WhatsappService {
           '• "troque o pagamento para Nubank"',
           '🗑️ Para desistir, responda *Cancelar*.',
         ];
+    const reviewIntro = draft.lowConfidence
+      ? [
+          '⚠️ *Entendi com pouca segurança.*',
+          'Confira principalmente título, valor, categoria e pagamento antes de confirmar.',
+          '',
+        ]
+      : [];
 
     return [
       draft.possibleDuplicate ? '⚠️ *Possível lançamento duplicado*' : '',
@@ -1349,6 +1395,7 @@ export class WhatsappService {
       headline,
       'Revise antes de salvar:',
       '',
+      ...reviewIntro,
       `${draft.type === TransactionType.EXPENSE ? '💸' : '💰'} *Tipo: ${type}*`,
       `📝 *Título: ${draft.description}*`,
       amountLine,
@@ -2362,6 +2409,91 @@ export class WhatsappService {
     await this.conversationStore.clearPending(userId);
   }
 
+  private assistantPendingSummary(conversation: {
+    pendingText: string | null;
+    pendingType: string | null;
+    pendingStep: string | null;
+    pendingData: Prisma.JsonValue | null;
+    updatedAt: Date;
+  }):
+    | {
+        type: string;
+        step: string;
+        title: string;
+        summary: string;
+        action: string;
+        updatedAt: string;
+      }
+    | null {
+    const pendingValue = this.conversationPendingValue(conversation);
+    if (!pendingValue) return null;
+
+    const transactionDraft = this.parseTransactionDraft(pendingValue);
+    if (transactionDraft) {
+      return {
+        type: 'TRANSACTION',
+        step: conversation.pendingStep ?? 'WAITING_CONFIRMATION',
+        title: 'Lançamento aguardando confirmação',
+        summary: `${transactionDraft.type === TransactionType.EXPENSE ? 'Despesa' : 'Receita'} de ${this.formatMoney(transactionDraft.amount)} - ${transactionDraft.description}`,
+        action: 'Responda Confirmar, Editar ou Cancelar.',
+        updatedAt: conversation.updatedAt.toISOString(),
+      };
+    }
+
+    const paymentDraft = this.parsePaymentDraft(pendingValue);
+    if (paymentDraft) {
+      return {
+        type: 'PAYMENT',
+        step: conversation.pendingStep ?? 'WAITING_SELECTION',
+        title: 'Forma de pagamento pendente',
+        summary: `${paymentDraft.transaction.type === TransactionType.EXPENSE ? 'Despesa' : 'Receita'} de ${this.formatMoney(paymentDraft.transaction.amount)} - ${paymentDraft.transaction.description}`,
+        action: 'Escolha uma conta, carteira ou cartão.',
+        updatedAt: conversation.updatedAt.toISOString(),
+      };
+    }
+
+    const categoryDraft = this.parseCategoryDraft(pendingValue);
+    if (categoryDraft) {
+      return {
+        type: 'CATEGORY',
+        step: conversation.pendingStep ?? 'WAITING_SELECTION',
+        title: 'Categoria pendente',
+        summary: `${categoryDraft.transaction.type === TransactionType.EXPENSE ? 'Despesa' : 'Receita'} de ${this.formatMoney(categoryDraft.transaction.amount)} - ${categoryDraft.transaction.description}`,
+        action: 'Escolha uma categoria ou crie uma nova.',
+        updatedAt: conversation.updatedAt.toISOString(),
+      };
+    }
+
+    const mutationDraft = this.parseMutationDraft(pendingValue);
+    if (mutationDraft) {
+      return {
+        type: 'MUTATION',
+        step: conversation.pendingStep ?? 'WAITING_CONFIRMATION',
+        title: 'Alteração aguardando confirmação',
+        summary:
+          mutationDraft.action === 'DELETE_ACCOUNT'
+            ? `Excluir ${mutationDraft.accountName}`
+            : `Alterar ${mutationDraft.description}`,
+        action: 'Responda Confirmar ou Cancelar.',
+        updatedAt: conversation.updatedAt.toISOString(),
+      };
+    }
+
+    const details = this.pendingDetailsText(conversation);
+    if (details) {
+      return {
+        type: conversation.pendingType ?? 'DETAILS',
+        step: conversation.pendingStep ?? 'WAITING_INPUT',
+        title: 'Informação pendente',
+        summary: this.compactPendingSummary(details),
+        action: 'Continue pelo app ou pelo WhatsApp.',
+        updatedAt: conversation.updatedAt.toISOString(),
+      };
+    }
+
+    return null;
+  }
+
   private conversationPendingValue(conversation: WhatsappConversationState): string | null {
     const data = conversation.pendingData;
     if (conversation.pendingType && data && typeof data === 'object') {
@@ -2571,6 +2703,10 @@ export class WhatsappService {
     } catch {
       // O webhook deve registrar/processar a entrada mesmo se o provedor estiver temporariamente indisponivel.
     }
+  }
+
+  private activityUserMessage(message: string, receivedAudio: boolean): string {
+    return receivedAudio ? `Áudio transcrito: ${message}` : message;
   }
 
   private extractPhone(payload: WhatsappWebhookDto): string {

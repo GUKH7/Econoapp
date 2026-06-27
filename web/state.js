@@ -37,6 +37,7 @@ export const state = {
   whatsappLoading: false,
   whatsappError: '',
   assistantMessages: [],
+  assistantActivity: null,
   assistantLoading: false,
   assistantError: '',
 };
@@ -80,6 +81,7 @@ export function clearSession() {
   state.accessToken = '';
   state.refreshToken = '';
   state.assistantMessages = [];
+  state.assistantActivity = null;
   state.assistantLoading = false;
   state.assistantError = '';
 }

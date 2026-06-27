@@ -21,6 +21,7 @@ export type WhatsappTransactionDraft = {
   accountId?: string;
   creditCardId?: string;
   paymentLabel?: string;
+  lowConfidence?: boolean;
   possibleDuplicate?: {
     description: string;
     amount: number;

@@ -1228,6 +1228,45 @@ textarea:focus {
   padding-bottom: 18px;
 }
 
+.assistant-pending-card {
+  background: linear-gradient(135deg, #f0fdf4, #ecfeff);
+  border: 1px solid #bbf7d0;
+  border-radius: 18px;
+  box-shadow: 0 16px 38px rgba(22, 101, 52, 0.1);
+  display: grid;
+  gap: 8px;
+  margin-bottom: 14px;
+  padding: 12px;
+}
+
+.assistant-pending-card strong {
+  color: var(--text);
+  display: block;
+  font-size: 14px;
+  line-height: 1.25;
+  margin-top: 2px;
+}
+
+.assistant-pending-card p {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.35;
+  margin: 4px 0 0;
+}
+
+.assistant-pending-card small {
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid #d9f8e5;
+  border-radius: 999px;
+  color: var(--green-dark);
+  display: inline-flex;
+  font-size: 11px;
+  font-weight: 900;
+  justify-self: start;
+  padding: 7px 10px;
+}
+
 .chat-row {
   align-items: flex-start;
   display: flex;

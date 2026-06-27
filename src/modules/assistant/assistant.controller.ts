@@ -1,4 +1,4 @@
-import { Body, Controller, Inject, Post } from '@nestjs/common';
+import { Body, Controller, Get, Inject, Post } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
 import { JwtPayload } from '@/common/types';
@@ -10,6 +10,13 @@ import { AssistantMessageDto } from './dto/assistant-message.dto';
 @Controller('assistant')
 export class AssistantController {
   constructor(@Inject(WhatsappService) private readonly whatsappService: WhatsappService) {}
+
+  @ApiOperation({ summary: 'Consultar historico e pendencias do Din' })
+  @Get('activity')
+  async activity(@CurrentUser() user: JwtPayload) {
+    const data = await this.whatsappService.getAssistantActivity(user.sub);
+    return { data };
+  }
 
   @ApiOperation({ summary: 'Conversar com o Din usando o contexto financeiro do usuario' })
   @Post('message')

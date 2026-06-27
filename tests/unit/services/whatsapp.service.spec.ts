@@ -48,7 +48,11 @@ describe('WhatsappService', () => {
       findMany: ReturnType<typeof vi.fn>;
       update: ReturnType<typeof vi.fn>;
     };
-    whatsappConversation: { upsert: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn> };
+    whatsappConversation: {
+      findUnique: ReturnType<typeof vi.fn>;
+      upsert: ReturnType<typeof vi.fn>;
+      update: ReturnType<typeof vi.fn>;
+    };
   };
   let geminiMock: {
     extractFinancialData: ReturnType<typeof vi.fn>;
@@ -79,7 +83,7 @@ describe('WhatsappService', () => {
         findMany: vi.fn(),
         update: vi.fn(),
       },
-      whatsappConversation: { upsert: vi.fn(), update: vi.fn() },
+      whatsappConversation: { findUnique: vi.fn(), upsert: vi.fn(), update: vi.fn() },
     };
     prismaMock.categoryPreference.findFirst.mockResolvedValue(null);
     prismaMock.categoryPreference.upsert.mockResolvedValue({});
@@ -90,6 +94,7 @@ describe('WhatsappService', () => {
       recentMessages: [],
       pendingText: null,
     });
+    prismaMock.whatsappConversation.findUnique.mockResolvedValue(null);
     geminiMock = {
       extractFinancialData: vi.fn(),
       transcribeAudioBase64: vi.fn(),
@@ -291,6 +296,11 @@ describe('WhatsappService', () => {
       expect.objectContaining({ categoryNames: ['Alimentacao'] }),
     );
     expect(result.reply).toContain('Despesa pronta para salvar');
+    expect(
+      prismaMock.whatsappConversation.upsert.mock.calls.some(([input]) =>
+        JSON.stringify(input.update?.recentMessages || '').includes('Áudio transcrito: Gastei 35 reais no mercado'),
+      ),
+    ).toBe(true);
   });
 
   it('baixa audio por URL antes de transcrever o webhook', async () => {
@@ -346,6 +356,43 @@ describe('WhatsappService', () => {
       'audio/ogg',
     );
     expect(result.reply).toContain('Despesa pronta para salvar');
+  });
+
+  it('pede revisao cuidadosa quando a extracao do audio tem baixa confianca', async () => {
+    fetchMock.mockImplementation(async (url: string) => ({
+      ok: true,
+      json: vi.fn().mockResolvedValue(
+        url.endsWith('/status') ? { status: 'conectado' } : { success: true },
+      ),
+    }));
+    prismaMock.user.findFirst.mockResolvedValue({
+      id: 'user-1',
+      name: 'Usuario',
+      phone: '11999999999',
+    });
+    prismaMock.salesChannel.findMany.mockResolvedValue([]);
+    prismaMock.category.findMany.mockResolvedValue([{ name: 'Alimentacao' }]);
+    prismaMock.category.findFirst.mockResolvedValue({
+      id: 'category-1',
+      name: 'Alimentacao',
+    });
+    geminiMock.transcribeAudioBase64.mockResolvedValue('Gastei 22 reais na cantina');
+    geminiMock.extractFinancialData.mockResolvedValue({
+      amount: 22,
+      type: 'EXPENSE',
+      description: 'Compra na cantina',
+      categoryHint: 'Alimentacao',
+      channelHint: null,
+      confidence: 0.55,
+    });
+
+    const result = await service.handleWebhook({
+      from: '5511999999999',
+      audio: { base64: Buffer.from('audio-baixa-confianca').toString('base64'), mimeType: 'audio/ogg' },
+    });
+
+    expect(result.reply).toContain('Entendi com pouca segurança');
+    expect(result.reply).toContain('Confira principalmente');
   });
 
   it('responde com orientacao quando nao consegue transcrever audio', async () => {
@@ -556,6 +603,43 @@ describe('WhatsappService', () => {
 
     expect(result.reply).toContain('Lançamento registrado');
     expect(transactionServiceMock.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('retorna atividade persistida do Din com pendencia resumida', async () => {
+    prismaMock.whatsappConversation.findUnique.mockResolvedValue({
+      phone: '5511999999999',
+      recentMessages: [
+        { role: 'user', text: 'Áudio transcrito: Gastei 25 reais em frutas' },
+        { role: 'assistant', text: 'Despesa pronta para salvar' },
+      ],
+      pendingText:
+        '__TRANSACTION_CONFIRMATION__:{"description":"Compra de frutas","amount":25,"type":"EXPENSE","scope":"PERSONAL","categoryHint":"Alimentação"}',
+      pendingType: 'TRANSACTION',
+      pendingStep: 'WAITING_CONFIRMATION',
+      pendingData: {
+        description: 'Compra de frutas',
+        amount: 25,
+        type: 'EXPENSE',
+        scope: 'PERSONAL',
+        categoryHint: 'Alimentação',
+      },
+      updatedAt: new Date('2026-06-27T11:00:00Z'),
+    });
+
+    const activity = await service.getAssistantActivity('user-1');
+
+    expect(activity.phone).toBe('5511999999999');
+    expect(activity.messages).toHaveLength(2);
+    const pending = activity.pending
+      ? { ...activity.pending, summary: activity.pending.summary.replace(/\u00a0/g, ' ') }
+      : null;
+    expect(pending).toEqual(
+      expect.objectContaining({
+        type: 'TRANSACTION',
+        title: 'Lançamento aguardando confirmação',
+        summary: 'Despesa de R$ 25,00 - Compra de frutas',
+      }),
+    );
   });
 
   it('alerta sobre duplicidade e exige salvar novamente', async () => {
