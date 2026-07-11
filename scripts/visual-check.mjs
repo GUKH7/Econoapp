@@ -7,6 +7,11 @@ const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const webDir = path.join(rootDir, 'web');
 const outputDir = path.join(rootDir, 'test-results', 'visual');
 
+function currentMonthDate(day = 1) {
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), day, 12)).toISOString();
+}
+
 const categories = [
   { id: 'cat-food', name: 'Alimentacao', color: '#22C55E' },
   { id: 'cat-home', name: 'Moradia', color: '#3B82F6' },
@@ -31,7 +36,7 @@ const transactions = [
     scope: 'PERSONAL',
     categoryId: 'cat-salary',
     accountId: 'acc-main',
-    date: '2026-06-03T12:00:00.000Z',
+    date: currentMonthDate(3),
   },
   {
     id: 'tx-2',
@@ -43,7 +48,7 @@ const transactions = [
     scope: 'PERSONAL',
     categoryId: 'cat-food',
     creditCardId: 'card-main',
-    date: '2026-06-04T12:00:00.000Z',
+    date: currentMonthDate(4),
   },
   {
     id: 'tx-3',
@@ -55,7 +60,7 @@ const transactions = [
     scope: 'PERSONAL',
     categoryId: 'cat-home',
     accountId: 'acc-main',
-    date: '2026-06-05T12:00:00.000Z',
+    date: currentMonthDate(5),
   },
   {
     id: 'tx-4',
@@ -67,7 +72,7 @@ const transactions = [
     scope: 'PERSONAL',
     categoryId: 'cat-transport',
     creditCardId: 'card-main',
-    date: '2026-06-06T12:00:00.000Z',
+    date: currentMonthDate(6),
   },
   {
     id: 'tx-5',
@@ -80,7 +85,7 @@ const transactions = [
     categoryId: 'cat-sales',
     channelId: 'channel-store',
     accountId: 'acc-business',
-    date: '2026-06-07T12:00:00.000Z',
+    date: currentMonthDate(7),
   },
 ];
 
@@ -109,7 +114,7 @@ const apiFixtures = {
   '/api/v1/budgets': {
     data: {
       scope: 'PERSONAL',
-      month: '2026-06-01T00:00:00.000Z',
+      month: currentMonthDate(1),
       totalLimit: 2300,
       totalSpent: 1599.4,
       items: [
@@ -119,7 +124,7 @@ const apiFixtures = {
           categoryName: 'Alimentacao',
           categoryColor: '#22C55E',
           scope: 'PERSONAL',
-          month: '2026-06-01T00:00:00.000Z',
+          month: currentMonthDate(1),
           amount: 800,
           spent: 312.9,
           percentage: 39,
@@ -130,7 +135,7 @@ const apiFixtures = {
           categoryName: 'Moradia',
           categoryColor: '#3B82F6',
           scope: 'PERSONAL',
-          month: '2026-06-01T00:00:00.000Z',
+          month: currentMonthDate(1),
           amount: 1500,
           spent: 1200,
           percentage: 80,
@@ -138,6 +143,8 @@ const apiFixtures = {
       ],
     },
   },
+  '/api/v1/transactions/recurring': { data: [] },
+  '/api/v1/assistant/activity': { data: { messages: [], events: [] } },
 };
 
 const contentTypes = {

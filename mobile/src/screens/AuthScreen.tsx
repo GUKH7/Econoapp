@@ -54,9 +54,9 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
   return (
     <View style={styles.container}>
       <View style={styles.hero}>
-        <Text style={styles.wordmark}>ECONOAPP</Text>
-        <Text style={styles.title}>Sua rotina financeira mais clara.</Text>
-        <Text style={styles.subtitle}>Registre gastos, acompanhe receitas e conecte tudo ao chatbot.</Text>
+        <Text style={styles.wordmark}>Din</Text>
+        <Text style={styles.title}>Seu dinheiro,{`\n`}mais <Text style={styles.titleAccent}>inteligente.</Text></Text>
+        <Text style={styles.subtitle}>O copiloto financeiro que aprende com você e ajuda a tomar decisões melhores todos os dias.</Text>
       </View>
 
       <Card>
@@ -127,8 +127,8 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xl,
   },
   wordmark: {
-    color: colors.primary,
-    fontSize: 34,
+    color: colors.text,
+    fontSize: 38,
     fontWeight: '900',
     letterSpacing: 0,
     marginBottom: spacing.lg,
@@ -138,6 +138,9 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: '900',
     lineHeight: 34,
+  },
+  titleAccent: {
+    color: colors.primaryDark,
   },
   subtitle: {
     color: colors.muted,

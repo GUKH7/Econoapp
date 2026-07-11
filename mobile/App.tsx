@@ -30,9 +30,9 @@ type Tab = 'dashboard' | 'transactions' | 'simulator' | 'settings';
 
 const tabs: Array<{ id: Tab; label: string }> = [
   { id: 'dashboard', label: 'Inicio' },
-  { id: 'transactions', label: 'Lancamentos' },
-  { id: 'simulator', label: 'Simular' },
-  { id: 'settings', label: 'Ajustes' },
+  { id: 'transactions', label: 'Transacoes' },
+  { id: 'simulator', label: 'Metas' },
+  { id: 'settings', label: 'Mais' },
 ];
 
 export default function App() {
@@ -152,7 +152,7 @@ export default function App() {
       <View style={styles.header}>
         <View style={styles.brand}>
           <View>
-            <Text style={styles.appName}>ECONOAPP</Text>
+            <Text style={styles.appName}>Din</Text>
             <Text style={styles.subtitle}>
               {user ? `Ola, ${user.name}` : 'Sua visao financeira'}
             </Text>
@@ -192,8 +192,8 @@ const styles = StyleSheet.create({
   header: {
     alignItems: 'center',
     backgroundColor: colors.sand,
-    borderBottomColor: colors.primarySoft,
-    borderBottomWidth: 2,
+    borderBottomColor: colors.border,
+    borderBottomWidth: 1,
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.lg,
@@ -205,8 +205,8 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   appName: {
-    color: colors.primary,
-    fontSize: 18,
+    color: colors.text,
+    fontSize: 22,
     fontWeight: '900',
   },
   subtitle: {
@@ -238,7 +238,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   tabButtonActive: {
-    backgroundColor: colors.primary,
+    backgroundColor: colors.primarySoft,
   },
   tabLabel: {
     color: colors.muted,
@@ -246,6 +246,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   tabLabelActive: {
-    color: colors.onPrimary,
+    color: colors.primaryDark,
   },
 });

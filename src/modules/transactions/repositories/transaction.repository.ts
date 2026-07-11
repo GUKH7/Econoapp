@@ -17,6 +17,8 @@ interface CreateTransactionInput {
   creditCardId?: string;
   date?: Date;
   userId: string;
+  importHash?: string;
+  recurringRuleId?: string;
 }
 
 @Injectable()

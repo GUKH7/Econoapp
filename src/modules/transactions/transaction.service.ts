@@ -1,14 +1,17 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { Transaction, TransactionSource, TransactionType } from '@prisma/client';
+import { FinancialScope, Prisma, Transaction, TransactionSource, TransactionType } from '@prisma/client';
 import { PrismaService } from '@/config/database';
 import { calculateNetAmount } from '@/domain/finance/calculate-fees';
 import { BadRequestException, NotFoundException, ForbiddenException } from '@/common/errors/app.exception';
+import { createHash } from 'node:crypto';
 import { PaginatedResult } from '@/common/types';
 import { AccountService } from '@/modules/accounts/account.service';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
+import { ImportTransactionsDto } from './dto/import-transactions.dto';
 import { FilterTransactionDto } from './dto/filter-transaction.dto';
 import { UpdateTransactionDto } from './dto/update-transaction.dto';
 import { TransactionRepository } from './repositories/transaction.repository';
+import { SmartCategoryService } from './smart-category.service';
 
 @Injectable()
 export class TransactionService {
@@ -16,9 +19,13 @@ export class TransactionService {
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(TransactionRepository) private readonly transactionRepository: TransactionRepository,
     @Inject(AccountService) private readonly accountService: AccountService,
+    @Inject(SmartCategoryService) private readonly smartCategoryService: SmartCategoryService,
   ) {}
 
-  async create(userId: string, input: CreateTransactionDto): Promise<Transaction> {
+  async create(
+    userId: string,
+    input: CreateTransactionDto & { importHash?: string; recurringRuleId?: string },
+  ): Promise<Transaction> {
     if (input.type === TransactionType.INCOME && input.creditCardId) {
       throw new BadRequestException('Receitas devem ser recebidas em uma conta ou carteira');
     }
@@ -40,7 +47,7 @@ export class TransactionService {
         ? calculateNetAmount(input.amount, Number(channel.feePercent))
         : input.amount;
 
-    return this.transactionRepository.create({
+    const transaction = await this.transactionRepository.create({
       description: input.description,
       amount: input.amount,
       netAmount,
@@ -53,6 +60,108 @@ export class TransactionService {
       ...(input.creditCardId ? { creditCardId: input.creditCardId } : {}),
       ...(input.date ? { date: new Date(input.date) } : {}),
       userId,
+      ...(input.importHash ? { importHash: input.importHash } : {}),
+      ...(input.recurringRuleId ? { recurringRuleId: input.recurringRuleId } : {}),
+    });
+
+    if (input.source !== TransactionSource.CSV && input.source !== TransactionSource.RECURRENT) {
+      const category = await this.prisma.category.findFirst({
+        where: { id: input.categoryId, userId },
+        select: { name: true },
+      });
+      if (category) {
+        await this.smartCategoryService.remember({
+          userId,
+          description: input.description,
+          categoryName: category.name,
+          type: input.type,
+        });
+      }
+    }
+
+    return transaction;
+  }
+
+  async importCsv(
+    userId: string,
+    input: ImportTransactionsDto,
+  ): Promise<{
+    created: number;
+    skipped: number;
+    totalRows: number;
+    transactions: Transaction[];
+  }> {
+    if (input.accountId) {
+      await this.accountService.ensureAccountBelongsToUser(userId, input.accountId);
+    }
+
+    const rows = parseCsvTransactions(input.csv);
+    if (!rows.length) {
+      throw new BadRequestException('Nenhuma transacao valida foi encontrada no CSV');
+    }
+
+    const categories = await this.prisma.category.findMany({ where: { userId } });
+    const fallbackCategory = input.categoryId
+      ? categories.find((category) => category.id === input.categoryId)
+      : await this.findOrCreateImportCategory(userId);
+
+    if (!fallbackCategory) {
+      throw new BadRequestException('Categoria padrao da importacao nao encontrada');
+    }
+
+    const scope = input.scope ?? FinancialScope.PERSONAL;
+    const hashes = rows.map((row) => importHashFor(userId, row));
+    const existing = await this.prisma.transaction.findMany({
+      where: { userId, importHash: { in: hashes } },
+      select: { importHash: true },
+    });
+    const existingHashes = new Set(existing.flatMap((item) => (item.importHash ? [item.importHash] : [])));
+
+    let skipped = 0;
+    const transactions: Transaction[] = [];
+    for (let index = 0; index < rows.length; index += 1) {
+      const row = rows[index];
+      const importHash = hashes[index];
+      if (!row || !importHash) continue;
+      if (existingHashes.has(importHash)) {
+        skipped += 1;
+        continue;
+      }
+
+      const categoryId = input.categoryId ?? (await this.smartCategoryService.suggestCategoryId({
+        userId,
+        description: row.description,
+        type: row.amount >= 0 ? TransactionType.INCOME : TransactionType.EXPENSE,
+        categories,
+        fallbackCategoryId: fallbackCategory.id,
+      }));
+      const transaction = await this.create(userId, {
+        description: row.description,
+        amount: Math.abs(row.amount),
+        type: row.amount >= 0 ? TransactionType.INCOME : TransactionType.EXPENSE,
+        source: TransactionSource.CSV,
+        scope,
+        categoryId,
+        accountId: input.accountId,
+        date: row.date.toISOString(),
+        importHash,
+      } as CreateTransactionDto & { importHash: string });
+      transactions.push(transaction);
+      existingHashes.add(importHash);
+    }
+
+    return { created: transactions.length, skipped, totalRows: rows.length, transactions };
+  }
+
+  private async findOrCreateImportCategory(userId: string): Promise<{ id: string; name: string }> {
+    const existing = await this.prisma.category.findFirst({
+      where: { userId, name: { equals: 'Importados', mode: 'insensitive' } },
+      select: { id: true, name: true },
+    });
+    if (existing) return existing;
+    return this.prisma.category.create({
+      data: { userId, name: 'Importados', color: '#3B82F6' },
+      select: { id: true, name: true },
     });
   }
 
@@ -61,6 +170,67 @@ export class TransactionService {
     filter: FilterTransactionDto,
   ): Promise<PaginatedResult<Transaction>> {
     return this.transactionRepository.findAllByUser(userId, filter);
+  }
+
+  async exportCsv(userId: string, filter: FilterTransactionDto): Promise<string> {
+    const dateFilter: Prisma.DateTimeFilter | undefined =
+      filter.startDate || filter.endDate
+        ? {
+            ...(filter.startDate ? { gte: new Date(filter.startDate) } : {}),
+            ...(filter.endDate ? { lte: new Date(filter.endDate) } : {}),
+          }
+        : undefined;
+
+    const transactions = await this.prisma.transaction.findMany({
+      where: {
+        userId,
+        ...(filter.type ? { type: filter.type } : {}),
+        ...(filter.scope ? { scope: filter.scope } : {}),
+        ...(filter.channelId ? { channelId: filter.channelId } : {}),
+        ...(filter.categoryId ? { categoryId: filter.categoryId } : {}),
+        ...(dateFilter ? { date: dateFilter } : {}),
+      },
+      include: {
+        category: { select: { name: true } },
+        channel: { select: { name: true } },
+        account: { select: { name: true, type: true } },
+        creditCard: { select: { name: true } },
+      },
+      orderBy: { date: 'asc' },
+    });
+
+    const header = [
+      'data',
+      'descricao',
+      'tipo',
+      'valor',
+      'valor_liquido',
+      'categoria',
+      'conta_carteira',
+      'cartao',
+      'canal',
+      'escopo',
+      'origem',
+      'id',
+    ];
+    const rows = transactions.map((transaction) => [
+      transaction.date.toISOString().slice(0, 10),
+      transaction.description,
+      transaction.type,
+      formatCsvNumber(Number(transaction.amount)),
+      formatCsvNumber(Number(transaction.netAmount)),
+      transaction.category?.name ?? '',
+      transaction.account
+        ? `${transaction.account.type === 'BANK' ? 'Banco' : 'Carteira'} - ${transaction.account.name}`
+        : '',
+      transaction.creditCard?.name ?? '',
+      transaction.channel?.name ?? '',
+      transaction.scope,
+      transaction.source,
+      transaction.id,
+    ]);
+
+    return `\uFEFF${[header, ...rows].map((row) => row.map(csvCell).join(';')).join('\n')}`;
   }
 
   async update(userId: string, id: string, input: UpdateTransactionDto): Promise<Transaction> {
@@ -138,4 +308,138 @@ export class TransactionService {
 
     await this.transactionRepository.delete(id);
   }
+}
+interface ParsedCsvTransaction {
+  date: Date;
+  description: string;
+  amount: number;
+}
+
+function parseCsvTransactions(csv: string): ParsedCsvTransaction[] {
+  const records = parseCsv(csv).filter((row) => row.some((cell) => cell.trim()));
+  if (records.length < 2) return [];
+
+  const headerRow = records[0];
+  if (!headerRow) return [];
+  const headers = headerRow.map((header) => normalizeHeader(header));
+  const dateIndex = findHeader(headers, ['data', 'date', 'dt', 'postedat']);
+  const descriptionIndex = findHeader(headers, ['descricao', 'description', 'historico', 'memo', 'lancamento', 'titulo']);
+  const amountIndex = findHeader(headers, ['valor', 'amount', 'quantia', 'total']);
+  const typeIndex = findHeader(headers, ['tipo', 'type', 'natureza']);
+
+  if (dateIndex < 0 || descriptionIndex < 0 || amountIndex < 0) {
+    throw new BadRequestException('CSV precisa ter colunas de data, descricao e valor');
+  }
+
+  return records.slice(1).flatMap((record) => {
+    const date = parseDate(record[dateIndex] ?? '');
+    const description = (record[descriptionIndex] ?? '').trim();
+    let amount = parseMoney(record[amountIndex] ?? '');
+    const type = (record[typeIndex] || '').toLowerCase();
+    if (type && /saida|debito|debit|expense|despesa|gasto/.test(normalizeText(type))) {
+      amount = -Math.abs(amount);
+    }
+    if (type && /entrada|credito|credit|income|receita/.test(normalizeText(type))) {
+      amount = Math.abs(amount);
+    }
+    if (!date || !description || !Number.isFinite(amount) || amount === 0) return [];
+    return [{ date, description, amount }];
+  });
+}
+
+function parseCsv(input: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let cell = '';
+  let quoted = false;
+  for (let index = 0; index < input.length; index += 1) {
+    const char = input[index];
+    const next = input[index + 1];
+    if (char === '"') {
+      if (quoted && next === '"') {
+        cell += '"';
+        index += 1;
+      } else {
+        quoted = !quoted;
+      }
+      continue;
+    }
+    if (!quoted && (char === ',' || char === ';' || char === '\t')) {
+      row.push(cell.trim());
+      cell = '';
+      continue;
+    }
+    if (!quoted && (char === '\n' || char === '\r')) {
+      if (char === '\r' && next === '\n') index += 1;
+      row.push(cell.trim());
+      rows.push(row);
+      row = [];
+      cell = '';
+      continue;
+    }
+    cell += char;
+  }
+  row.push(cell.trim());
+  rows.push(row);
+  return rows;
+}
+
+function findHeader(headers: string[], candidates: string[]): number {
+  return headers.findIndex((header) => candidates.some((candidate) => header === candidate || header.includes(candidate)));
+}
+
+function normalizeHeader(value: string): string {
+  return normalizeText(value).replace(/[^a-z0-9]/g, '');
+}
+
+function normalizeText(value: string): string {
+  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+}
+
+function parseDate(value: string): Date | null {
+  const raw = value.trim();
+  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return safeDate(Number(iso[1] ?? 0), Number(iso[2] ?? 0), Number(iso[3] ?? 0));
+  const br = raw.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})$/);
+  if (br) {
+    const day = br[1] ?? '';
+    const month = br[2] ?? '';
+    const rawYear = br[3] ?? '';
+    const year = Number(rawYear.length === 2 ? `20${rawYear}` : rawYear);
+    return safeDate(year, Number(month), Number(day));
+  }
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function safeDate(year: number, month: number, day: number): Date | null {
+  const date = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function parseMoney(value: string): number {
+  const cleaned = value.replace(/[^\d,.-]/g, '').trim();
+  if (!cleaned) return Number.NaN;
+  const lastComma = cleaned.lastIndexOf(',');
+  const lastDot = cleaned.lastIndexOf('.');
+  if (lastComma > lastDot) {
+    return Number(cleaned.replace(/\./g, '').replace(',', '.'));
+  }
+  return Number(cleaned.replace(/,/g, ''));
+}
+
+function csvCell(value: string | number): string {
+  const text = String(value ?? '');
+  const escaped = text.replace(/"/g, '""');
+  return /[;"\n\r]/.test(escaped) ? `"${escaped}"` : escaped;
+}
+
+function formatCsvNumber(value: number): string {
+  return value.toFixed(2).replace('.', ',');
+}
+
+function importHashFor(userId: string, row: ParsedCsvTransaction): string {
+  return createHash('sha256')
+    .update([userId, row.date.toISOString().slice(0, 10), row.description.trim().toLowerCase(), row.amount.toFixed(2)].join('|'))
+    .digest('hex');
 }

@@ -13,7 +13,7 @@ import type {
   UserResponse,
 } from './types';
 
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000/api/v1';
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1';
 const REQUEST_TIMEOUT_MS = 12000;
 
 let accessToken: string | null = null;

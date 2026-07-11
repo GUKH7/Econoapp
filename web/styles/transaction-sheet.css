@@ -591,3 +591,205 @@
     grid-template-columns: 1fr;
   }
 }
+
+.import-panel {
+  background: linear-gradient(135deg, #f0fdf4, #ffffff);
+  border: 1px solid #bbf7d0;
+  border-radius: 18px;
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.import-panel strong,
+.import-panel span {
+  display: block;
+}
+
+.import-panel strong {
+  color: var(--green-dark);
+  font-size: 15px;
+  font-weight: 950;
+}
+
+.import-header {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.import-header .button {
+  flex: 0 0 auto;
+  min-height: 38px;
+  padding: 0 12px;
+  width: auto;
+}
+
+.import-panel span,
+.import-summary {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  margin: 3px 0 0;
+}
+
+.import-form {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.import-form input[type="file"],
+.import-form button {
+  grid-column: 1 / -1;
+}
+
+.import-form input[type="file"] {
+  background: white;
+  border: 1px dashed #86efac;
+  border-radius: 14px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+  min-height: 46px;
+  padding: 10px;
+}
+
+.recurring-panel {
+  background: linear-gradient(135deg, #f8fafc, #ffffff);
+  border-color: var(--line);
+}
+
+.recurring-header {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.recurring-header .button {
+  flex: 0 0 auto;
+  min-height: 38px;
+  padding: 0 12px;
+  width: auto;
+}
+
+.recurring-list {
+  display: grid;
+  gap: 8px;
+}
+
+.recurring-row {
+  align-items: center;
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 1fr auto;
+  min-width: 0;
+  padding: 10px;
+}
+
+.recurring-row strong,
+.recurring-row span {
+  display: block;
+}
+
+.recurring-row strong {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 950;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recurring-row span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  margin-top: 2px;
+}
+
+.recurring-row > div:last-child {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.recurring-row .income {
+  color: var(--green-dark);
+}
+
+.recurring-row .expense {
+  color: var(--red);
+}
+
+.recurring-row button {
+  align-items: center;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  display: inline-flex;
+  font-size: 18px;
+  font-weight: 900;
+  height: 30px;
+  justify-content: center;
+  line-height: 1;
+  width: 30px;
+}
+
+.recurring-form input:not([type="checkbox"]) {
+  min-width: 0;
+}
+
+.recurring-check {
+  align-items: center;
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  color: var(--muted);
+  display: flex;
+  font-size: 12px;
+  font-weight: 850;
+  gap: 8px;
+  min-height: 46px;
+  padding: 0 12px;
+}
+
+.recurring-check input {
+  min-height: auto;
+  width: auto;
+}
+
+@media (max-width: 520px) {
+  .import-form {
+    grid-template-columns: 1fr;
+  }
+
+  .import-header {
+    align-items: stretch;
+    display: grid;
+  }
+
+  .import-header .button {
+    width: 100%;
+  }
+
+  .recurring-header,
+  .recurring-row {
+    align-items: stretch;
+    grid-template-columns: 1fr;
+  }
+
+  .recurring-header {
+    display: grid;
+  }
+
+  .recurring-header .button {
+    width: 100%;
+  }
+}
