@@ -39,14 +39,14 @@ export function SegmentedControl<T extends string>({
 const styles = StyleSheet.create({
   wrapper: {
     backgroundColor: colors.surfaceAlt,
-    borderRadius: 8,
+    borderRadius: 14,
     flexDirection: 'row',
     gap: spacing.xs,
     padding: spacing.xs,
   },
   option: {
     alignItems: 'center',
-    borderRadius: 6,
+    borderRadius: 11,
     flex: 1,
     minHeight: 40,
     justifyContent: 'center',

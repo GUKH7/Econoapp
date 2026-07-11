@@ -53,6 +53,7 @@ async function request(path, options = {}, retrying = false) {
       throw new Error(Array.isArray(message) ? message.join('\n') : message);
     }
 
+    if (options.raw) return response;
     if (response.status === 204) return null;
     return response.json();
   } catch (error) {
@@ -83,6 +84,16 @@ export function api() {
     deleteBudget: (id) => request(`/budgets/${id}`, { method: 'DELETE' }),
     createTransaction: (payload) =>
       request('/transactions', { method: 'POST', body: JSON.stringify(payload) }),
+    importTransactionsCsv: (payload) =>
+      request('/transactions/import/csv', { method: 'POST', body: JSON.stringify(payload), timeoutMs: 120000 }),
+    exportTransactionsCsv: () =>
+      request(`/transactions/export/csv?scope=${state.scope}`, { method: 'GET', raw: true, timeoutMs: 120000 }),
+    recurringTransactions: () => request(`/transactions/recurring?scope=${state.scope}`),
+    createRecurringTransaction: (payload) =>
+      request('/transactions/recurring', { method: 'POST', body: JSON.stringify(payload) }),
+    generateRecurringTransactions: (payload = {}) =>
+      request('/transactions/recurring/generate', { method: 'POST', body: JSON.stringify(payload), timeoutMs: 120000 }),
+    deactivateRecurringTransaction: (id) => request(`/transactions/recurring/${id}`, { method: 'DELETE' }),
     createCategory: (payload) =>
       request('/categories', { method: 'POST', body: JSON.stringify(payload) }),
     createChannel: (payload) =>
@@ -104,7 +115,7 @@ export function api() {
 
 export async function loadData() {
   const client = api();
-  const [me, dashboard, transactions, categories, channels, accounts, cards, budgets, assistantActivity] = await Promise.all([
+  const [me, dashboard, transactions, categories, channels, accounts, cards, budgets, recurring, assistantActivity] = await Promise.all([
     client.me(),
     client.dashboard(),
     client.transactions(),
@@ -113,6 +124,7 @@ export async function loadData() {
     client.accounts(),
     client.cards(),
     client.budgets(),
+    client.recurringTransactions(),
     client.assistantActivity(),
   ]);
   state.user = me.data;
@@ -124,6 +136,7 @@ export async function loadData() {
   state.cards = cards.data;
   state.budgetSummary = budgets.data;
   state.categoryBudgets = budgets.data.items || [];
+  state.recurringTransactions = recurring.data || [];
   state.budgets[state.scope] = Number(budgets.data.totalLimit || 0);
   state.assistantActivity = assistantActivity.data;
   state.assistantMessages = assistantActivity.data?.messages || [];

@@ -30,8 +30,15 @@ export const state = {
   categoryBudgets: [],
   categoryColor: '#22C55E',
   onboardingDismissed: localStorage.getItem('econoapp.onboardingDismissed') === 'true',
+  onboardingProfileDone: localStorage.getItem('econoapp.onboardingProfileDone') === 'true',
   transactionFilter: 'ALL',
   transactionSearch: '',
+  importCsvSummary: null,
+  importCsvLoading: false,
+  exportCsvLoading: false,
+  recurringTransactions: [],
+  recurringLoading: false,
+  recurringSummary: null,
   reportType: 'EXPENSE',
   whatsappStatus: null,
   whatsappLoading: false,
@@ -73,6 +80,10 @@ export function saveCategoryKinds() {
 
 export function saveOnboardingDismissed() {
   localStorage.setItem('econoapp.onboardingDismissed', String(state.onboardingDismissed));
+}
+
+export function saveOnboardingProfileDone() {
+  localStorage.setItem('econoapp.onboardingProfileDone', String(state.onboardingProfileDone));
 }
 
 export function clearSession() {

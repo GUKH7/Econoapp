@@ -7,7 +7,10 @@ const root = __dirname;
 const port = Number(process.env.WEB_PORT || 5173);
 const apiTarget = new URL(process.env.API_TARGET || 'http://localhost:3001');
 const publicApiUrl = process.env.WEB_API_URL || '';
-const googleClientId = process.env.GOOGLE_CLIENT_ID || '';
+const googleClientId = (process.env.GOOGLE_CLIENT_ID || '')
+  .split(',')
+  .map((clientId) => clientId.trim())
+  .filter(Boolean)[0] || '';
 
 const types = {
   '.html': 'text/html; charset=utf-8',

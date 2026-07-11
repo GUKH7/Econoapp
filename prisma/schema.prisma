@@ -18,6 +18,14 @@ enum TransactionSource {
   TELEGRAM
   WHATSAPP
   AUDIO
+  CSV
+  RECURRENT
+}
+
+enum RecurrenceFrequency {
+  WEEKLY
+  MONTHLY
+  YEARLY
 }
 
 enum FinancialScope {
@@ -51,6 +59,7 @@ model User {
   categories             Category[]
   categoryPreferences    CategoryPreference[]
   transactions           Transaction[]
+  recurringTransactions  RecurringTransaction[]
   accounts               FinancialAccount[]
   creditCards            CreditCard[]
   categoryBudgets        CategoryBudget[]
@@ -80,6 +89,7 @@ model SalesChannel {
   createdAt    DateTime      @default(now()) @db.Timestamptz(6)
   user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   transactions Transaction[]
+  recurringTransactions RecurringTransaction[]
 
   @@index([userId])
 }
@@ -112,6 +122,7 @@ model Category {
   user         User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   transactions Transaction[]
   budgets      CategoryBudget[]
+  recurringTransactions RecurringTransaction[]
 
   @@index([userId])
 }
@@ -145,6 +156,7 @@ model FinancialAccount {
   updatedAt    DateTime             @updatedAt @db.Timestamptz(6)
   user         User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
   transactions Transaction[]
+  recurringTransactions RecurringTransaction[]
 
   @@index([userId, scope])
 }
@@ -162,6 +174,7 @@ model CreditCard {
   updatedAt    DateTime       @updatedAt @db.Timestamptz(6)
   user         User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   transactions Transaction[]
+  recurringTransactions RecurringTransaction[]
 
   @@index([userId, scope])
 }
@@ -178,8 +191,10 @@ model Transaction {
   channelId    String?           @db.Uuid
   accountId    String?           @db.Uuid
   creditCardId String?           @db.Uuid
+  recurringRuleId String?        @db.Uuid
   date         DateTime          @default(now()) @db.Timestamptz(6)
   userId       String            @db.Uuid
+  importHash   String?
   createdAt    DateTime          @default(now()) @db.Timestamptz(6)
 
   user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -187,11 +202,50 @@ model Transaction {
   channel    SalesChannel?     @relation(fields: [channelId], references: [id], onDelete: SetNull)
   account    FinancialAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
   creditCard CreditCard?       @relation(fields: [creditCardId], references: [id], onDelete: SetNull)
+  recurringRule RecurringTransaction? @relation(fields: [recurringRuleId], references: [id], onDelete: SetNull)
 
+  @@unique([userId, importHash])
+  @@unique([recurringRuleId, date])
   @@index([userId, date])
   @@index([userId, scope])
   @@index([categoryId])
   @@index([channelId])
+  @@index([accountId])
+  @@index([creditCardId])
+  @@index([recurringRuleId])
+}
+
+model RecurringTransaction {
+  id              String              @id @default(uuid()) @db.Uuid
+  userId          String              @db.Uuid
+  description     String
+  amount          Decimal             @db.Decimal(15, 4)
+  type            TransactionType
+  scope           FinancialScope      @default(PERSONAL)
+  categoryId      String              @db.Uuid
+  channelId       String?             @db.Uuid
+  accountId       String?             @db.Uuid
+  creditCardId    String?             @db.Uuid
+  frequency       RecurrenceFrequency @default(MONTHLY)
+  interval        Int                 @default(1)
+  startDate       DateTime            @db.Timestamptz(6)
+  nextRunAt       DateTime            @db.Timestamptz(6)
+  endDate         DateTime?           @db.Timestamptz(6)
+  maxOccurrences  Int?
+  generatedCount  Int                 @default(0)
+  isActive        Boolean             @default(true)
+  createdAt       DateTime            @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime            @updatedAt @db.Timestamptz(6)
+
+  user        User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category    Category           @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  channel     SalesChannel?      @relation(fields: [channelId], references: [id], onDelete: SetNull)
+  account     FinancialAccount?  @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  creditCard  CreditCard?        @relation(fields: [creditCardId], references: [id], onDelete: SetNull)
+  transactions Transaction[]
+
+  @@index([userId, isActive, nextRunAt])
+  @@index([categoryId])
   @@index([accountId])
   @@index([creditCardId])
 }

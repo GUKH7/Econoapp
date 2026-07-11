@@ -4,6 +4,7 @@ import {
   clearSession,
   saveCategoryKinds,
   saveOnboardingDismissed,
+  saveOnboardingProfileDone,
   savePaymentData,
   saveScopes,
   saveSession,
@@ -37,8 +38,8 @@ function screenTitle() {
   const titles = {
     dashboard: 'Resumo',
     transactions: 'Transações',
-    reports: 'Relatórios',
-    budget: 'Limites',
+    reports: 'Análise',
+    budget: 'Metas',
     assistant: 'Din',
     more: manageTitle(),
     launch: 'Lançamentos',
@@ -182,11 +183,10 @@ function renderAuth(initialError = '') {
       <div class="welcome-panel">
         <div class="brand-row centered">
           <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
-          <h1 class="wordmark">Econo<span>App</span></h1>
+          <h1 class="wordmark">Din</h1>
         </div>
-        <h2 class="auth-title">Suas finanças pessoais e do seu negócio em um só lugar</h2>
-        <img class="welcome-illustration" src="./assets/login-illustration.jpg" alt="" aria-hidden="true" />
-        <p class="auth-subtitle">Separe pessoal e negócio, acompanhe entradas, gastos, canais e categorias em um painel claro.</p>
+        <h2 class="auth-title">Seu dinheiro,<br />mais <span>inteligente.</span></h2>
+        <p class="auth-subtitle">O copiloto financeiro que aprende com você e ajuda a tomar decisões melhores todos os dias.</p>
       </div>
 
       <div class="card">
@@ -436,8 +436,12 @@ function renderApp() {
   const totals = scopedTotals();
   app.innerHTML = `
     <section class="shell" data-swipe-shell>
-      <header class="appbar">
-        <h1>${screenTitle()}</h1>
+      <header class="appbar ${state.tab === 'dashboard' ? 'dashboard-appbar' : ''}">
+        <div>
+          <h1>${state.tab === 'dashboard' && state.user?.name ? `Olá, ${escapeHtml(state.user.name.split(' ')[0])}! <span aria-hidden="true">👋</span>` : screenTitle()}</h1>
+          ${state.tab === 'dashboard' ? '<p>Aqui está o resumo da sua vida financeira.</p>' : ''}
+        </div>
+        ${state.tab === 'dashboard' ? '<span class="brand-mark compact" aria-label="Din"><span></span><span></span><span></span></span>' : ''}
       </header>
 
       <main class="page-track" data-swipe-track>
@@ -460,9 +464,9 @@ function renderApp() {
 
       <nav class="tabs" data-tabs>
         ${tabButton('dashboard', 'Início')}
-        ${tabButton('transactions', 'Fluxo')}
+        ${tabButton('transactions', 'Transações')}
         <button class="fab nav-fab ${state.fabOpen ? 'open' : ''}" type="button" data-fab aria-label="Adicionar">+</button>
-        ${tabButton('reports', 'Relatórios')}
+        ${tabButton('reports', 'Análise')}
         ${tabButton('more', 'Mais')}
       </nav>
       ${state.tab === 'assistant' ? assistantInputHtml() : ''}
@@ -649,11 +653,30 @@ function bindViewEvents() {
         handleSeedCategories();
         return;
       }
+      if (action === 'profile-personal' || action === 'profile-business') {
+        const nextScope = action === 'profile-business' ? 'BUSINESS' : 'PERSONAL';
+        state.scope = nextScope;
+        state.onboardingProfileDone = true;
+        saveScopes();
+        saveOnboardingProfileDone();
+        loadData()
+          .then(() => renderApp())
+          .catch((error) => showToast(error.message, 'error'));
+        return;
+      }
       if (action === 'accounts') {
         renderWithTransition(() => {
           state.tab = 'more';
           state.manageSection = 'accounts';
           state.fabOpen = false;
+        });
+        return;
+      }
+      if (action === 'transaction-income') {
+        renderWithTransition(() => {
+          state.quickType = 'INCOME';
+          state.fabOpen = false;
+          state.sheetOpen = true;
         });
         return;
       }
@@ -672,6 +695,7 @@ function bindViewEvents() {
   );
 
   document.querySelector('[data-category-form]')?.addEventListener('submit', handleCategorySubmit);
+  document.querySelector('[data-onboarding-account-form]')?.addEventListener('submit', handleOnboardingAccountSubmit);
   document.querySelector('[data-channel-form]')?.addEventListener('submit', handleChannelSubmit);
   document.querySelector('[data-wallet-form]')?.addEventListener('submit', handleWalletSubmit);
   document.querySelector('[data-card-form]')?.addEventListener('submit', handleCardSubmit);
@@ -755,6 +779,14 @@ function bindViewEvents() {
       input.value = formatCurrencyInput(`${button.dataset.amountPreset}00`);
       input.focus();
     });
+  });
+
+  document.querySelector('[data-import-csv-form]')?.addEventListener('submit', handleCsvImport);
+  document.querySelector('[data-export-csv]')?.addEventListener('click', handleCsvExport);
+  document.querySelector('[data-recurring-form]')?.addEventListener('submit', handleRecurringSubmit);
+  document.querySelector('[data-generate-recurring]')?.addEventListener('click', handleGenerateRecurring);
+  document.querySelectorAll('[data-recurring-delete]').forEach((button) => {
+    button.addEventListener('click', () => handleRecurringDelete(button.dataset.recurringDelete));
   });
 
   document.querySelector('[data-transaction-search]')?.addEventListener('input', (event) => {
@@ -1030,6 +1062,145 @@ function bindSwipeNavigation() {
   });
 }
 
+
+async function handleCsvImport(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const data = new FormData(form);
+  const file = data.get('file');
+  if (!(file instanceof File)) {
+    showToast('Escolha um arquivo CSV para importar.', 'error');
+    return;
+  }
+
+  state.importCsvLoading = true;
+  state.importCsvSummary = null;
+  renderApp();
+
+  try {
+    const csv = await file.text();
+    const response = await api().importTransactionsCsv({
+      csv,
+      accountId: data.get('accountId') || undefined,
+      categoryId: data.get('categoryId') || undefined,
+      scope: state.scope,
+    });
+    state.importCsvSummary = response.data;
+    await loadData();
+    state.importCsvSummary = response.data;
+    state.tab = 'transactions';
+    renderApp();
+    showToast(`${response.data.created} transacoes importadas.`);
+  } catch (error) {
+    showToast(error.message, 'error');
+    state.importCsvLoading = false;
+    renderApp();
+    return;
+  }
+  state.importCsvLoading = false;
+}
+
+async function handleCsvExport() {
+  state.exportCsvLoading = true;
+  renderApp();
+  try {
+    const response = await api().exportTransactionsCsv();
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const scopeName = state.scope === 'BUSINESS' ? 'negocio' : 'pessoal';
+    link.href = url;
+    link.download = `econoapp-transacoes-${scopeName}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    showToast('Backup CSV gerado.');
+  } catch (error) {
+    showToast(error.message, 'error');
+  } finally {
+    state.exportCsvLoading = false;
+    renderApp();
+  }
+}
+
+async function handleRecurringSubmit(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const data = Object.fromEntries(new FormData(form));
+  const amount = parseAmount(data.amount);
+  if (!amount || amount <= 0) {
+    showToast('Informe um valor valido para a recorrencia.', 'error');
+    return;
+  }
+  if (!data.categoryId) {
+    showToast('Escolha uma categoria para a recorrencia.', 'error');
+    return;
+  }
+
+  state.recurringLoading = true;
+  state.recurringSummary = null;
+  renderApp();
+
+  try {
+    await api().createRecurringTransaction({
+      description: String(data.description || '').trim(),
+      amount,
+      type: data.type,
+      scope: state.scope,
+      categoryId: data.categoryId,
+      accountId: data.accountId || undefined,
+      frequency: data.frequency || 'MONTHLY',
+      startDate: data.startDate,
+      maxOccurrences: data.maxOccurrences ? Number(data.maxOccurrences) : undefined,
+      generateFirst: data.generateFirst === 'on',
+    });
+    await loadData();
+    state.tab = 'transactions';
+    showToast('Recorrencia criada.');
+  } catch (error) {
+    showToast(error.message, 'error');
+  } finally {
+    state.recurringLoading = false;
+    renderApp();
+  }
+}
+
+async function handleGenerateRecurring() {
+  state.recurringLoading = true;
+  state.recurringSummary = null;
+  renderApp();
+  try {
+    const response = await api().generateRecurringTransactions();
+    state.recurringSummary = response.data;
+    await loadData();
+    state.recurringSummary = response.data;
+    showToast(`${response.data.created} lancamentos recorrentes gerados.`);
+  } catch (error) {
+    showToast(error.message, 'error');
+  } finally {
+    state.recurringLoading = false;
+    renderApp();
+  }
+}
+
+async function handleRecurringDelete(id) {
+  if (!id) return;
+  const confirmed = window.confirm('Desativar esta recorrencia? Os lancamentos ja criados serao mantidos.');
+  if (!confirmed) return;
+  state.recurringLoading = true;
+  renderApp();
+  try {
+    await api().deactivateRecurringTransaction(id);
+    await loadData();
+    showToast('Recorrencia desativada.');
+  } catch (error) {
+    showToast(error.message, 'error');
+  } finally {
+    state.recurringLoading = false;
+    renderApp();
+  }
+}
 async function handleTransactionSubmit(event) {
   event.preventDefault();
   const form = event.currentTarget;
@@ -1195,6 +1366,27 @@ async function handleWalletSubmit(event) {
     state.manageModal = '';
     renderApp();
     showToast('Conta ou carteira criada.');
+  } catch (error) {
+    setFormBusy(form, false);
+    showToast(error.message, 'error');
+  }
+}
+
+async function handleOnboardingAccountSubmit(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const data = Object.fromEntries(new FormData(form));
+  setFormBusy(form, true, 'Salvando conta...');
+  try {
+    await api().createAccount({
+      name: String(data.name).trim(),
+      type: data.type,
+      balance: parseAmount(data.balance || '0'),
+      scope: state.scope,
+    });
+    await loadData();
+    showToast('Conta inicial criada.');
+    renderApp();
   } catch (error) {
     setFormBusy(form, false);
     showToast(error.message, 'error');

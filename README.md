@@ -1,153 +1,170 @@
-# 🚀 EconoApp
+# EconoApp
 
-![NestJS](https://img.shields.io/badge/nestjs-%23E0234E.svg?style=for-the-badge&logo=nestjs&logoColor=white)
-![TypeScript](https://img.shields.io/badge/typescript-%23007ACC.svg?style=for-the-badge&logo=typescript&logoColor=white)
-![Google Gemini](https://img.shields.io/badge/Google%20Gemini-8E75B2?style=for-the-badge&logo=google&logoColor=white)
-![Prisma](https://img.shields.io/badge/Prisma-3982CE?style=for-the-badge&logo=Prisma&logoColor=white)
-![PostgreSQL](https://img.shields.io/badge/PostgreSQL-316192?style=for-the-badge&logo=postgresql&logoColor=white)
-![Docker](https://img.shields.io/badge/docker-%232496ED.svg?style=for-the-badge&logo=docker&logoColor=white)
+EconoApp e uma plataforma de gestao financeira pessoal e empresarial. O projeto combina API NestJS, banco PostgreSQL, assistente com Google Gemini, integracoes com Telegram e WhatsApp, web app PWA e app mobile Expo.
 
-O **EconoApp** é uma solução inteligente de gestão financeira pessoal e empresarial, permitindo que usuários registrem e acompanhem suas finanças diretamente através do **Telegram**.
+A ideia central e permitir que usuarios registrem receitas, despesas, canais de venda, categorias, contas, cartoes e orcamentos por interfaces simples, incluindo conversas em linguagem natural.
 
-Utilizando Inteligência Artificial avançada (Google Gemini), o sistema é capaz de entender mensagens de voz e texto em linguagem natural para extrair dados financeiros automaticamente.
+## Funcionalidades
 
----
+- Registro de transacoes manuais, por Telegram e por WhatsApp.
+- Extracao inteligente de dados financeiros com Google Gemini.
+- Gestao de categorias, canais de venda e taxas.
+- Contas, carteiras, cartoes de credito e escopos pessoal/empresarial.
+- Dashboard com resumo financeiro e relatorios.
+- Alertas de orcamento e notificacoes agendadas via WhatsApp.
+- Web app PWA e app mobile Expo consumindo a mesma API.
 
-## ✨ Funcionalidades Principais
+## Tecnologias
 
--   🤖 **IA com Google Gemini:** Extração automática de valor, descrição, produto e canal de vendas a partir de mensagens naturais.
--   📱 **Exclusivo Telegram:** Integração completa e otimizada com bot do Telegram.
--   💹 **Gestão de Canais de Venda:** Configuração de taxas de comissão por canal (ex: Shopee, Mercado Livre) com cálculo automático de valor líquido.
--   📊 **Relatórios Visuais:** Geração de gráficos de pizza e resumos detalhados de entradas, saídas e categorias.
--   📂 **Categorização Dinâmica:** Criação automática de categorias com cores persistentes para melhor visualização.
--   ⚙️ **Configurações via Bot:** Edição de perfil, gestão de canais e taxas diretamente pelo chat.
+- Backend: NestJS, TypeScript, Prisma e PostgreSQL.
+- IA: Google Gemini.
+- Bots: Telegraf para Telegram e Baileys via servico externo para WhatsApp.
+- Web: HTML, CSS e JavaScript com servidor/proxy Node.
+- Mobile: Expo e React Native.
+- Qualidade: Vitest, ESLint e Prettier.
+- Deploy: Docker, Docker Compose e Render.
 
----
-
-## 🛠️ Tecnologias Utilizadas
-
--   **Framework:** [NestJS](https://nestjs.com/)
--   **Linguagem:** TypeScript
--   **ORM:** [Prisma](https://www.prisma.io/)
--   **IA:** [Google Gemini (AI)](https://ai.google.dev/)
--   **Banco de Dados:** [PostgreSQL](https://www.postgresql.org/)
--   **Gráficos:** Chart.js (via `chartjs-node-canvas`)
--   **Documentação da API:** [Swagger](https://swagger.io/) & [Scalar](https://scalar.com/)
--   **Segurança:** JWT, Bcrypt & Helmet
--   **Logs:** [Pino](https://getpino.io/)
--   **Testes:** [Vitest](https://vitest.dev/)
--   **Validação:** [Zod](https://zod.dev/) & [Class-validator](https://github.com/typestack/class-validator)
-
----
-
-## 📁 Estrutura do Projeto
+## Estrutura
 
 ```text
 src/
-├── common/         # Filtros, Pipes e Decorators compartilhados
-├── config/         # Configurações de variáveis de ambiente e App
-├── domain/         # Regras de negócio e lógica de domínio (finance)
-├── modules/        # Módulos do NestJS (Telegram, Auth, etc.)
-│   ├── auth/       # Autenticação e Gestão de Usuários
-│   ├── categories/ # Gestão de Categorias e Cores
-│   ├── channels/   # Gestão de Canais de Venda e Taxas
-│   ├── dashboard/  # Lógica de relatórios e gráficos
-│   ├── health/     # Monitoramento e integridade do sistema
-│   ├── telegram/   # Bot Telegram: Scenes, Keyboards e Handlers
-│   └── transactions/# Registro e gestão de movimentações financeiras
-├── services/       # Integrações externas (AI/Gemini)
-├── utils/          # Funções utilitárias e ajudantes
-└── main.ts         # Inicialização do servidor NestJS
+  common/          filtros, guards, decorators e tipos compartilhados
+  config/          banco e variaveis de ambiente
+  domain/          regras financeiras puras
+  modules/         modulos NestJS da aplicacao
+    accounts/      contas e cartoes
+    assistant/     assistente e atividade
+    auth/          login, JWT, Google e perfil
+    budgets/       orcamentos por categoria
+    categories/    categorias
+    channels/      canais de venda
+    dashboard/     resumo financeiro
+    health/        healthcheck
+    telegram/      bot Telegram
+    transactions/  transacoes
+    whatsapp/      webhook, envio e alertas WhatsApp
+  services/        integracoes externas
+  utils/           utilitarios
+web/               PWA estatico
+mobile/            app Expo/React Native
+prisma/            schema, migrations e seed
 ```
 
----
+## Ambiente
 
-## 🚀 Como Executar
+Crie um `.env` a partir do `.env.example`.
 
-### Pré-requisitos
-- Node.js (v18 ou superior)
-- Docker e Docker Compose
-- Uma chave de API do Google Gemini
-- Token de Bot do Telegram (via BotFather)
+Variaveis essenciais:
 
-### Instalação
+```text
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/econoapp?schema=public"
+JWT_SECRET="troque_por_uma_chave_com_mais_de_32_caracteres"
+JWT_EXPIRES_IN="15m"
+JWT_REFRESH_EXPIRES_IN="7d"
+GEMINI_API_KEY="sua_chave_gemini"
+TELEGRAM_BOT_TOKEN="seu_token_telegram"
+WHATSAPP_BOT_API_URL="http://64.181.189.107:3001/econoapp"
+WHATSAPP_WEBHOOK_TOKEN="token_forte_para_webhook"
+WHATSAPP_BUDGET_ALERT_TOKEN="token_forte_para_alertas"
+PORT=3001
+NODE_ENV="development"
+CORS_ORIGIN="*"
+```
 
-1.  Clone o repositório:
-    ```bash
-    git clone https://github.com/devhenrico/econoapp.git
-    cd econoapp
-    ```
+Em producao, nao deixe `CORS_ORIGIN` como `*`. Informe o dominio publico do web app. O webhook do WhatsApp tambem deve ter `WHATSAPP_WEBHOOK_TOKEN` configurado.
 
-2.  Instale as dependências:
-    ```bash
-    npm install
-    ```
 
-3.  Configure as variáveis de ambiente:
-    Crie um arquivo `.env` na raiz baseado no `.env.example`.
+## Login com Google
 
-4.  Suba o PostgreSQL local:
-    ```bash
-    docker compose up -d postgres
-    ```
+O login com Google depende de `GOOGLE_CLIENT_ID` configurado no backend e no servidor web. Use o Client ID do tipo Web criado no Google Cloud Console.
 
-5.  Configure o banco de dados:
-    ```bash
-    npx prisma migrate dev
-    npx prisma generate
-    ```
+Em ambiente com backend e web separados, configure o mesmo valor nos dois servicos. O backend tambem aceita varios client IDs separados por virgula, mas o web app usa o primeiro para renderizar o botao.
 
-6.  Inicie o servidor de desenvolvimento:
-    ```bash
-    npm run dev
-    ```
+Se essa variavel estiver vazia, o botao do Google nao aparece no web app e a rota `/auth/google` retorna erro de configuracao.
 
-### Docker
+## Rodar localmente
 
-Para subir o ambiente completo de produção (PostgreSQL + backend) com Docker:
+```bash
+npm install
+docker compose up -d postgres
+npx prisma migrate dev
+npx prisma generate
+npm run dev
+```
+
+A API sobe em:
+
+```text
+http://localhost:3001/api/v1
+```
+
+A documentacao da API fica em:
+
+```text
+http://localhost:3001/docs
+```
+
+## Web/PWA
+
+```bash
+node web/server.js
+```
+
+Acesse:
+
+```text
+http://localhost:5173
+```
+
+O servidor web faz proxy de `/api/v1/*` para a API configurada em `API_TARGET`.
+
+## Mobile
+
+```bash
+cd mobile
+npm install
+npm run start
+```
+
+Para testar em celular fisico, defina `EXPO_PUBLIC_API_URL` com o IP da maquina na rede local, por exemplo:
+
+```text
+EXPO_PUBLIC_API_URL=http://192.168.15.12:3001/api/v1
+```
+
+## Docker
 
 ```bash
 docker compose up -d --build
 ```
 
-O serviço `api` aguarda o PostgreSQL ficar saudável, executa `prisma migrate deploy` e inicia com `node dist/main.js`.
+O servico `api` aguarda o PostgreSQL ficar saudavel, executa as migrations e inicia o backend.
 
-Para acompanhar os logs:
-
-```bash
-docker compose logs -f api
-```
-
----
-
-## 📋 Comandos do Bot
-
--   `/start` - Inicia o bot e apresenta o menu principal.
--   `/saldo` - Exibe o saldo líquido acumulado no mês.
--   `/resumo` - Gera um relatório visual com gráfico de categorias.
--   `/canais` - Gerencia canais de venda e suas respectivas taxas.
--   `/configuracoes` - Atalho para edição de perfil e preferências.
--   `/ajuda` - Lista todos os comandos disponíveis.
-
----
-
-## 🧪 Testes
-
-O projeto utiliza **Vitest** para testes unitários e de integração.
+## Testes e qualidade
 
 ```bash
-# Rodar todos os testes
+npm run build
 npm run test
-
-# Modo watch
-npm run test:watch
-
-# Cobertura
+npm run lint
 npm run test:coverage
 ```
 
----
+No app mobile:
 
-## 📄 Licença
+```bash
+cd mobile
+npm run typecheck
+```
 
-Este projeto está sob a licença MIT. Consulte o arquivo [LICENSE](LICENSE) para mais detalhes.
+## Comandos do bot Telegram
+
+- `/start` inicia o bot.
+- `/saldo` mostra o saldo do mes.
+- `/resumo` gera resumo financeiro.
+- `/canais` gerencia canais de venda.
+- `/configuracoes` abre ajustes de perfil.
+- `/ajuda` lista comandos disponiveis.
+
+## Licenca
+
+MIT. Veja o arquivo `LICENSE`.

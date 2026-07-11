@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "EconoApp",
+    "name": "Din",
     "slug": "econoapp-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -10,7 +10,7 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#F5F7FA"
     },
     "ios": {
       "supportsTablet": true
@@ -18,7 +18,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#00D19A"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false

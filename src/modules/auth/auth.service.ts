@@ -21,6 +21,10 @@ interface AuthTokens {
   refreshToken: string;
 }
 
+function googleClientIds(): string[] {
+  return env.GOOGLE_CLIENT_ID.split(',').map((clientId) => clientId.trim()).filter(Boolean);
+}
+
 function parseDurationToMs(value: string): number {
   const match = value.match(/^(\d+)([smhd])$/);
   if (!match) {
@@ -102,15 +106,16 @@ export class AuthService {
   }
 
   async googleLogin(input: GoogleLoginDto): Promise<AuthTokens | { requiresPhone: true }> {
-    if (!env.GOOGLE_CLIENT_ID) {
-      throw new BadRequestException('Login com Google ainda não foi configurado');
+    const clientIds = googleClientIds();
+    if (!clientIds.length) {
+      throw new BadRequestException('Login com Google ainda nao foi configurado');
     }
 
     let payload;
     try {
       const ticket = await this.googleClient.verifyIdToken({
         idToken: input.credential,
-        audience: env.GOOGLE_CLIENT_ID,
+        audience: clientIds,
       });
       payload = ticket.getPayload();
     } catch {

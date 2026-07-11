@@ -24,6 +24,7 @@ import { TransactionService } from '@/modules/transactions/transaction.service';
 import { PrismaService } from '@/config/database';
 import { AccountService } from '@/modules/accounts/account.service';
 import { TransactionRepository } from '@/modules/transactions/repositories/transaction.repository';
+import { SmartCategoryService } from '@/modules/transactions/smart-category.service';
 import { ForbiddenException, NotFoundException } from '@/common/errors/app.exception';
 
 // ---------------------------------------------------------------------------
@@ -47,6 +48,11 @@ const mockTransactionRepo = {
 const mockAccountService = {
   ensureAccountBelongsToUser: vi.fn(),
   ensureCardBelongsToUser: vi.fn(),
+};
+
+const mockSmartCategoryService = {
+  suggestCategoryId: vi.fn(),
+  remember: vi.fn(),
 };
 
 // ---------------------------------------------------------------------------
@@ -97,6 +103,7 @@ describe('TransactionService › update', () => {
         { provide: PrismaService, useValue: mockPrisma },
         { provide: TransactionRepository, useValue: mockTransactionRepo },
         { provide: AccountService, useValue: mockAccountService },
+        { provide: SmartCategoryService, useValue: mockSmartCategoryService },
       ],
     }).compile();
 

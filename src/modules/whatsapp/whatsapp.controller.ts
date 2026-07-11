@@ -105,6 +105,10 @@ export class WhatsappController {
   }
 
   private ensureWebhookToken(token?: string): void {
+    if (!env.WHATSAPP_WEBHOOK_TOKEN && env.NODE_ENV === 'production') {
+      throw new ForbiddenException('Webhook WhatsApp nao configurado.');
+    }
+
     if (env.WHATSAPP_WEBHOOK_TOKEN && token !== env.WHATSAPP_WEBHOOK_TOKEN) {
       throw new ForbiddenException('Webhook WhatsApp nao autorizado.');
     }

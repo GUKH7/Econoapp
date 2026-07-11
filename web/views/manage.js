@@ -1,7 +1,7 @@
 import { colors, money, state } from '../state.js';
 import { escapeHtml } from '../utils.js';
 import { scopeLabel } from '../finance.js';
-import { currentMonth, emptyState, icon } from './shared.js';
+import { currentMonth, emptyState, icon, nextMonth, previousMonth } from './shared.js';
 
 export function budgetView() {
   const key = state.scope;
@@ -28,9 +28,9 @@ export function budgetView() {
     .join('');
   return `
     <div class="period-switch">
-      <button type="button">Abril</button>
+      <button type="button">${previousMonth}</button>
       <button class="active" type="button">${currentMonth}</button>
-      <button type="button">Junho</button>
+      <button type="button">${nextMonth}</button>
     </div>
     <article class="card">
       ${

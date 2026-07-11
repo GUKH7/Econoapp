@@ -15,8 +15,14 @@ async function bootstrap(): Promise<void> {
   app.use(json({ limit: '15mb' }));
   app.use(urlencoded({ extended: true, limit: '15mb' }));
 
+  const corsOrigins = env.CORS_ORIGIN
+    ? env.CORS_ORIGIN.split(',').map((origin) => origin.trim()).filter(Boolean)
+    : env.NODE_ENV === 'production'
+      ? false
+      : true;
+
   app.enableCors({
-    origin: process.env.CORS_ORIGIN ?? '*',
+    origin: corsOrigins,
     methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
   });
