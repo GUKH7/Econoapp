@@ -1,7 +1,8 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { hash, compare } from 'bcryptjs';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { Resend } from 'resend';
 import { OAuth2Client } from 'google-auth-library';
 import { PrismaService } from '@/config/database';
 import {
@@ -47,7 +48,9 @@ function parseDurationToMs(value: string): number {
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
   private readonly googleClient = new OAuth2Client();
+  private readonly resend = env.RESEND_API_KEY ? new Resend(env.RESEND_API_KEY) : null;
 
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
@@ -219,6 +222,103 @@ export class AuthService {
     await this.prisma.refreshToken.deleteMany({ where: { token: refreshToken } });
   }
 
+  async requestPasswordReset(email: string): Promise<void> {
+    const normalizedEmail = email.trim().toLowerCase();
+    const user = await this.prisma.user.findUnique({ where: { email: normalizedEmail } });
+    if (!user) return;
+
+    await this.prisma.passwordResetToken.updateMany({
+      where: { userId: user.id, usedAt: null },
+      data: { usedAt: new Date() },
+    });
+
+    const token = randomBytes(32).toString('base64url');
+    await this.prisma.passwordResetToken.create({
+      data: {
+        tokenHash: passwordResetTokenHash(token),
+        userId: user.id,
+        expiresAt: new Date(Date.now() + 30 * 60_000),
+      },
+    });
+
+    if (!this.resend) {
+      this.logger.warn('RESEND_API_KEY não configurada; e-mail de recuperação não enviado.');
+      return;
+    }
+
+    const resetUrl = new URL(env.PASSWORD_RESET_URL);
+    resetUrl.searchParams.set('token', token);
+    const { error } = await this.resend.emails.send({
+      from: env.RESEND_FROM_EMAIL,
+      to: normalizedEmail,
+      subject: 'Redefina sua senha do Din',
+      text: `Recebemos uma solicitação para redefinir sua senha. Use este link em até 30 minutos: ${resetUrl.toString()}\n\nSe você não solicitou, ignore este e-mail.`,
+      html: `<div style="font-family:Arial,sans-serif;color:#0f172a;max-width:560px;margin:auto"><h1 style="color:#00bfa6">Din</h1><h2>Redefina sua senha</h2><p>Recebemos uma solicitação para redefinir sua senha.</p><p><a href="${resetUrl.toString()}" style="display:inline-block;background:#00bfa6;color:#fff;padding:12px 20px;border-radius:10px;text-decoration:none;font-weight:bold">Criar nova senha</a></p><p>Este link expira em 30 minutos e só pode ser usado uma vez.</p><p style="color:#64748b">Se você não solicitou, ignore este e-mail.</p></div>`,
+    });
+    if (error) throw new BadRequestException('Não foi possível enviar o e-mail de recuperação');
+  }
+
+  async resetPassword(token: string, password: string): Promise<void> {
+    const stored = await this.prisma.passwordResetToken.findUnique({
+      where: { tokenHash: passwordResetTokenHash(token) },
+    });
+    if (!stored || stored.usedAt || stored.expiresAt <= new Date()) {
+      throw new BadRequestException('Link de recuperação inválido ou expirado');
+    }
+
+    const passwordHash = await hash(password, 10);
+    await this.prisma.$transaction([
+      this.prisma.user.update({ where: { id: stored.userId }, data: { passwordHash } }),
+      this.prisma.passwordResetToken.update({
+        where: { id: stored.id },
+        data: { usedAt: new Date() },
+      }),
+      this.prisma.refreshToken.deleteMany({ where: { userId: stored.userId } }),
+    ]);
+  }
+
+  async exportAccountData(userId: string): Promise<Record<string, unknown>> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, name: true, phone: true, email: true, createdAt: true, updatedAt: true },
+    });
+    if (!user) throw new NotFoundException('Usuário não encontrado');
+
+    const [transactions, categories, channels, accounts, creditCards, budgets, recurringTransactions] =
+      await Promise.all([
+        this.prisma.transaction.findMany({ where: { userId }, orderBy: { date: 'desc' } }),
+        this.prisma.category.findMany({ where: { userId } }),
+        this.prisma.salesChannel.findMany({ where: { userId } }),
+        this.prisma.financialAccount.findMany({ where: { userId } }),
+        this.prisma.creditCard.findMany({ where: { userId } }),
+        this.prisma.categoryBudget.findMany({ where: { userId } }),
+        this.prisma.recurringTransaction.findMany({ where: { userId } }),
+      ]);
+
+    return {
+      exportedAt: new Date().toISOString(),
+      profile: user,
+      transactions,
+      categories,
+      salesChannels: channels,
+      accounts,
+      creditCards,
+      budgets,
+      recurringTransactions,
+    };
+  }
+
+  async deleteAccount(userId: string, password?: string): Promise<void> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new NotFoundException('Usuário não encontrado');
+    if (user.passwordHash) {
+      if (!password || !(await compare(password, user.passwordHash))) {
+        throw new UnauthorizedException('Senha atual inválida');
+      }
+    }
+    await this.prisma.user.delete({ where: { id: userId } });
+  }
+
   private async issueTokens(userId: string, phone: string, email?: string): Promise<AuthTokens> {
     // Limpar tokens expirados
     await this.prisma.refreshToken.deleteMany({
@@ -253,6 +353,10 @@ export class AuthService {
 
     return { accessToken, refreshToken };
   }
+}
+
+function passwordResetTokenHash(token: string): string {
+  return createHash('sha256').update(token).digest('hex');
 }
 
 export function isWhatsappAdminPhone(phone: string): boolean {

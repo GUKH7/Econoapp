@@ -30,12 +30,14 @@ export class HttpExceptionFilter implements ExceptionFilter {
     const response = ctx.getResponse<Response>();
     const request = ctx.getRequest<Request>();
     const path = request.url;
+    const requestId = (request as Request & { id?: string }).id;
+    const errorContext = { path, requestId, timestamp: new Date().toISOString() };
 
     if (exception instanceof ZodError) {
       response.status(HttpStatus.BAD_REQUEST).json({
         message: 'Validation error',
         fieldErrors: exception.flatten().fieldErrors,
-        path,
+        ...errorContext,
       });
       return;
     }
@@ -44,25 +46,25 @@ export class HttpExceptionFilter implements ExceptionFilter {
       const status = exception.getStatus();
       const errorResponse = exception.getResponse();
       if (typeof errorResponse === 'string') {
-        response.status(status).json({ message: errorResponse, path });
+        response.status(status).json({ message: errorResponse, ...errorContext });
         return;
       }
 
       response.status(status).json({
         ...(errorResponse as Record<string, unknown>),
-        path,
+        ...errorContext,
       });
       return;
     }
 
     if (this.logger) {
-      this.logger.error({ err: exception, path }, 'Unhandled exception');
+      this.logger.error({ err: exception, ...errorContext }, 'Unhandled exception');
     } else {
       console.error('Unhandled exception', { err: exception, path });
     }
     response.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
       message: 'Internal server error',
-      path,
+      ...errorContext,
     });
   }
 }

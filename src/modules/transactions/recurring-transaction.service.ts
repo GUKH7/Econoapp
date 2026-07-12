@@ -6,9 +6,11 @@ import {
   Transaction,
   TransactionSource,
   TransactionType,
+  Prisma,
 } from '@prisma/client';
 import { PrismaService } from '@/config/database';
 import { CreateRecurringTransactionDto } from './dto/create-recurring-transaction.dto';
+import { UpdateRecurringTransactionDto } from './dto/update-recurring-transaction.dto';
 import { TransactionService } from './transaction.service';
 
 @Injectable()
@@ -75,6 +77,54 @@ export class RecurringTransactionService {
     });
   }
 
+  async update(
+    userId: string,
+    id: string,
+    input: UpdateRecurringTransactionDto,
+  ): Promise<RecurringTransaction> {
+    const current = await this.findOneByUser(userId, id);
+    if (!current) throw new BadRequestException('Recorrência não encontrada');
+
+    const merged = {
+      description: input.description ?? current.description,
+      amount: input.amount ?? Number(current.amount),
+      type: input.type ?? current.type,
+      scope: input.scope ?? current.scope,
+      categoryId: input.categoryId ?? current.categoryId,
+      channelId: input.channelId !== undefined ? input.channelId : current.channelId ?? undefined,
+      accountId: input.accountId !== undefined ? input.accountId : current.accountId ?? undefined,
+      creditCardId:
+        input.creditCardId !== undefined ? input.creditCardId : current.creditCardId ?? undefined,
+      frequency: input.frequency ?? current.frequency,
+      interval: input.interval ?? current.interval,
+      startDate: input.startDate ?? current.startDate.toISOString(),
+      endDate:
+        input.endDate !== undefined ? input.endDate : current.endDate?.toISOString(),
+      maxOccurrences:
+        input.maxOccurrences !== undefined ? input.maxOccurrences : current.maxOccurrences ?? undefined,
+    };
+    this.validatePaymentTarget(merged.type, merged.creditCardId);
+    await this.validateReferences(userId, merged);
+
+    const scheduleChanged =
+      input.startDate !== undefined || input.frequency !== undefined || input.interval !== undefined;
+    const startDate = startOfDay(merged.startDate);
+    const endDate = merged.endDate ? startOfDay(merged.endDate) : null;
+    if (endDate && endDate < startDate) {
+      throw new BadRequestException('A data final deve ser maior ou igual à data inicial');
+    }
+
+    return this.prisma.recurringTransaction.update({
+      where: { id },
+      data: {
+        ...input,
+        ...(input.startDate !== undefined ? { startDate } : {}),
+        ...(input.endDate !== undefined ? { endDate } : {}),
+        ...(scheduleChanged ? { nextRunAt: startDate } : {}),
+      },
+    });
+  }
+
   async generateDue(
     userId: string,
     until = new Date(),
@@ -96,6 +146,20 @@ export class RecurringTransactionService {
     }
 
     return { created: transactions.length, rulesChecked: rules.length, transactions };
+  }
+
+  async generateAllDue(until = new Date()): Promise<{ created: number; usersChecked: number }> {
+    const dueUsers = await this.prisma.recurringTransaction.findMany({
+      where: { isActive: true, nextRunAt: { lte: endOfDay(until) } },
+      select: { userId: true },
+      distinct: ['userId'],
+    });
+    let created = 0;
+    for (const { userId } of dueUsers) {
+      const result = await this.generateDue(userId, until);
+      created += result.created;
+    }
+    return { created, usersChecked: dueUsers.length };
   }
 
   private async generateForRule(
@@ -127,18 +191,24 @@ export class RecurringTransactionService {
           ...(rule.accountId ? { accountId: rule.accountId } : {}),
           ...(rule.creditCardId ? { creditCardId: rule.creditCardId } : {}),
         };
-        const transaction = await this.transactionService.create(userId, {
-          description: occurrenceDescription(rule, generatedCount + 1),
-          amount: Number(rule.amount),
-          type: rule.type,
-          source: TransactionSource.RECURRENT,
-          scope: rule.scope,
-          categoryId: rule.categoryId,
-          ...paymentTarget,
-          date: nextRunAt.toISOString(),
-          recurringRuleId: rule.id,
-        });
-        transactions.push(transaction);
+        try {
+          const transaction = await this.transactionService.create(userId, {
+            description: occurrenceDescription(rule, generatedCount + 1),
+            amount: Number(rule.amount),
+            type: rule.type,
+            source: TransactionSource.RECURRENT,
+            scope: rule.scope,
+            categoryId: rule.categoryId,
+            ...paymentTarget,
+            date: nextRunAt.toISOString(),
+            recurringRuleId: rule.id,
+          });
+          transactions.push(transaction);
+        } catch (error) {
+          if (!(error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')) {
+            throw error;
+          }
+        }
       }
 
       generatedCount += 1;
@@ -171,7 +241,12 @@ export class RecurringTransactionService {
 
   private async validateReferences(
     userId: string,
-    input: CreateRecurringTransactionDto,
+    input: {
+      categoryId: string;
+      channelId?: string | null | undefined;
+      accountId?: string | null | undefined;
+      creditCardId?: string | null | undefined;
+    },
   ): Promise<void> {
     const [category, channel, account, creditCard] = await Promise.all([
       this.prisma.category.findFirst({ where: { id: input.categoryId, userId }, select: { id: true } }),

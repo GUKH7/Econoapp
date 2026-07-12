@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { api, ApiError } from '../api/client';
 import type { CategoryResponse, ChannelResponse, UserResponse } from '../api/types';
 import { Button } from '../components/Button';
@@ -25,6 +25,44 @@ export function SettingsScreen({
   const [categoryName, setCategoryName] = useState('');
   const [categoryColor, setCategoryColor] = useState('#007338');
   const [savingCategory, setSavingCategory] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [privacyLoading, setPrivacyLoading] = useState(false);
+
+  const exportAccount = async () => {
+    setPrivacyLoading(true);
+    try {
+      const response = await api.exportAccount();
+      await Share.share({
+        title: 'Meus dados do Din',
+        message: JSON.stringify(response.data, null, 2),
+      });
+    } catch (error) {
+      Alert.alert('Exportação não concluída', error instanceof ApiError ? error.message : 'Tente novamente.');
+    } finally {
+      setPrivacyLoading(false);
+    }
+  };
+
+  const deleteAccount = () => {
+    Alert.alert(
+      'Excluir minha conta?',
+      'Todos os dados serão apagados permanentemente. Esta ação não pode ser desfeita.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Excluir permanentemente',
+          style: 'destructive',
+          onPress: () => {
+            setPrivacyLoading(true);
+            void api.deleteAccount(currentPassword || undefined)
+              .then(onLogout)
+              .catch((error) => Alert.alert('Conta não excluída', error instanceof ApiError ? error.message : 'Tente novamente.'))
+              .finally(() => setPrivacyLoading(false));
+          },
+        },
+      ],
+    );
+  };
 
   const createCategory = async () => {
     if (!categoryName.trim()) {
@@ -52,7 +90,7 @@ export function SettingsScreen({
   return (
     <View style={styles.stack}>
       <View style={styles.rowBetween}>
-        <Text style={styles.screenTitle}>Ajustes</Text>
+        <Text style={styles.screenTitle}>Mais</Text>
         <TouchableOpacity onPress={onRefresh}>
           <Text style={styles.refresh}>Atualizar</Text>
         </TouchableOpacity>
@@ -66,21 +104,10 @@ export function SettingsScreen({
       </Card>
 
       <Card>
-        <Text style={styles.sectionTitle}>Chatbot</Text>
-        <Text style={styles.copy}>
-          Os lancamentos feitos pelo Telegram aparecem automaticamente no app quando a conta
-          esta vinculada ao mesmo usuario.
-        </Text>
-        <View style={styles.statusPill}>
-          <Text style={styles.statusText}>Vinculo via telegramId no backend</Text>
-        </View>
-      </Card>
-
-      <Card>
-        <Text style={styles.sectionTitle}>Categorias</Text>
+        <Text style={styles.sectionTitle}>Categorias e organização</Text>
         <View style={styles.formBox}>
           <TextField
-            label="Nova categoria"
+            label="Nome da categoria"
             value={categoryName}
             onChangeText={setCategoryName}
             placeholder="Ex: Moradia, Transporte, Taxas"
@@ -109,7 +136,7 @@ export function SettingsScreen({
         </View>
 
         {categories.length === 0 ? (
-          <Text style={styles.copy}>Nenhuma categoria cadastrada.</Text>
+          <Text style={styles.copy}>Nenhuma categoria cadastrada ainda.</Text>
         ) : (
           categories.map((category) => (
             <View key={category.id} style={styles.listRow}>
@@ -134,6 +161,22 @@ export function SettingsScreen({
             </View>
           ))
         )}
+      </Card>
+
+      <Card>
+        <Text style={styles.sectionTitle}>Privacidade e conta</Text>
+        <Text style={styles.copy}>Você pode baixar uma cópia das suas informações ou excluir permanentemente sua conta.</Text>
+        <View style={styles.formBox}>
+          <TextField
+            label="Senha atual para exclusão"
+            value={currentPassword}
+            onChangeText={setCurrentPassword}
+            secureTextEntry
+            placeholder="Contas Google podem deixar em branco"
+          />
+          <Button label="Compartilhar meus dados" variant="ghost" onPress={exportAccount} loading={privacyLoading} />
+          <Button label="Excluir minha conta" variant="danger" onPress={deleteAccount} disabled={privacyLoading} />
+        </View>
       </Card>
 
       <Button label="Sair" variant="danger" onPress={onLogout} />

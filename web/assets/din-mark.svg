@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title">
+  <title id="title">Din</title>
+  <rect width="128" height="128" rx="31" fill="#0F172A"/>
+  <circle cx="37" cy="37" r="8" fill="#00D19A"/>
+  <path d="M37 67v24h25" fill="none" stroke="#00D19A" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M62 37a27 27 0 0 1 0 54" fill="none" stroke="#00D19A" stroke-width="12" stroke-linecap="round"/>
+</svg>

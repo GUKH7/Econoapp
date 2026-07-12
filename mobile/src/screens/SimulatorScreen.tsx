@@ -38,7 +38,7 @@ export function SimulatorScreen() {
 
   return (
     <View style={styles.stack}>
-      <Text style={styles.screenTitle}>Simulador</Text>
+      <Text style={styles.screenTitle}>Planejamento</Text>
 
       <Card>
         <View style={styles.form}>

@@ -71,7 +71,11 @@ export function api() {
     login: (payload) => request('/auth/login', { method: 'POST', body: JSON.stringify(payload) }),
     googleLogin: (payload) => request('/auth/google', { method: 'POST', body: JSON.stringify(payload) }),
     register: (payload) => request('/auth/register', { method: 'POST', body: JSON.stringify(payload) }),
+    forgotPassword: (payload) => request('/auth/forgot-password', { method: 'POST', body: JSON.stringify(payload) }),
+    resetPassword: (payload) => request('/auth/reset-password', { method: 'POST', body: JSON.stringify(payload) }),
     me: () => request('/auth/me'),
+    exportAccount: () => request('/auth/me/export'),
+    deleteAccount: (payload) => request('/auth/me', { method: 'DELETE', body: JSON.stringify(payload) }),
     dashboard: () => request(`/dashboard?scope=${state.scope}`),
     transactions: () => request(`/transactions?limit=100&scope=${state.scope}`),
     categories: () => request('/categories'),
@@ -91,6 +95,8 @@ export function api() {
     recurringTransactions: () => request(`/transactions/recurring?scope=${state.scope}`),
     createRecurringTransaction: (payload) =>
       request('/transactions/recurring', { method: 'POST', body: JSON.stringify(payload) }),
+    updateRecurringTransaction: (id, payload) =>
+      request(`/transactions/recurring/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
     generateRecurringTransactions: (payload = {}) =>
       request('/transactions/recurring/generate', { method: 'POST', body: JSON.stringify(payload), timeoutMs: 120000 }),
     deactivateRecurringTransaction: (id) => request(`/transactions/recurring/${id}`, { method: 'DELETE' }),
@@ -115,30 +121,45 @@ export function api() {
 
 export async function loadData() {
   const client = api();
-  const [me, dashboard, transactions, categories, channels, accounts, cards, budgets, recurring, assistantActivity] = await Promise.all([
-    client.me(),
-    client.dashboard(),
-    client.transactions(),
-    client.categories(),
-    client.channels(),
-    client.accounts(),
-    client.cards(),
-    client.budgets(),
-    client.recurringTransactions(),
-    client.assistantActivity(),
-  ]);
+  const me = await client.me();
   state.user = me.data;
-  state.dashboard = dashboard.data;
-  state.transactions = transactions.data;
-  state.categories = categories.data;
-  state.channels = channels.data;
-  state.wallets = accounts.data;
-  state.cards = cards.data;
-  state.budgetSummary = budgets.data;
-  state.categoryBudgets = budgets.data.items || [];
-  state.recurringTransactions = recurring.data || [];
-  state.budgets[state.scope] = Number(budgets.data.totalLimit || 0);
-  state.assistantActivity = assistantActivity.data;
-  state.assistantMessages = assistantActivity.data?.messages || [];
+
+  const resources = [
+    ['dashboard', client.dashboard()],
+    ['transactions', client.transactions()],
+    ['categories', client.categories()],
+    ['channels', client.channels()],
+    ['accounts', client.accounts()],
+    ['cards', client.cards()],
+    ['budgets', client.budgets()],
+    ['recurring', client.recurringTransactions()],
+    ['assistant', client.assistantActivity()],
+  ];
+  const results = await Promise.allSettled(resources.map(([, promise]) => promise));
+  const loaded = {};
+  state.loadWarnings = [];
+  results.forEach((result, index) => {
+    const name = resources[index][0];
+    if (result.status === 'fulfilled') loaded[name] = result.value.data;
+    else state.loadWarnings.push(name);
+  });
+
+  if ('dashboard' in loaded) state.dashboard = loaded.dashboard;
+  if ('transactions' in loaded) state.transactions = loaded.transactions || [];
+  if ('categories' in loaded) state.categories = loaded.categories || [];
+  if ('channels' in loaded) state.channels = loaded.channels || [];
+  if ('accounts' in loaded) state.wallets = loaded.accounts || [];
+  if ('cards' in loaded) state.cards = loaded.cards || [];
+  if ('budgets' in loaded) {
+    state.budgetSummary = loaded.budgets;
+    state.categoryBudgets = loaded.budgets?.items || [];
+    state.budgets[state.scope] = Number(loaded.budgets?.totalLimit || 0);
+  }
+  if ('recurring' in loaded) state.recurringTransactions = loaded.recurring || [];
+  if ('assistant' in loaded) {
+    state.assistantActivity = loaded.assistant;
+    state.assistantMessages = loaded.assistant?.messages || [];
+  }
   localStorage.removeItem('econoapp.budgets');
+  return { warnings: state.loadWarnings };
 }

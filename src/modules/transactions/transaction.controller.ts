@@ -22,6 +22,7 @@ import { GenerateRecurringTransactionsDto } from './dto/generate-recurring-trans
 import { ImportTransactionsDto } from './dto/import-transactions.dto';
 import { FilterTransactionDto } from './dto/filter-transaction.dto';
 import { UpdateTransactionDto } from './dto/update-transaction.dto';
+import { UpdateRecurringTransactionDto } from './dto/update-recurring-transaction.dto';
 import { RecurringTransactionService } from './recurring-transaction.service';
 import { TransactionService } from './transaction.service';
 
@@ -108,6 +109,17 @@ export class TransactionController {
     @Param('id') id: string,
   ): Promise<{ data: unknown }> {
     const data = await this.recurringTransactionService.deactivate(user.sub, id);
+    return { data };
+  }
+
+  @ApiOperation({ summary: 'Atualizar transação recorrente' })
+  @Patch('recurring/:id')
+  async updateRecurring(
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+    @Body() dto: UpdateRecurringTransactionDto,
+  ): Promise<{ data: unknown }> {
+    const data = await this.recurringTransactionService.update(user.sub, id, dto);
     return { data };
   }
   @ApiOperation({ summary: 'Listar transações do usuário autenticado' })

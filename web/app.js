@@ -144,19 +144,39 @@ async function bootstrap() {
 
   renderLoading();
   try {
-    await loadData();
+    const result = await loadData();
     renderApp();
+    if (result.warnings.length) {
+      showToast('Algumas informações não carregaram. Você pode continuar usando o app.', 'warning');
+    }
   } catch (error) {
-    clearSession();
-    renderAuth(error.message);
+    if (!state.accessToken) renderAuth(error.message);
+    else renderLoadError(error.message);
   }
+}
+
+function renderLoadError(message) {
+  app.innerHTML = `
+    <section class="loading-shell" role="alert">
+      <div class="loading-copy">
+        <strong>Não foi possível carregar seus dados</strong>
+        <span>${escapeHtml(message || 'Verifique sua conexão e tente novamente.')}</span>
+      </div>
+      <button class="primary-button" id="retry-load" type="button">Tentar novamente</button>
+      <button class="secondary-button" id="logout-load" type="button">Sair da conta</button>
+    </section>`;
+  document.querySelector('#retry-load')?.addEventListener('click', bootstrap);
+  document.querySelector('#logout-load')?.addEventListener('click', () => {
+    clearSession();
+    renderAuth();
+  });
 }
 
 function renderLoading() {
   app.innerHTML = `
     <section class="loading-shell" role="status" aria-live="polite">
       <div class="loading-brand">
-        <span class="brand-mark compact" aria-hidden="true"><span></span><span></span><span></span></span>
+        <img class="din-mark compact" src="./assets/din-mark.svg" alt="" aria-hidden="true" />
         <div class="loading-copy">
           <strong>Preparando seu resumo</strong>
           <span>Buscando saldos, lançamentos e insights do Din.</span>
@@ -178,25 +198,25 @@ function renderLoading() {
 }
 
 function renderAuth(initialError = '') {
+  const resetToken = new URLSearchParams(location.search).get('token');
   app.innerHTML = `
     <section class="auth-shell" data-auth-shell data-auth-mode="login">
       <div class="welcome-panel">
         <div class="brand-row centered">
-          <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
-          <h1 class="wordmark">Din</h1>
+          <img class="din-logo" src="./assets/din-logo.svg" alt="Din" />
         </div>
         <h2 class="auth-title">Seu dinheiro,<br />mais <span>inteligente.</span></h2>
         <p class="auth-subtitle">O copiloto financeiro que aprende com você e ajuda a tomar decisões melhores todos os dias.</p>
       </div>
 
       <div class="card">
-        <div class="auth-switch" data-auth-tabs>
+        <div class="auth-switch ${resetToken ? 'hidden' : ''}" data-auth-tabs>
           <button class="active" type="button" data-mode="login">Entrar</button>
           <button type="button" data-mode="register">Cadastrar</button>
         </div>
         <p class="error ${initialError ? '' : 'hidden'}" data-error>${escapeHtml(initialError)}</p>
-        <form class="form" data-auth-form data-mode="login">
-          ${authFields('login')}
+        <form class="form" data-auth-form data-mode="${resetToken ? 'reset' : 'login'}">
+          ${authFields(resetToken ? 'reset' : 'login')}
         </form>
         ${
           GOOGLE_CLIENT_ID
@@ -225,18 +245,32 @@ function renderAuth(initialError = '') {
     form.dataset.mode = button.dataset.mode;
     document.querySelector('[data-auth-shell]').dataset.authMode = button.dataset.mode;
     form.innerHTML = authFields(button.dataset.mode);
-    bindAuthPasswordToggle(form);
+    bindAuthControls(form);
   });
 
   const authForm = document.querySelector('[data-auth-form]');
   authForm.addEventListener('submit', handleAuth);
-  bindAuthPasswordToggle(authForm);
+  bindAuthControls(authForm);
   document.querySelector('[data-google-phone-form]')?.addEventListener('submit', handleGooglePhone);
   document.querySelector('[data-google-cancel]')?.addEventListener('click', cancelGooglePhone);
   initializeGoogleLogin();
 }
 
 function authFields(mode) {
+  if (mode === 'forgot') {
+    return `
+      <div><strong>Recuperar senha</strong><p class="muted">Informe o e-mail cadastrado. Enviaremos um link válido por 30 minutos.</p></div>
+      <label class="field">E-mail<input name="email" type="email" autocomplete="email" required /></label>
+      <button class="button" type="submit">Enviar link</button>
+      <button class="button secondary" type="button" data-auth-back>Voltar</button>`;
+  }
+  if (mode === 'reset') {
+    return `
+      <div><strong>Criar nova senha</strong><p class="muted">Use pelo menos 8 caracteres.</p></div>
+      ${passwordField('Nova senha', 'new-password', 'password', 'Digite a nova senha')}
+      ${passwordField('Confirmar nova senha', 'new-password', 'passwordConfirmation', 'Repita a nova senha')}
+      <button class="button" type="submit">Salvar nova senha</button>`;
+  }
   if (mode === 'register') {
     return `
       <label class="field">Nome<input name="name" autocomplete="name" required /></label>
@@ -251,7 +285,22 @@ function authFields(mode) {
     <label class="field">Telefone ou email<input name="login" autocomplete="username" required /></label>
     ${passwordField('Senha', 'current-password', 'password', 'Digite sua senha')}
     <button class="button" type="submit">Entrar</button>
+    <button class="button secondary" type="button" data-forgot-password>Esqueci minha senha</button>
   `;
+}
+
+function bindAuthControls(form) {
+  bindAuthPasswordToggle(form);
+  form.querySelector('[data-forgot-password]')?.addEventListener('click', () => {
+    form.dataset.mode = 'forgot';
+    form.innerHTML = authFields('forgot');
+    bindAuthControls(form);
+  });
+  form.querySelector('[data-auth-back]')?.addEventListener('click', () => {
+    form.dataset.mode = 'login';
+    form.innerHTML = authFields('login');
+    bindAuthControls(form);
+  });
 }
 
 function passwordField(label, autocomplete, name, placeholder) {
@@ -298,6 +347,22 @@ async function handleAuth(event) {
 
   try {
     const client = api();
+    if (form.dataset.mode === 'forgot') {
+      await client.forgotPassword({ email: data.email });
+      form.innerHTML = '<div class="empty"><strong>Confira seu e-mail</strong><p>Se houver uma conta cadastrada, o link chegará em alguns minutos.</p><button class="button secondary" type="button" data-auth-back>Voltar</button></div>';
+      bindAuthControls(form);
+      return;
+    }
+    if (form.dataset.mode === 'reset') {
+      if (data.password !== data.passwordConfirmation) throw new Error('As senhas não coincidem.');
+      const token = new URLSearchParams(location.search).get('token');
+      if (!token) throw new Error('Link de recuperação inválido.');
+      await client.resetPassword({ token, password: data.password });
+      history.replaceState({}, '', location.pathname);
+      showToast('Senha alterada. Entre novamente.');
+      renderAuth();
+      return;
+    }
     const response =
       form.dataset.mode === 'register'
         ? await client.register({
@@ -441,7 +506,7 @@ function renderApp() {
           <h1>${state.tab === 'dashboard' && state.user?.name ? `Olá, ${escapeHtml(state.user.name.split(' ')[0])}! <span aria-hidden="true">👋</span>` : screenTitle()}</h1>
           ${state.tab === 'dashboard' ? '<p>Aqui está o resumo da sua vida financeira.</p>' : ''}
         </div>
-        ${state.tab === 'dashboard' ? '<span class="brand-mark compact" aria-label="Din"><span></span><span></span><span></span></span>' : ''}
+        ${state.tab === 'dashboard' ? '<img class="din-mark compact" src="./assets/din-mark.svg" alt="Din" />' : ''}
       </header>
 
       <main class="page-track" data-swipe-track>
@@ -577,6 +642,8 @@ function bindViewEvents() {
     clearSession();
     renderAuth();
   });
+  document.querySelector('[data-export-account]')?.addEventListener('click', handlePrivacyExport);
+  document.querySelector('[data-delete-account]')?.addEventListener('click', handlePrivacyAccountDelete);
 
   document.querySelectorAll('[data-tab-jump]').forEach((button) => {
     button.addEventListener('click', () => {
@@ -782,11 +849,15 @@ function bindViewEvents() {
   });
 
   document.querySelector('[data-import-csv-form]')?.addEventListener('submit', handleCsvImport);
+  document.querySelector('[data-csv-file]')?.addEventListener('change', handleCsvPreview);
   document.querySelector('[data-export-csv]')?.addEventListener('click', handleCsvExport);
   document.querySelector('[data-recurring-form]')?.addEventListener('submit', handleRecurringSubmit);
   document.querySelector('[data-generate-recurring]')?.addEventListener('click', handleGenerateRecurring);
   document.querySelectorAll('[data-recurring-delete]').forEach((button) => {
     button.addEventListener('click', () => handleRecurringDelete(button.dataset.recurringDelete));
+  });
+  document.querySelectorAll('[data-recurring-edit]').forEach((button) => {
+    button.addEventListener('click', () => startRecurringEdit(button.dataset.recurringEdit));
   });
 
   document.querySelector('[data-transaction-search]')?.addEventListener('input', (event) => {
@@ -839,6 +910,38 @@ function bindViewEvents() {
     form.reset();
     handleAssistantMessage(message);
   });
+}
+
+async function handlePrivacyExport() {
+  try {
+    const response = await api().exportAccount();
+    const blob = new Blob([JSON.stringify(response.data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `din-meus-dados-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    showToast('Cópia dos seus dados gerada.');
+  } catch (error) {
+    showToast(error.message, 'error');
+  }
+}
+
+async function handlePrivacyAccountDelete() {
+  const confirmation = window.prompt('Esta ação é permanente. Digite EXCLUIR para confirmar:');
+  if (confirmation !== 'EXCLUIR') return;
+  const password = window.prompt('Digite sua senha atual. Contas criadas pelo Google podem deixar em branco:') || undefined;
+  try {
+    await api().deleteAccount({ confirmation: 'EXCLUIR', password });
+    clearSession();
+    renderAuth();
+    showToast('Sua conta foi excluída.');
+  } catch (error) {
+    showToast(error.message, 'error');
+  }
 }
 
 function handleAssistantAction(action) {
@@ -1124,6 +1227,27 @@ async function handleCsvExport() {
   }
 }
 
+async function handleCsvPreview(event) {
+  const file = event.currentTarget.files?.[0];
+  const target = document.querySelector('[data-csv-preview]');
+  if (!file || !target) return;
+  const rows = parseCsvPreview(await file.text());
+  target.innerHTML = rows.length
+    ? `<strong>Prévia do arquivo</strong>${rows
+        .map((row) => `<span>${row.map(escapeHtml).join(' · ')}</span>`)
+        .join('')}`
+    : '<p class="import-summary">Não encontramos linhas válidas neste arquivo.</p>';
+}
+
+function parseCsvPreview(csv) {
+  return csv
+    .replace(/^\uFEFF/, '')
+    .split(/\r?\n/)
+    .filter((line) => line.trim())
+    .slice(0, 6)
+    .map((line) => line.split(line.includes(';') ? ';' : ',').map((cell) => cell.trim().replace(/^"|"$/g, '')));
+}
+
 async function handleRecurringSubmit(event) {
   event.preventDefault();
   const form = event.currentTarget;
@@ -1143,7 +1267,7 @@ async function handleRecurringSubmit(event) {
   renderApp();
 
   try {
-    await api().createRecurringTransaction({
+    const payload = {
       description: String(data.description || '').trim(),
       amount,
       type: data.type,
@@ -1154,16 +1278,41 @@ async function handleRecurringSubmit(event) {
       startDate: data.startDate,
       maxOccurrences: data.maxOccurrences ? Number(data.maxOccurrences) : undefined,
       generateFirst: data.generateFirst === 'on',
-    });
+    };
+    const wasEditing = Boolean(state.recurringEditingId);
+    if (wasEditing) {
+      delete payload.generateFirst;
+      await api().updateRecurringTransaction(state.recurringEditingId, payload);
+    } else {
+      await api().createRecurringTransaction(payload);
+    }
     await loadData();
-    state.tab = 'transactions';
-    showToast('Recorrencia criada.');
+    state.recurringEditingId = '';
+    state.tab = 'more';
+    showToast(wasEditing ? 'Recorrência atualizada.' : 'Recorrência criada.');
   } catch (error) {
     showToast(error.message, 'error');
   } finally {
     state.recurringLoading = false;
     renderApp();
   }
+}
+
+function startRecurringEdit(id) {
+  const rule = state.recurringTransactions.find((item) => item.id === id);
+  const form = document.querySelector('[data-recurring-form]');
+  if (!rule || !form) return;
+  state.recurringEditingId = id;
+  form.elements.description.value = rule.description || '';
+  form.elements.amount.value = String(Number(rule.amount || 0)).replace('.', ',');
+  form.elements.type.value = rule.type;
+  form.elements.categoryId.value = rule.categoryId;
+  form.elements.frequency.value = rule.frequency;
+  form.elements.startDate.value = String(rule.startDate || '').slice(0, 10);
+  form.elements.accountId.value = rule.accountId || '';
+  form.elements.maxOccurrences.value = rule.maxOccurrences || '';
+  form.querySelector('[type="submit"]').textContent = 'Salvar alterações';
+  form.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
 async function handleGenerateRecurring() {

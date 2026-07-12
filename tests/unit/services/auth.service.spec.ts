@@ -25,6 +25,9 @@ vi.mock('@/config/env', () => ({
     JWT_REFRESH_EXPIRES_IN: '7d',
     GEMINI_API_KEY: 'test-gemini-api-key',
     GOOGLE_CLIENT_ID: 'google-client-id.apps.googleusercontent.com',
+    RESEND_API_KEY: '',
+    RESEND_FROM_EMAIL: 'Din <no-reply@resend.dev>',
+    PASSWORD_RESET_URL: 'http://localhost:5173/?resetPassword=1',
     WHATSAPP_ADMIN_PHONES: '11999999999',
     PORT: 3001,
     NODE_ENV: 'test',
@@ -38,6 +41,10 @@ vi.mock('bcryptjs', () => ({
 
 vi.mock('node:crypto', () => ({
   randomUUID: vi.fn().mockReturnValue('mock-refresh-token-uuid'),
+  randomBytes: vi.fn().mockReturnValue({ toString: () => 'mock-password-reset-token' }),
+  createHash: vi.fn().mockReturnValue({
+    update: vi.fn().mockReturnValue({ digest: vi.fn().mockReturnValue('mock-token-hash') }),
+  }),
 }));
 
 vi.mock('google-auth-library', () => ({
@@ -97,6 +104,7 @@ function makePrismaMock() {
       findUnique: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
+      delete: vi.fn(),
     },
     refreshToken: {
       findUnique: vi.fn(),
@@ -105,6 +113,21 @@ function makePrismaMock() {
       delete: vi.fn(),
       deleteMany: vi.fn(),
     },
+    passwordResetToken: {
+      findUnique: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+      delete: vi.fn(),
+      updateMany: vi.fn(),
+    },
+    transaction: { findMany: vi.fn() },
+    category: { findMany: vi.fn() },
+    salesChannel: { findMany: vi.fn() },
+    financialAccount: { findMany: vi.fn() },
+    creditCard: { findMany: vi.fn() },
+    categoryBudget: { findMany: vi.fn() },
+    recurringTransaction: { findMany: vi.fn() },
+    $transaction: vi.fn().mockResolvedValue([]),
   };
 }
 
@@ -546,6 +569,65 @@ describe('AuthService', () => {
       await expect(
         service.googleLogin({ credential: 'google-id-token-value-long' }),
       ).rejects.toThrow('Não foi possível validar sua conta Google');
+    });
+  });
+
+  describe('password recovery', () => {
+    it('não revela quando o e-mail não está cadastrado', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(null);
+
+      await expect(service.requestPasswordReset('naoexiste@example.com')).resolves.toBeUndefined();
+      expect(mockPrisma.passwordResetToken.create).not.toHaveBeenCalled();
+    });
+
+    it('invalida tokens anteriores e cria um token armazenado como hash', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(mockUser);
+      mockPrisma.passwordResetToken.updateMany.mockResolvedValue({ count: 1 });
+      mockPrisma.passwordResetToken.create.mockResolvedValue({});
+
+      await service.requestPasswordReset('GUSTAVO@example.com');
+
+      expect(mockPrisma.passwordResetToken.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          tokenHash: 'mock-token-hash',
+          userId: mockUser.id,
+        }),
+      });
+    });
+
+    it('rejeita token expirado sem alterar a senha', async () => {
+      mockPrisma.passwordResetToken.findUnique.mockResolvedValue({
+        id: 'reset-1',
+        userId: mockUser.id,
+        tokenHash: 'mock-token-hash',
+        expiresAt: pastDate,
+        usedAt: null,
+      });
+
+      await expect(service.resetPassword('token-valid-with-more-than-32-characters', 'novaSenha123')).rejects.toThrow(
+        'Link de recuperação inválido ou expirado',
+      );
+      expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('privacy and account management', () => {
+    it('exige a senha atual antes de excluir uma conta com senha', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(mockUser);
+      vi.mocked(compare).mockResolvedValue(false as never);
+
+      await expect(service.deleteAccount(mockUser.id, 'senha-incorreta')).rejects.toThrow('Senha atual inválida');
+      expect(mockPrisma.user.delete).not.toHaveBeenCalled();
+    });
+
+    it('exclui a conta quando a senha atual é válida', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(mockUser);
+      vi.mocked(compare).mockResolvedValue(true as never);
+      mockPrisma.user.delete.mockResolvedValue(mockUser);
+
+      await service.deleteAccount(mockUser.id, 'senha-correta');
+
+      expect(mockPrisma.user.delete).toHaveBeenCalledWith({ where: { id: mockUser.id } });
     });
   });
 });

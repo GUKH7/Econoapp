@@ -2,6 +2,7 @@ import { colors, money, state } from '../state.js';
 import { escapeHtml } from '../utils.js';
 import { scopeLabel } from '../finance.js';
 import { currentMonth, emptyState, icon, nextMonth, previousMonth } from './shared.js';
+import { transactionToolsView } from './transactions.js';
 
 export function budgetView() {
   const key = state.scope;
@@ -84,6 +85,18 @@ export function moreView() {
               ? `<button class="menu-item" type="button" data-manage-section="whatsapp"><span class="tab-icon">${icon('chat')}</span><span>WhatsApp</span><span>›</span></button>`
               : ''
           }
+        </div>
+      </article>
+      <article class="card">
+        <div class="panel-title"><div><span class="eyebrow">Ferramentas</span><h2>Automação e dados</h2></div></div>
+        ${transactionToolsView()}
+      </article>
+      <article class="card privacy-card">
+        <div class="panel-title"><div><span class="eyebrow">Privacidade</span><h2>Seus dados e sua conta</h2></div></div>
+        <p class="muted">Baixe uma cópia das informações armazenadas ou exclua permanentemente sua conta.</p>
+        <div class="privacy-actions">
+          <button class="button secondary" type="button" data-export-account>Baixar meus dados</button>
+          <button class="button danger" type="button" data-delete-account>Excluir minha conta</button>
         </div>
       </article>
       <button class="button danger" type="button" data-logout>Sair da conta</button>
