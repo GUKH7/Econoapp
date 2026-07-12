@@ -1,28 +1,33 @@
 import { dateFmt, money, state } from '../state.js';
 import { escapeHtml } from '../utils.js';
 import { paymentMetaForTransaction, scopedTransactions, transactionScope } from '../finance.js';
-import { currentMonth, emptyState, transactionRow } from './shared.js';
+import { currentMonth, emptyState, nextMonth, previousMonth, transactionRow } from './shared.js';
 
 export function transactionsView() {
   return `
-    ${importStatementHtml()}
-    ${recurringTransactionsHtml()}
     <label class="search-field"><input type="search" placeholder="Buscar lançamento" value="${escapeHtml(state.transactionSearch)}" data-transaction-search /></label>
     <div class="filter-chips">
       ${transactionFilterButton('ALL', 'Todos')}
       ${transactionFilterButton('INCOME', 'Receitas')}
-      ${transactionFilterButton('EXPENSE', 'Gastos')}
+      ${transactionFilterButton('EXPENSE', 'Despesas')}
       ${transactionFilterButton('TRANSFER', 'Transferências')}
     </div>
     <div class="period-switch">
-      <button type="button">Maio</button>
+      <button type="button">${previousMonth}</button>
       <button class="active" type="button">${currentMonth}</button>
-      <button type="button">Julho</button>
+      <button type="button">${nextMonth}</button>
     </div>
     <section class="timeline-list" data-transaction-list>
       ${transactionListHtml()}
     </section>
   `;
+}
+
+export function transactionToolsView() {
+  return `<section class="transaction-tools" aria-label="Automação e dados">
+    ${recurringTransactionsHtml()}
+    ${importStatementHtml()}
+  </section>`;
 }
 
 function transactionFilterButton(filter, label) {
@@ -119,7 +124,13 @@ function recurringTransactionsHtml() {
     : '';
 
   return `
-    <section class="import-panel recurring-panel">
+    <details class="import-panel recurring-panel transaction-tool">
+      <summary class="transaction-tool-summary">
+        <span class="transaction-tool-icon" aria-hidden="true">↻</span>
+        <span><strong>Transações recorrentes</strong><small>${activeRules.length ? `${activeRules.length} ativa${activeRules.length === 1 ? '' : 's'}` : 'Salários, contas e assinaturas'}</small></span>
+        <span class="transaction-tool-chevron" aria-hidden="true"></span>
+      </summary>
+      <div class="transaction-tool-content">
       <div class="recurring-header">
         <div>
           <strong>Transacoes recorrentes</strong>
@@ -161,7 +172,8 @@ function recurringTransactionsHtml() {
         </button>
       </form>
       ${summary}
-    </section>
+      </div>
+    </details>
   `;
 }
 
@@ -178,7 +190,8 @@ function recurringRuleRow(rule) {
       </div>
       <div>
         <strong class="${rule.type === 'INCOME' ? 'income' : 'expense'}">${amount}</strong>
-        <button type="button" data-recurring-delete="${rule.id}" aria-label="Desativar recorrencia">×</button>
+        <button type="button" data-recurring-edit="${rule.id}" aria-label="Editar recorrência">Editar</button>
+        <button type="button" data-recurring-delete="${rule.id}" aria-label="Desativar recorrência">×</button>
       </div>
     </div>
   `;
@@ -202,7 +215,13 @@ function importStatementHtml() {
     ? `<p class="import-summary">${state.importCsvSummary.created} importadas, ${state.importCsvSummary.skipped} duplicadas ignoradas.</p>`
     : '';
   return `
-    <section class="import-panel">
+    <details class="import-panel transaction-tool">
+      <summary class="transaction-tool-summary">
+        <span class="transaction-tool-icon" aria-hidden="true">⇅</span>
+        <span><strong>Importar e exportar</strong><small>Extrato CSV e backup</small></span>
+        <span class="transaction-tool-chevron" aria-hidden="true"></span>
+      </summary>
+      <div class="transaction-tool-content">
       <div class="import-header">
         <div>
           <strong>Importar e exportar</strong>
@@ -221,12 +240,14 @@ function importStatementHtml() {
           <option value="">Categorizar automaticamente</option>
           ${categoryOptions}
         </select>
-        <input name="file" type="file" accept=".csv,text/csv" required />
+        <input name="file" type="file" accept=".csv,text/csv" required data-csv-file />
         <button class="button secondary" type="submit" ${state.importCsvLoading ? 'disabled' : ''}>
           ${state.importCsvLoading ? 'Importando...' : 'Importar CSV'}
         </button>
       </form>
+      <div class="csv-preview" data-csv-preview><p class="import-summary">Selecione um arquivo para conferir os dados antes de importar.</p></div>
       ${summary}
-    </section>
+      </div>
+    </details>
   `;
 }

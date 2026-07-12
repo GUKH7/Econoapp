@@ -98,6 +98,8 @@ const apiFixtures = {
       email: 'gustavo@example.com',
     },
   },
+  '/api/v1/auth/forgot-password': { data: { accepted: true } },
+  '/api/v1/auth/me/export': { data: { profile: { id: 'user-visual' }, transactions } },
   '/api/v1/dashboard': { data: {} },
   '/api/v1/transactions': { data: transactions },
   '/api/v1/categories': { data: categories },
@@ -300,6 +302,26 @@ async function prepareSession(page) {
   }, categoryKinds);
 }
 
+async function assertAccessibilityBasics(page, name) {
+  const issues = await page.evaluate(() => {
+    const problems = [];
+    if (document.documentElement.lang !== 'pt-BR') problems.push('idioma da página');
+    if (!document.querySelector('main')) problems.push('conteúdo principal');
+    document.querySelectorAll('img').forEach((item) => {
+      if (!item.hasAttribute('alt')) problems.push(`imagem sem alt: ${item.getAttribute('src') || ''}`);
+    });
+    document.querySelectorAll('button, summary').forEach((item) => {
+      if (!(item.textContent || '').trim() && !item.getAttribute('aria-label')) problems.push('controle sem nome');
+    });
+    document.querySelectorAll('input, select, textarea').forEach((item) => {
+      const label = item.closest('label')?.textContent?.trim();
+      if (!label && !item.getAttribute('aria-label') && !item.getAttribute('placeholder')) problems.push(`campo sem nome: ${item.getAttribute('name') || ''}`);
+    });
+    return problems;
+  });
+  if (issues.length) throw new Error(`Falhas básicas de acessibilidade em ${name}: ${issues.join(', ')}`);
+}
+
 async function runViewport(browser, baseUrl, name, viewport) {
   console.log(`Verificando viewport ${name} (${viewport.width}x${viewport.height})...`);
   const context = await browser.newContext({
@@ -322,10 +344,27 @@ async function runViewport(browser, baseUrl, name, viewport) {
   await disableMotion(page);
 
   await assertText(page, 'Resumo');
+  await assertAccessibilityBasics(page, name);
   await assertVisible(page, '.balance-card', 'card de saldo');
   await screenshot(page, `${name}-dashboard`);
   await screenshotBottomViewport(page, `${name}-dashboard`);
   await page.evaluate(() => window.scrollTo(0, 0));
+
+  await page.locator('nav.tabs [data-tab="transactions"]').click();
+  await assertVisible(page, '[data-transaction-search]', 'busca de lancamentos');
+  if (await page.locator('.transaction-tools').count()) {
+    throw new Error(`Ferramentas administrativas ainda aparecem em Transações em ${name}`);
+  }
+  await screenshot(page, `${name}-transactions`);
+
+  await page.locator('nav.tabs [data-tab="more"]').click();
+  await assertText(page, 'Automação e dados');
+  await assertText(page, 'Importar e exportar');
+  const closedTransactionTools = await page.locator('.transaction-tool:not([open])').count();
+  if (closedTransactionTools !== 2) {
+    throw new Error(`Ferramentas de transacao deveriam iniciar recolhidas em ${name}`);
+  }
+  await screenshot(page, `${name}-more`);
 
   await page.locator('nav.tabs [data-tab="reports"]').click();
   await assertText(page, 'Por categoria');
@@ -370,6 +409,28 @@ async function runViewport(browser, baseUrl, name, viewport) {
   }
 }
 
+async function runAuthViewport(browser, baseUrl) {
+  console.log('Verificando identidade no login mobile...');
+  const context = await browser.newContext({
+    locale: 'pt-BR',
+    viewport: { width: 390, height: 844 },
+    deviceScaleFactor: 2,
+    isMobile: true,
+    hasTouch: true,
+  });
+  const page = await context.newPage();
+  await page.goto(baseUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
+  await routeApi(page);
+  await assertVisible(page, '.din-logo', 'logo Din no login');
+  await assertAccessibilityBasics(page, 'login');
+  await page.getByRole('button', { name: 'Esqueci minha senha' }).click();
+  await page.getByLabel('E-mail').fill('gustavo@example.com');
+  await page.getByRole('button', { name: 'Enviar link' }).click();
+  await assertText(page, 'Confira seu e-mail');
+  await screenshot(page, 'mobile-login');
+  await context.close();
+}
+
 async function main() {
   await mkdir(outputDir, { recursive: true });
   console.log('Carregando Playwright...');
@@ -380,6 +441,7 @@ async function main() {
 
   try {
     browser = await launchBrowser(chromium);
+    await runAuthViewport(browser, baseUrl);
     await runViewport(browser, baseUrl, 'mobile', { width: 390, height: 844 });
     await runViewport(browser, baseUrl, 'desktop', { width: 1024, height: 900 });
     console.log(`Verificacao visual concluida. Screenshots em ${path.relative(rootDir, outputDir)}`);
@@ -392,7 +454,7 @@ async function main() {
 await Promise.race([
   main(),
   new Promise((_, reject) => {
-    setTimeout(() => reject(new Error('Timeout global da verificacao visual.')), 90000);
+    setTimeout(() => reject(new Error('Timeout global da verificacao visual.')), 120000);
   }),
 ]).catch((error) => {
   console.error(error.message);

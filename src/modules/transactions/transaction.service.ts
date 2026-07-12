@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { FinancialScope, Prisma, Transaction, TransactionSource, TransactionType } from '@prisma/client';
+import { FinancialScope, Prisma, SalesChannel, Transaction, TransactionSource, TransactionType } from '@prisma/client';
 import { PrismaService } from '@/config/database';
 import { calculateNetAmount } from '@/domain/finance/calculate-fees';
 import { BadRequestException, NotFoundException, ForbiddenException } from '@/common/errors/app.exception';
@@ -30,17 +30,7 @@ export class TransactionService {
       throw new BadRequestException('Receitas devem ser recebidas em uma conta ou carteira');
     }
 
-    if (input.accountId) {
-      await this.accountService.ensureAccountBelongsToUser(userId, input.accountId);
-    }
-
-    if (input.creditCardId) {
-      await this.accountService.ensureCardBelongsToUser(userId, input.creditCardId);
-    }
-
-    const channel = input.channelId
-      ? await this.prisma.salesChannel.findFirst({ where: { id: input.channelId, userId } })
-      : null;
+    const channel = await this.validateReferences(userId, input);
 
     const netAmount =
       input.type === TransactionType.INCOME && channel
@@ -252,23 +242,17 @@ export class TransactionService {
       throw new BadRequestException('Receitas devem ser recebidas em uma conta ou carteira');
     }
 
-    if (input.accountId) {
-      await this.accountService.ensureAccountBelongsToUser(userId, input.accountId);
-    }
-
-    if (input.creditCardId) {
-      await this.accountService.ensureCardBelongsToUser(userId, input.creditCardId);
-    }
+    const channel = await this.validateReferences(userId, {
+      categoryId: input.categoryId !== undefined ? input.categoryId : current.categoryId,
+      channelId: newChannelId,
+      accountId: input.accountId !== undefined ? input.accountId : current.accountId,
+      creditCardId: newCreditCardId,
+    });
 
     let newNetAmount: number = Number(current.netAmount);
     if (input.amount !== undefined || input.channelId !== undefined || input.type !== undefined) {
       if (newType === TransactionType.INCOME && newChannelId) {
-        const channel = await this.prisma.salesChannel.findFirst({
-          where: { id: newChannelId, userId },
-        });
-        newNetAmount = channel
-          ? calculateNetAmount(newAmount, Number(channel.feePercent))
-          : newAmount;
+        newNetAmount = calculateNetAmount(newAmount, Number(channel?.feePercent ?? 0));
       } else {
         newNetAmount = newAmount;
       }
@@ -307,6 +291,46 @@ export class TransactionService {
     }
 
     await this.transactionRepository.delete(id);
+  }
+
+  private async validateReferences(
+    userId: string,
+    references: {
+      categoryId?: string | null;
+      channelId?: string | null;
+      accountId?: string | null;
+      creditCardId?: string | null;
+    },
+  ): Promise<SalesChannel | null> {
+    const [category, channel] = await Promise.all([
+      references.categoryId
+        ? this.prisma.category.findFirst({
+            where: { id: references.categoryId, userId },
+            select: { id: true },
+          })
+        : null,
+      references.channelId
+        ? this.prisma.salesChannel.findFirst({ where: { id: references.channelId, userId } })
+        : null,
+    ]);
+
+    if (references.categoryId && !category) {
+      throw new BadRequestException('Categoria não encontrada para este usuário');
+    }
+    if (references.channelId && !channel) {
+      throw new BadRequestException('Canal de venda não encontrado para este usuário');
+    }
+
+    await Promise.all([
+      references.accountId
+        ? this.accountService.ensureAccountBelongsToUser(userId, references.accountId)
+        : Promise.resolve(),
+      references.creditCardId
+        ? this.accountService.ensureCardBelongsToUser(userId, references.creditCardId)
+        : Promise.resolve(),
+    ]);
+
+    return channel;
   }
 }
 interface ParsedCsvTransaction {

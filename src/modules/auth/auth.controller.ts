@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Inject, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Inject, Patch, Post, UseGuards } from '@nestjs/common';
 import { IsString } from 'class-validator';
 import { Throttle } from '@nestjs/throttler';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
@@ -13,6 +13,9 @@ import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { GoogleLoginDto } from './dto/google-login.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
+import { DeleteAccountDto } from './dto/delete-account.dto';
 
 class RefreshDto {
   @IsString()
@@ -60,6 +63,24 @@ export class AuthController {
     return { data };
   }
 
+  @ApiOperation({ summary: 'Solicitar link de recuperação de senha' })
+  @Public()
+  @Throttle({ default: { limit: env.NODE_ENV === 'development' ? 30 : 3, ttl: 900000 } })
+  @Post('forgot-password')
+  async forgotPassword(@Body() dto: ForgotPasswordDto): Promise<{ data: { accepted: true } }> {
+    await this.authService.requestPasswordReset(dto.email);
+    return { data: { accepted: true } };
+  }
+
+  @ApiOperation({ summary: 'Redefinir senha usando token de uso único' })
+  @Public()
+  @Throttle({ default: { limit: env.NODE_ENV === 'development' ? 30 : 5, ttl: 900000 } })
+  @Post('reset-password')
+  async resetPassword(@Body() dto: ResetPasswordDto): Promise<{ data: { success: true } }> {
+    await this.authService.resetPassword(dto.token, dto.password);
+    return { data: { success: true } };
+  }
+
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Encerrar sessão e invalidar refresh token' })
   @UseGuards(AuthGuard)
@@ -87,5 +108,24 @@ export class AuthController {
   ): Promise<{ data: UserResponse }> {
     const data = await this.authService.updateProfile(user.sub, dto);
     return { data };
+  }
+
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Exportar uma cópia dos dados da conta' })
+  @Get('me/export')
+  async exportAccount(@CurrentUser() user: JwtPayload): Promise<{ data: unknown }> {
+    const data = await this.authService.exportAccountData(user.sub);
+    return { data };
+  }
+
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Excluir permanentemente a conta autenticada' })
+  @Delete('me')
+  @HttpCode(204)
+  async deleteAccount(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: DeleteAccountDto,
+  ): Promise<void> {
+    await this.authService.deleteAccount(user.sub, dto.password);
   }
 }

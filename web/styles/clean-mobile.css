@@ -55,59 +55,23 @@ body { background: var(--bg); }
   margin: 4px 0 0;
 }
 
-.brand-mark {
-  background: #071426;
-  border: 0;
-  border-radius: 28%;
-  box-shadow: 0 8px 22px rgba(7, 20, 38, 0.16);
+.din-logo {
+  display: block;
+  height: auto;
+  max-width: 210px;
+  width: min(210px, 62vw);
+}
+
+.din-mark {
+  display: block;
+  flex: 0 0 auto;
   height: 64px;
-  padding: 0;
-  position: relative;
   width: 64px;
 }
 
-.brand-mark::before { display: none; }
-
-.brand-mark span { background: #00d19a; position: absolute; }
-.brand-mark span:nth-child(1) {
-  border-radius: 50%;
-  height: 9px;
-  left: 16px;
-  top: 16px;
-  width: 9px;
-}
-.brand-mark span:nth-child(2) {
-  border-radius: 999px;
-  bottom: 14px;
-  height: 24px;
-  left: 17px;
-  width: 8px;
-}
-.brand-mark span:nth-child(3) {
-  background: transparent;
-  border: 8px solid #00d19a;
-  border-left: 0;
-  border-radius: 0 999px 999px 0;
-  height: 34px;
-  left: 22px;
-  top: 15px;
-  width: 25px;
-}
-
-.brand-mark.compact {
-  border-radius: 13px;
-  height: 42px;
-  width: 42px;
-}
-.brand-mark.compact span:nth-child(1) { height: 6px; left: 10px; top: 10px; width: 6px; }
-.brand-mark.compact span:nth-child(2) { bottom: 9px; height: 16px; left: 11px; width: 5px; }
-.brand-mark.compact span:nth-child(3) { border-width: 5px; height: 22px; left: 14px; top: 10px; width: 17px; }
-
-.wordmark {
-  color: #0f172a;
-  font-size: 50px;
-  font-weight: 900;
-  letter-spacing: -0.055em;
+.din-mark.compact {
+  height: 44px;
+  width: 44px;
 }
 
 .auth-title span { color: #00bfa6; }
@@ -357,4 +321,135 @@ body { background: var(--bg); }
     animation-iteration-count: 1 !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* Secondary transaction tools stay out of the primary transaction flow. */
+.transaction-tools {
+  display: grid;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.csv-preview {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 14px;
+  background: var(--surface-soft, #f5f7fa);
+  color: var(--muted, #64748b);
+  font-size: 12px;
+  overflow: hidden;
+}
+
+.csv-preview strong,
+.csv-preview span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.transaction-tool.import-panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: none;
+  display: block;
+  padding: 0;
+}
+
+.transaction-tool-summary {
+  align-items: center;
+  cursor: pointer;
+  display: grid;
+  gap: 11px;
+  grid-template-columns: 38px minmax(0, 1fr) 18px;
+  list-style: none;
+  min-height: 64px;
+  padding: 10px 13px;
+}
+
+.transaction-tool-summary::-webkit-details-marker { display: none; }
+
+.transaction-tool-summary strong,
+.transaction-tool-summary small { display: block; }
+
+.transaction-tool-summary strong {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.transaction-tool-summary small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 650;
+  margin-top: 2px;
+}
+
+.transaction-tool-icon {
+  align-items: center;
+  background: var(--green-soft);
+  border-radius: 11px;
+  color: var(--green-dark) !important;
+  display: flex !important;
+  font-size: 20px !important;
+  font-weight: 750 !important;
+  height: 38px;
+  justify-content: center;
+  margin: 0 !important;
+  width: 38px;
+}
+
+.transaction-tool-chevron {
+  border-bottom: 2px solid var(--muted);
+  border-right: 2px solid var(--muted);
+  height: 8px;
+  justify-self: center;
+  margin: -4px 0 0 !important;
+  transform: rotate(45deg);
+  transition: transform 160ms ease;
+  width: 8px;
+}
+
+.transaction-tool[open] .transaction-tool-chevron {
+  margin-top: 4px !important;
+  transform: rotate(225deg);
+}
+
+.transaction-tool-content {
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+.skip-link {
+  position: fixed;
+  z-index: 9999;
+  top: 8px;
+  left: 8px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: #0f172a;
+  color: #fff;
+  font-weight: 800;
+  transform: translateY(-150%);
+}
+
+.skip-link:focus {
+  transform: translateY(0);
+}
+
+button,
+[role='button'],
+summary,
+input,
+select {
+  min-height: 44px;
+}
+
+@media (prefers-contrast: more) {
+  :root { --border: #475569; }
+  button, input, select, textarea, .card { border-width: 2px; }
 }

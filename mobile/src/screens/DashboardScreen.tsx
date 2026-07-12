@@ -19,12 +19,12 @@ export function DashboardScreen({ dashboard, transactions, onRefresh }: Dashboar
     );
   }
 
-  const recent = transactions.slice(0, 4);
+  const recent = transactions.slice(0, 3);
 
   return (
     <View style={styles.stack}>
       <View style={styles.rowBetween}>
-        <Text style={styles.screenTitle}>Visao geral</Text>
+        <Text style={styles.screenTitle}>Resumo</Text>
         <TouchableOpacity onPress={onRefresh}>
           <Text style={styles.refresh}>Atualizar</Text>
         </TouchableOpacity>
@@ -48,43 +48,9 @@ export function DashboardScreen({ dashboard, transactions, onRefresh }: Dashboar
       </Card>
 
       <Card>
-        <Text style={styles.sectionTitle}>Categorias</Text>
-        {dashboard.byCategory.length === 0 ? (
-          <Text style={styles.empty}>Sem categorias no periodo.</Text>
-        ) : (
-          dashboard.byCategory.slice(0, 5).map((item) => (
-            <View key={item.categoryName} style={styles.listRow}>
-              <View style={styles.categoryName}>
-                <View style={[styles.dot, { backgroundColor: item.color }]} />
-                <Text style={styles.rowTitle}>{item.categoryName}</Text>
-              </View>
-              <Text style={styles.rowValue}>{formatCurrency(item.total)}</Text>
-            </View>
-          ))
-        )}
-      </Card>
-
-      <Card>
-        <Text style={styles.sectionTitle}>Canais</Text>
-        {dashboard.byChannel.length === 0 ? (
-          <Text style={styles.empty}>Nenhum canal com movimentacao.</Text>
-        ) : (
-          dashboard.byChannel.slice(0, 4).map((item) => (
-            <View key={item.channelName} style={styles.listRow}>
-              <View>
-                <Text style={styles.rowTitle}>{item.channelName}</Text>
-                <Text style={styles.rowMeta}>{item.transactionCount} lancamentos</Text>
-              </View>
-              <Text style={styles.rowValue}>{formatCurrency(item.netTotal)}</Text>
-            </View>
-          ))
-        )}
-      </Card>
-
-      <Card>
-        <Text style={styles.sectionTitle}>Recentes</Text>
+        <Text style={styles.sectionTitle}>Últimos lançamentos</Text>
         {recent.length === 0 ? (
-          <Text style={styles.empty}>Sem lancamentos ainda.</Text>
+          <Text style={styles.empty}>Nenhum lançamento ainda.</Text>
         ) : (
           recent.map((transaction) => (
             <View key={transaction.id} style={styles.listRow}>

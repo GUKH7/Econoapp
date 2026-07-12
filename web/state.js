@@ -34,11 +34,13 @@ export const state = {
   transactionFilter: 'ALL',
   transactionSearch: '',
   importCsvSummary: null,
+  importCsvPreview: null,
   importCsvLoading: false,
   exportCsvLoading: false,
   recurringTransactions: [],
   recurringLoading: false,
   recurringSummary: null,
+  recurringEditingId: '',
   reportType: 'EXPENSE',
   whatsappStatus: null,
   whatsappLoading: false,
@@ -47,6 +49,7 @@ export const state = {
   assistantActivity: null,
   assistantLoading: false,
   assistantError: '',
+  loadWarnings: [],
 };
 
 export const app = document.querySelector('#app');
@@ -95,4 +98,5 @@ export function clearSession() {
   state.assistantActivity = null;
   state.assistantLoading = false;
   state.assistantError = '';
+  navigator.serviceWorker?.controller?.postMessage({ type: 'CLEAR_PRIVATE_CACHES' });
 }

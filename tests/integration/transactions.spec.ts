@@ -25,13 +25,16 @@ import { PrismaService } from '@/config/database';
 import { AccountService } from '@/modules/accounts/account.service';
 import { TransactionRepository } from '@/modules/transactions/repositories/transaction.repository';
 import { SmartCategoryService } from '@/modules/transactions/smart-category.service';
-import { ForbiddenException, NotFoundException } from '@/common/errors/app.exception';
+import { BadRequestException, ForbiddenException, NotFoundException } from '@/common/errors/app.exception';
 
 // ---------------------------------------------------------------------------
 // Mocks das dependências injetadas pelo NestJS
 // ---------------------------------------------------------------------------
 
 const mockPrisma = {
+  category: {
+    findFirst: vi.fn(),
+  },
   salesChannel: {
     findFirst: vi.fn(),
   },
@@ -96,6 +99,7 @@ describe('TransactionService › update', () => {
    */
   beforeEach(async () => {
     vi.clearAllMocks();
+    mockPrisma.category.findFirst.mockResolvedValue({ id: 'cat-001' });
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -283,7 +287,7 @@ describe('TransactionService › update', () => {
       });
     });
 
-    it('netAmount = newAmount quando o canal não é encontrado no banco (canal removido)', async () => {
+    it('rejeita a atualização quando o canal não pertence ao usuário', async () => {
       // Canal estava associado na transação mas foi deletado — findFirst retorna null
       mockTransactionRepo.findById.mockResolvedValue(
         makeTransaction({
@@ -296,18 +300,10 @@ describe('TransactionService › update', () => {
         }),
       );
       mockPrisma.salesChannel.findFirst.mockResolvedValue(null);
-      mockTransactionRepo.update.mockResolvedValue(makeTransaction());
-
-      await service.update('user-001', 'tx-008', { amount: 150 });
-
-      // Canal não encontrado → sem taxa → netAmount = 150
-      expect(mockTransactionRepo.update).toHaveBeenCalledWith(
-        'tx-008',
-        expect.objectContaining({
-          amount: 150,
-          netAmount: 150,
-        }),
-      );
+      await expect(
+        service.update('user-001', 'tx-008', { amount: 150 }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(mockTransactionRepo.update).not.toHaveBeenCalled();
     });
 
     it('deve retornar o resultado do repositório após o update', async () => {

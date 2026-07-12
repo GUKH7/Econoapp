@@ -1,4 +1,5 @@
 import { IsEmail, IsOptional, IsString, Matches, MinLength } from 'class-validator';
+import { Transform } from 'class-transformer';
 
 export class RegisterDto {
   @IsString()
@@ -11,6 +12,7 @@ export class RegisterDto {
   phone!: string;
 
   @IsOptional()
+  @Transform(({ value }) => value ? String(value).trim().toLowerCase() : value)
   @IsEmail()
   email?: string;
 

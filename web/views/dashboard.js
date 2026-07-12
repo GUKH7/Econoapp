@@ -15,24 +15,11 @@ import {
 } from './shared.js';
 
 export function dashboardView() {
-  const rows = scopedTransactions().slice(0, 4).map(transactionRow).join('');
-  const assistant = assistantInsight();
-  const assistantActionAttr = assistant.manageSection
-    ? `data-manage-section="${assistant.manageSection}"`
-    : `data-tab-jump="${assistant.target}"`;
+  const rows = scopedTransactions().slice(0, 3).map(transactionRow).join('');
 
   return `
     ${onboardingGuideHtml()}
     ${state.scope === 'BUSINESS' ? businessSummaryCard() : ''}
-    <article class="assistant-card dashboard-assistant ${assistant.tone}">
-      <div class="assistant-icon">${icon('chat')}</div>
-      <div class="assistant-copy">
-        <span>Din</span>
-        <strong>${escapeHtml(assistant.title)}</strong>
-        <p>${escapeHtml(assistant.copy)}</p>
-      </div>
-      <button class="assistant-action" type="button" ${assistantActionAttr}>${escapeHtml(assistant.action)}</button>
-    </article>
     ${dashboardInsightsHtml()}
     <article class="card dashboard-recent">
       <div class="panel-title">
@@ -106,7 +93,7 @@ function onboardingGuideHtml() {
 
 function onboardingTitle(step) {
   const titles = {
-    Perfil: 'Escolha como quer organizar o EconoApp',
+    Perfil: 'Escolha como quer organizar o Din',
     Categorias: 'Crie categorias iniciais em um toque',
     Conta: 'Cadastre onde seu dinheiro fica',
     Lancamento: 'Registre o primeiro movimento',
@@ -166,10 +153,7 @@ function onboardingStepBody(step) {
 
 function dashboardInsightsHtml() {
   const currentTransactions = scopedTransactionsForMonth(0);
-  const previousTransactions = scopedTransactionsForMonth(-1);
   const currentTotals = totalsForTransactions(currentTransactions);
-  const previousTotals = totalsForTransactions(previousTransactions);
-  const expenseCategories = totalsByCategoryForTransactions('EXPENSE', currentTransactions).sort((a, b) => b.total - a.total);
   const topExpense = currentTransactions
     .filter((transaction) => transaction.type === 'EXPENSE')
     .sort((a, b) => transactionValue(b) - transactionValue(a))[0];
@@ -183,29 +167,6 @@ function dashboardInsightsHtml() {
         ${dashboardKpiCard('Saldo previsto', projected.label, money.format(projected.balance), projected.balance >= 0 ? 'income' : 'expense')}
         ${dashboardKpiCard('Orcamento', budgetAlert.title, budgetAlert.value, budgetAlert.tone)}
       </div>
-      <article class="card dashboard-panel">
-        <div class="panel-title compact">
-          <div>
-            <span class="eyebrow">Gastos por categoria</span>
-            <h3>${expenseCategories[0] ? escapeHtml(expenseCategories[0].name) : 'Sem gastos no mes'}</h3>
-          </div>
-          <button class="button secondary compact-action" type="button" data-tab-jump="reports">Ver relatorio</button>
-        </div>
-        ${
-          expenseCategories.length
-            ? dashboardCategoryRows(expenseCategories, currentTotals.expense)
-            : '<p class="empty">Registre gastos para enxergar para onde o dinheiro esta indo.</p>'
-        }
-      </article>
-      <article class="card dashboard-panel">
-        <div class="panel-title compact">
-          <div>
-            <span class="eyebrow">Evolucao mensal</span>
-            <h3>${monthlyEvolutionTitle(currentTotals, previousTotals)}</h3>
-          </div>
-        </div>
-        ${monthlyEvolutionHtml()}
-      </article>
       ${budgetAlert.copy ? `<article class="dashboard-alert ${budgetAlert.tone}"><span>${icon('target')}</span><p>${escapeHtml(budgetAlert.copy)}</p></article>` : ''}
     </section>
   `;

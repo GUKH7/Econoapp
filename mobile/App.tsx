@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Image,
+  Linking,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -25,13 +27,18 @@ import { TransactionsScreen } from './src/screens/TransactionsScreen';
 import { SimulatorScreen } from './src/screens/SimulatorScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
 import { colors, spacing } from './src/theme';
+import {
+  clearStoredSession,
+  loadStoredSession,
+  saveStoredSession,
+} from './src/auth/session-storage';
 
 type Tab = 'dashboard' | 'transactions' | 'simulator' | 'settings';
 
 const tabs: Array<{ id: Tab; label: string }> = [
   { id: 'dashboard', label: 'Inicio' },
   { id: 'transactions', label: 'Transacoes' },
-  { id: 'simulator', label: 'Metas' },
+  { id: 'simulator', label: 'Planejar' },
   { id: 'settings', label: 'Mais' },
 ];
 
@@ -44,6 +51,34 @@ export default function App() {
   const [categories, setCategories] = useState<CategoryResponse[]>([]);
   const [channels, setChannels] = useState<ChannelResponse[]>([]);
   const [loading, setLoading] = useState(false);
+  const [restoringSession, setRestoringSession] = useState(true);
+  const [resetToken, setResetToken] = useState('');
+
+  useEffect(() => {
+    const captureToken = (url: string | null) => {
+      if (!url) return;
+      const token = new URL(url).searchParams.get('token');
+      if (token) setResetToken(token);
+    };
+    void Linking.getInitialURL().then(captureToken);
+    const subscription = Linking.addEventListener('url', ({ url }) => captureToken(url));
+    return () => subscription.remove();
+  }, []);
+
+  useEffect(() => {
+    void loadStoredSession()
+      .then(async (stored) => {
+        if (!stored) return;
+        try {
+          const refreshed = await api.refresh(stored.refreshToken);
+          await saveStoredSession(refreshed.data);
+          setTokens(refreshed.data);
+        } catch {
+          await clearStoredSession();
+        }
+      })
+      .finally(() => setRestoringSession(false));
+  }, []);
 
   useEffect(() => {
     setAccessToken(tokens?.accessToken ?? null);
@@ -83,11 +118,13 @@ export default function App() {
   }, [loadPrivateData, tokens]);
 
   const handleAuthenticated = (authTokens: AuthTokensResponse) => {
+    void saveStoredSession(authTokens);
     setTokens(authTokens);
     setActiveTab('dashboard');
   };
 
   const handleLogout = () => {
+    void clearStoredSession();
     setTokens(null);
     setUser(null);
     setDashboard(null);
@@ -137,11 +174,27 @@ export default function App() {
     );
   }, [activeTab, categories, channels, dashboard, transactions, user]);
 
+  if (restoringSession) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <StatusBar style="dark" />
+        <View style={styles.sessionLoader}>
+          <ActivityIndicator color={colors.primary} size="large" />
+          <Text style={styles.subtitle}>Restaurando sua sessão...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   if (!tokens) {
     return (
       <SafeAreaView style={styles.safeArea}>
         <StatusBar style="dark" />
-        <AuthScreen onAuthenticated={handleAuthenticated} />
+        <AuthScreen
+          onAuthenticated={handleAuthenticated}
+          resetToken={resetToken}
+          onPasswordReset={() => setResetToken('')}
+        />
       </SafeAreaView>
     );
   }
@@ -151,6 +204,7 @@ export default function App() {
       <StatusBar style="dark" />
       <View style={styles.header}>
         <View style={styles.brand}>
+          <Image source={require('./assets/adaptive-icon.png')} style={styles.brandMark} />
           <View>
             <Text style={styles.appName}>Din</Text>
             <Text style={styles.subtitle}>
@@ -204,6 +258,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: spacing.md,
   },
+  brandMark: {
+    height: 38,
+    width: 38,
+  },
   appName: {
     color: colors.text,
     fontSize: 22,
@@ -213,6 +271,12 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontSize: 14,
     marginTop: 2,
+  },
+  sessionLoader: {
+    alignItems: 'center',
+    flex: 1,
+    gap: spacing.md,
+    justifyContent: 'center',
   },
   content: {
     padding: spacing.lg,

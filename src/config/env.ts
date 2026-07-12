@@ -9,6 +9,9 @@ const envSchema = z.object({
   TELEGRAM_BOT_TOKEN: z.string().min(1),
   GEMINI_API_KEY: z.string().min(1),
   GOOGLE_CLIENT_ID: z.string().default(''),
+  RESEND_API_KEY: z.string().default(''),
+  RESEND_FROM_EMAIL: z.string().default('Din <no-reply@resend.dev>'),
+  PASSWORD_RESET_URL: z.string().url().default('http://localhost:5173/?resetPassword=1'),
   CORS_ORIGIN: z.string().default(''),
   WHATSAPP_BOT_API_URL: z.string().url().default('http://64.181.189.107:3001/econoapp'),
   WHATSAPP_BOT_SEND_MESSAGE_PATH: z.string().default('/send-message'),
@@ -16,6 +19,7 @@ const envSchema = z.object({
   WHATSAPP_WEBHOOK_TOKEN: z.string().default(''),
   WHATSAPP_BUDGET_ALERT_TOKEN: z.string().default(''),
   WHATSAPP_BUDGET_ALERT_INTERVAL_MINUTES: z.coerce.number().int().min(5).default(60),
+  RECURRING_TRANSACTION_INTERVAL_MINUTES: z.coerce.number().int().min(5).default(60),
   PORT: z
     .string()
     .default('3001')

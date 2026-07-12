@@ -19,13 +19,25 @@ import { TelegramModule } from '@/modules/telegram/telegram.module';
 import { WhatsappModule } from '@/modules/whatsapp/whatsapp.module';
 import { BudgetModule } from '@/modules/budgets/budget.module';
 import { AssistantModule } from '@/modules/assistant/assistant.module';
+import { randomUUID } from 'node:crypto';
 
 @Module({
   imports: [
     DatabaseModule,
     LoggerModule.forRoot({
-      pinoHttp:
-        env.NODE_ENV === 'development'
+      pinoHttp: {
+        genReqId: (request, response) => {
+          const incoming = request.headers['x-request-id'];
+          const requestId = typeof incoming === 'string' && incoming.length <= 128 ? incoming : randomUUID();
+          response.setHeader('x-request-id', requestId);
+          return requestId;
+        },
+        redact: {
+          paths: ['req.headers.authorization', 'req.headers.cookie', 'res.headers.set-cookie'],
+          censor: '[REDACTED]',
+        },
+        autoLogging: { ignore: (request) => request.url === '/health' },
+        ...(env.NODE_ENV === 'development'
           ? {
               transport: {
                 target: 'pino-pretty',
@@ -35,7 +47,8 @@ import { AssistantModule } from '@/modules/assistant/assistant.module';
                 },
               },
             }
-          : {},
+          : {}),
+      },
     }),
     ThrottlerModule.forRoot([
       {

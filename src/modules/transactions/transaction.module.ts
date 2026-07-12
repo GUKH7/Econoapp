@@ -5,11 +5,18 @@ import { TransactionService } from './transaction.service';
 import { TransactionRepository } from './repositories/transaction.repository';
 import { SmartCategoryService } from './smart-category.service';
 import { RecurringTransactionService } from './recurring-transaction.service';
+import { RecurringTransactionScheduler } from './recurring-transaction.scheduler';
 
 @Module({
   imports: [AccountModule],
   controllers: [TransactionController],
-  providers: [TransactionService, TransactionRepository, SmartCategoryService, RecurringTransactionService],
+  providers: [
+    TransactionService,
+    TransactionRepository,
+    SmartCategoryService,
+    RecurringTransactionService,
+    RecurringTransactionScheduler,
+  ],
   exports: [TransactionService, TransactionRepository, SmartCategoryService, RecurringTransactionService],
 })
 export class TransactionModule {}
