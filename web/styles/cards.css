@@ -1101,6 +1101,17 @@ textarea:focus {
   min-height: calc(100dvh - var(--content-safe-bottom) - 64px);
   overflow-x: hidden;
   padding-bottom: calc(var(--bottom-nav-height) + 92px);
+  max-width: 100%;
+  min-width: 0;
+  width: 100%;
+}
+
+.assistant-chat-screen > *,
+.assistant-history-card,
+.assistant-thread,
+.chat-row {
+  max-width: 100%;
+  min-width: 0;
 }
 
 @media (max-width: 520px) {
@@ -1669,7 +1680,9 @@ textarea:focus {
   border-radius: 18px;
   box-shadow: var(--shadow-card);
   color: var(--text);
-  max-width: min(330px, calc(100vw - 86px));
+  max-width: min(330px, calc(100% - 52px));
+  min-width: 0;
+  overflow-wrap: anywhere;
   padding: 12px 14px;
 }
 
@@ -1677,6 +1690,7 @@ textarea:focus {
   background: var(--green);
   border-color: var(--green);
   color: white;
+  max-width: 88%;
 }
 
 .chat-bubble strong {
@@ -1695,7 +1709,9 @@ textarea:focus {
 .assistant-finance-card {
   display: grid;
   gap: 10px;
-  min-width: min(292px, calc(100vw - 116px));
+  max-width: 100%;
+  min-width: 0;
+  width: 100%;
 }
 
 .assistant-finance-title {
@@ -1995,6 +2011,22 @@ textarea:focus {
 }
 
 @media (max-width: 430px) {
+  .assistant-command-meta > * {
+    max-width: calc(50% - 4px);
+  }
+
+  .assistant-history-card .panel-title > div {
+    min-width: 0;
+  }
+
+  .assistant-history-card .panel-title small {
+    flex: 0 1 auto;
+    max-width: 42%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .assistant-command-head {
     align-items: flex-start;
   }

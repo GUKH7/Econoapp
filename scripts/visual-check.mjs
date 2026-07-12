@@ -146,7 +146,15 @@ const apiFixtures = {
     },
   },
   '/api/v1/transactions/recurring': { data: [] },
-  '/api/v1/assistant/activity': { data: { messages: [], events: [] } },
+  '/api/v1/assistant/activity': {
+    data: {
+      messages: [
+        { role: 'user', text: 'Gastei 5,30 de passagem hoje' },
+        { role: 'assistant', text: 'Despesa pronta para salvar\nTipo: Despesa\nTítulo: Gasto com passagem\nValor: R$ 5,30\nCategoria: Transporte\nPagamento: Dinheiro' },
+      ],
+      events: [],
+    },
+  },
 };
 
 const contentTypes = {
@@ -365,6 +373,15 @@ async function runViewport(browser, baseUrl, name, viewport) {
     throw new Error(`Ferramentas de transacao deveriam iniciar recolhidas em ${name}`);
   }
   await screenshot(page, `${name}-more`);
+
+  await page.locator('[data-tab-jump="assistant"]').click();
+  await assertText(page, 'App e WhatsApp');
+  await assertVisible(page, '.assistant-finance-card', 'cartao financeiro do Din');
+  const assistantOverflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  if (assistantOverflow > 1) {
+    throw new Error(`Tela do Din excede o viewport em ${assistantOverflow}px em ${name}`);
+  }
+  await screenshot(page, `${name}-assistant`);
 
   await page.locator('nav.tabs [data-tab="reports"]').click();
   await assertText(page, 'Por categoria');
