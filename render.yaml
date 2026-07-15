@@ -19,10 +19,16 @@ services:
         sync: false
       - key: GOOGLE_CLIENT_ID
         sync: false
-      - key: RESEND_API_KEY
+      - key: SMTP_HOST
+        value: smtp.gmail.com
+      - key: SMTP_PORT
+        value: 465
+      - key: SMTP_USER
         sync: false
-      - key: RESEND_FROM_EMAIL
-        value: Din <no-reply@resend.dev>
+      - key: SMTP_PASS
+        sync: false
+      - key: SMTP_FROM_EMAIL
+        sync: false
       - key: PASSWORD_RESET_URL
         value: https://econoapp-web.onrender.com/?resetPassword=1
       - key: TELEGRAM_BOT_TOKEN

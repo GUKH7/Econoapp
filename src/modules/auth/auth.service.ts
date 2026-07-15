@@ -2,7 +2,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { hash, compare } from 'bcryptjs';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
-import { Resend } from 'resend';
+import nodemailer, { type Transporter } from 'nodemailer';
 import { OAuth2Client } from 'google-auth-library';
 import { PrismaService } from '@/config/database';
 import {
@@ -50,7 +50,15 @@ function parseDurationToMs(value: string): number {
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
   private readonly googleClient = new OAuth2Client();
-  private readonly resend = env.RESEND_API_KEY ? new Resend(env.RESEND_API_KEY) : null;
+  private readonly mailer: Transporter | null =
+    env.SMTP_USER && env.SMTP_PASS
+      ? nodemailer.createTransport({
+          host: env.SMTP_HOST,
+          port: env.SMTP_PORT,
+          secure: env.SMTP_PORT === 465,
+          auth: { user: env.SMTP_USER, pass: env.SMTP_PASS },
+        })
+      : null;
 
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
@@ -241,21 +249,25 @@ export class AuthService {
       },
     });
 
-    if (!this.resend) {
-      this.logger.warn('RESEND_API_KEY não configurada; e-mail de recuperação não enviado.');
+    if (!this.mailer) {
+      this.logger.warn('SMTP do Gmail não configurado; e-mail de recuperação não enviado.');
       return;
     }
 
     const resetUrl = new URL(env.PASSWORD_RESET_URL);
     resetUrl.searchParams.set('token', token);
-    const { error } = await this.resend.emails.send({
-      from: env.RESEND_FROM_EMAIL,
-      to: normalizedEmail,
-      subject: 'Redefina sua senha do Din',
-      text: `Recebemos uma solicitação para redefinir sua senha. Use este link em até 30 minutos: ${resetUrl.toString()}\n\nSe você não solicitou, ignore este e-mail.`,
-      html: `<div style="font-family:Arial,sans-serif;color:#0f172a;max-width:560px;margin:auto"><h1 style="color:#00bfa6">Din</h1><h2>Redefina sua senha</h2><p>Recebemos uma solicitação para redefinir sua senha.</p><p><a href="${resetUrl.toString()}" style="display:inline-block;background:#00bfa6;color:#fff;padding:12px 20px;border-radius:10px;text-decoration:none;font-weight:bold">Criar nova senha</a></p><p>Este link expira em 30 minutos e só pode ser usado uma vez.</p><p style="color:#64748b">Se você não solicitou, ignore este e-mail.</p></div>`,
-    });
-    if (error) throw new BadRequestException('Não foi possível enviar o e-mail de recuperação');
+    try {
+      await this.mailer.sendMail({
+        from: env.SMTP_FROM_EMAIL || `Din <${env.SMTP_USER}>`,
+        to: normalizedEmail,
+        subject: 'Redefina sua senha do Din',
+        text: `Recebemos uma solicitação para redefinir sua senha. Use este link em até 30 minutos: ${resetUrl.toString()}\n\nSe você não solicitou, ignore este e-mail.`,
+        html: `<div style="font-family:Arial,sans-serif;color:#0f172a;max-width:560px;margin:auto"><h1 style="color:#00bfa6">Din</h1><h2>Redefina sua senha</h2><p>Recebemos uma solicitação para redefinir sua senha.</p><p><a href="${resetUrl.toString()}" style="display:inline-block;background:#00bfa6;color:#fff;padding:12px 20px;border-radius:10px;text-decoration:none;font-weight:bold">Criar nova senha</a></p><p>Este link expira em 30 minutos e só pode ser usado uma vez.</p><p style="color:#64748b">Se você não solicitou, ignore este e-mail.</p></div>`,
+      });
+    } catch (error) {
+      this.logger.error('Falha ao enviar e-mail de recuperação pelo Gmail', error);
+      throw new BadRequestException('Não foi possível enviar o e-mail de recuperação');
+    }
   }
 
   async resetPassword(token: string, password: string): Promise<void> {
