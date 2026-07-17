@@ -2,6 +2,15 @@ import { clearSession, saveSession, state } from './state.js';
 
 let refreshPromise = null;
 
+const authRoutesWithoutRefresh = new Set([
+  '/auth/login',
+  '/auth/google',
+  '/auth/register',
+  '/auth/refresh',
+  '/auth/forgot-password',
+  '/auth/reset-password',
+]);
+
 async function refreshSession() {
   if (!state.refreshToken) return false;
   if (!refreshPromise) {
@@ -39,7 +48,7 @@ async function request(path, options = {}, retrying = false) {
       signal: controller.signal,
     });
 
-    if (response.status === 401 && !retrying && !path.startsWith('/auth/')) {
+    if (response.status === 401 && !retrying && !authRoutesWithoutRefresh.has(path)) {
       clearTimeout(timeout);
       const refreshed = await refreshSession();
       if (refreshed) return request(path, options, true);
