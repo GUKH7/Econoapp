@@ -19,15 +19,13 @@ services:
         sync: false
       - key: GOOGLE_CLIENT_ID
         sync: false
-      - key: SMTP_HOST
-        value: smtp.gmail.com
-      - key: SMTP_PORT
-        value: 465
-      - key: SMTP_USER
+      - key: GMAIL_API_CLIENT_ID
         sync: false
-      - key: SMTP_PASS
+      - key: GMAIL_API_CLIENT_SECRET
         sync: false
-      - key: SMTP_FROM_EMAIL
+      - key: GMAIL_API_REFRESH_TOKEN
+        sync: false
+      - key: GMAIL_FROM_EMAIL
         sync: false
       - key: PASSWORD_RESET_URL
         value: https://econoapp-web.onrender.com/?resetPassword=1

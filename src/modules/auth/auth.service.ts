@@ -2,7 +2,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { hash, compare } from 'bcryptjs';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
-import nodemailer, { type Transporter } from 'nodemailer';
+import nodemailer from 'nodemailer';
 import { OAuth2Client } from 'google-auth-library';
 import { PrismaService } from '@/config/database';
 import {
@@ -24,6 +24,15 @@ interface AuthTokens {
 
 function googleClientIds(): string[] {
   return env.GOOGLE_CLIENT_ID.split(',').map((clientId) => clientId.trim()).filter(Boolean);
+}
+
+function gmailApiConfigured(): boolean {
+  return Boolean(
+    env.GMAIL_API_CLIENT_ID &&
+      env.GMAIL_API_CLIENT_SECRET &&
+      env.GMAIL_API_REFRESH_TOKEN &&
+      env.GMAIL_FROM_EMAIL,
+  );
 }
 
 function parseDurationToMs(value: string): number {
@@ -50,15 +59,11 @@ function parseDurationToMs(value: string): number {
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
   private readonly googleClient = new OAuth2Client();
-  private readonly mailer: Transporter | null =
-    env.SMTP_USER && env.SMTP_PASS
-      ? nodemailer.createTransport({
-          host: env.SMTP_HOST,
-          port: env.SMTP_PORT,
-          secure: env.SMTP_PORT === 465,
-          auth: { user: env.SMTP_USER, pass: env.SMTP_PASS },
-        })
-      : null;
+  private readonly mimeMailer = nodemailer.createTransport({
+    streamTransport: true,
+    newline: 'unix',
+    buffer: true,
+  });
 
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
@@ -249,24 +254,61 @@ export class AuthService {
       },
     });
 
-    if (!this.mailer) {
-      this.logger.warn('SMTP do Gmail não configurado; e-mail de recuperação não enviado.');
+    if (!gmailApiConfigured()) {
+      this.logger.warn('Gmail API não configurada; e-mail de recuperação não enviado.');
       return;
     }
 
     const resetUrl = new URL(env.PASSWORD_RESET_URL);
     resetUrl.searchParams.set('token', token);
     try {
-      await this.mailer.sendMail({
-        from: env.SMTP_FROM_EMAIL || `Din <${env.SMTP_USER}>`,
+      await this.sendPasswordResetEmail({
+        from: env.GMAIL_FROM_EMAIL,
         to: normalizedEmail,
-        subject: 'Redefina sua senha do Din',
-        text: `Recebemos uma solicitação para redefinir sua senha. Use este link em até 30 minutos: ${resetUrl.toString()}\n\nSe você não solicitou, ignore este e-mail.`,
-        html: `<div style="font-family:Arial,sans-serif;color:#0f172a;max-width:560px;margin:auto"><h1 style="color:#00bfa6">Din</h1><h2>Redefina sua senha</h2><p>Recebemos uma solicitação para redefinir sua senha.</p><p><a href="${resetUrl.toString()}" style="display:inline-block;background:#00bfa6;color:#fff;padding:12px 20px;border-radius:10px;text-decoration:none;font-weight:bold">Criar nova senha</a></p><p>Este link expira em 30 minutos e só pode ser usado uma vez.</p><p style="color:#64748b">Se você não solicitou, ignore este e-mail.</p></div>`,
+        resetUrl: resetUrl.toString(),
       });
     } catch (error) {
-      this.logger.error('Falha ao enviar e-mail de recuperação pelo Gmail', error);
+      const message = error instanceof Error ? error.message : 'erro desconhecido';
+      this.logger.error(`Falha ao enviar e-mail de recuperação pela Gmail API: ${message}`);
       throw new BadRequestException('Não foi possível enviar o e-mail de recuperação');
+    }
+  }
+
+  private async sendPasswordResetEmail(input: {
+    from: string;
+    to: string;
+    resetUrl: string;
+  }): Promise<void> {
+    const oauthClient = new OAuth2Client(
+      env.GMAIL_API_CLIENT_ID,
+      env.GMAIL_API_CLIENT_SECRET,
+    );
+    oauthClient.setCredentials({ refresh_token: env.GMAIL_API_REFRESH_TOKEN });
+    const accessToken = await oauthClient.getAccessToken();
+    if (!accessToken.token) throw new Error('não foi possível obter acesso ao Gmail');
+
+    const mail = await this.mimeMailer.sendMail({
+      from: `Din <${input.from}>`,
+      to: input.to,
+      subject: 'Redefina sua senha do Din',
+      text: `Recebemos uma solicitação para redefinir sua senha. Use este link em até 30 minutos: ${input.resetUrl}\n\nSe você não solicitou, ignore este e-mail.`,
+      html: `<div style="font-family:Arial,sans-serif;color:#0f172a;max-width:560px;margin:auto"><h1 style="color:#00bfa6">Din</h1><h2>Redefina sua senha</h2><p>Recebemos uma solicitação para redefinir sua senha.</p><p><a href="${input.resetUrl}" style="display:inline-block;background:#00bfa6;color:#fff;padding:12px 20px;border-radius:10px;text-decoration:none;font-weight:bold">Criar nova senha</a></p><p>Este link expira em 30 minutos e só pode ser usado uma vez.</p><p style="color:#64748b">Se você não solicitou, ignore este e-mail.</p></div>`,
+    });
+    const rawMessage = Buffer.isBuffer(mail.message)
+      ? mail.message
+      : Buffer.from(String(mail.message));
+    const response = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken.token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ raw: rawMessage.toString('base64url') }),
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!response.ok) {
+      const details = (await response.text()).slice(0, 500);
+      throw new Error(`Google respondeu ${response.status}: ${details}`);
     }
   }
 
