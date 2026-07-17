@@ -64,7 +64,8 @@ const server = http.createServer((request, response) => {
     return;
   }
 
-  const requested = request.url === '/' ? '/index.html' : request.url.split('?')[0];
+  const pathname = new URL(request.url || '/', 'http://localhost').pathname;
+  const requested = pathname === '/' ? '/index.html' : pathname;
   const filePath = path.normalize(path.join(root, requested));
 
   if (!filePath.startsWith(root)) {
