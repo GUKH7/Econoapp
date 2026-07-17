@@ -267,3 +267,13 @@
   height: 100%;
   transition: width 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
+
+.time-report { margin-bottom: 16px; }
+.time-report .panel-title p { margin-top: 6px; color: var(--muted); line-height: 1.45; }
+.time-report-list { display: grid; gap: 8px; margin-top: 16px; }
+.time-report-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 12px; border: 1px solid var(--line); border-radius: 14px; }
+.time-report-row.active { border-color: rgba(0, 209, 154, .42); background: rgba(0, 209, 154, .06); }
+.time-report-row > div { display: grid; gap: 3px; }
+.time-report-row small, .time-report-note { color: var(--muted); }
+.time-report-value { text-align: right; }
+.time-report-note { display: block; margin-top: 12px; line-height: 1.4; }

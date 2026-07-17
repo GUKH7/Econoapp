@@ -133,6 +133,10 @@ function switchTab(targetTab) {
 }
 
 async function bootstrap() {
+  if (location.hostname === 'localhost' && new URLSearchParams(location.search).has('loadingPreview')) {
+    renderLoading();
+    return;
+  }
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
   }
@@ -174,27 +178,20 @@ function renderLoadError(message) {
 
 function renderLoading() {
   app.innerHTML = `
-    <section class="loading-shell" role="status" aria-live="polite">
-      <div class="loading-brand">
-        <img class="din-mark compact" src="./assets/din-mark.svg" alt="" aria-hidden="true" />
-        <div class="loading-copy">
-          <strong>Preparando seu resumo</strong>
-          <span>Buscando saldos, lançamentos e insights do Din.</span>
-        </div>
+    <section class="loading-shell splash-loading" role="status" aria-live="polite" aria-label="Carregando o Din">
+      <div class="splash-brand">
+        <img src="./assets/din-logo.svg" alt="Din" />
+        <p>Seu dinheiro, mais <strong>inteligente.</strong></p>
       </div>
-      <div class="loading-skeleton balance-preview"></div>
-      <div class="loading-grid">
-        <div class="loading-skeleton metric-preview"></div>
-        <div class="loading-skeleton metric-preview"></div>
+      <div class="splash-mascot" aria-hidden="true">
+        <img src="./assets/login-illustration.jpg" alt="" />
       </div>
-      <div class="loading-skeleton assistant-preview"></div>
-      <div class="loading-list">
-        <div class="loading-row"></div>
-        <div class="loading-row"></div>
-        <div class="loading-row"></div>
+      <div class="splash-progress">
+        <span class="splash-spinner" aria-hidden="true"></span>
+        <strong>Preparando sua vida financeira</strong>
+        <span>Carregando saldos e insights...</span>
       </div>
-    </section>
-  `;
+    </section>`;
 }
 
 function renderAuth(initialError = '') {

@@ -4,6 +4,12 @@ import { PrismaService } from '@/config/database';
 
 @Injectable()
 export class SmartCategoryService {
+  private readonly ignoredPreferenceTokens = new Set([
+    'a', 'ao', 'aos', 'as', 'com', 'compra', 'compras', 'da', 'das', 'de', 'do', 'dos',
+    'em', 'gasto', 'gastos', 'hoje', 'meu', 'minha', 'no', 'nos', 'na', 'nas', 'pagamento',
+    'paguei', 'para', 'por', 'real', 'reais', 'um', 'uma', 'valor', 'via',
+  ]);
+
   constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
 
   async suggestCategoryId(input: {
@@ -64,11 +70,17 @@ export class SmartCategoryService {
   ): Promise<string | null> {
     const keys = this.preferenceKeys(description);
     if (!keys.length) return null;
-    const preference = await this.prisma.categoryPreference.findFirst({
+    const preferences = await this.prisma.categoryPreference.findMany({
       where: { userId, type, sourceKey: { in: keys } },
       orderBy: [{ hits: 'desc' }, { updatedAt: 'desc' }],
     });
-    return preference?.categoryName ?? null;
+    const priority = new Map(keys.map((key, index) => [key, keys.length - index]));
+    preferences.sort((left, right) => {
+      const specificity = (priority.get(right.sourceKey) ?? 0) - (priority.get(left.sourceKey) ?? 0);
+      if (specificity !== 0) return specificity;
+      return right.hits - left.hits;
+    });
+    return preferences[0]?.categoryName ?? null;
   }
 
   private findCategoryMention(description: string, categories: Pick<Category, 'id' | 'name'>[]) {
@@ -92,28 +104,44 @@ export class SmartCategoryService {
     const normalized = this.normalize(description);
     const rules: Array<{ keywords: string[]; categoryNames: string[]; type?: TransactionType }> = [
       {
-        keywords: ['ifood', 'restaurante', 'lanchonete', 'mercado', 'supermercado', 'padaria', 'acougue'],
-        categoryNames: ['alimentacao', 'comida', 'mercado'],
+        keywords: [
+          'ifood', 'rappi', 'restaurante', 'lanchonete', 'delivery', 'mercado', 'supermercado',
+          'atacadao', 'assai', 'carrefour', 'padaria', 'acougue',
+        ],
+        categoryNames: ['alimentacao', 'comida', 'mercado', 'supermercado'],
         type: TransactionType.EXPENSE,
       },
       {
-        keywords: ['uber', '99', 'posto', 'combustivel', 'estacionamento', 'metro', 'onibus'],
-        categoryNames: ['transporte', 'carro'],
+        keywords: [
+          'uber', '99', 'taxi', 'posto', 'combustivel', 'gasolina', 'etanol', 'estacionamento',
+          'pedagio', 'metro', 'onibus', 'passagem',
+        ],
+        categoryNames: ['transporte', 'carro', 'mobilidade'],
         type: TransactionType.EXPENSE,
       },
       {
-        keywords: ['farmacia', 'drogaria', 'medico', 'hospital', 'consulta'],
-        categoryNames: ['saude'],
+        keywords: ['farmacia', 'drogaria', 'remedio', 'medicamento', 'medico', 'hospital', 'consulta', 'exame'],
+        categoryNames: ['saude', 'farmacia'],
         type: TransactionType.EXPENSE,
       },
       {
-        keywords: ['netflix', 'spotify', 'cinema', 'prime video', 'youtube', 'lazer'],
-        categoryNames: ['lazer', 'assinaturas'],
+        keywords: ['netflix', 'spotify', 'cinema', 'prime video', 'youtube premium', 'disney', 'hbo', 'globoplay'],
+        categoryNames: ['assinaturas', 'lazer', 'entretenimento'],
         type: TransactionType.EXPENSE,
       },
       {
-        keywords: ['aluguel', 'condominio', 'energia', 'luz', 'agua', 'internet'],
-        categoryNames: ['moradia', 'casa', 'contas'],
+        keywords: ['aluguel', 'condominio', 'energia', 'luz', 'agua', 'internet', 'telefone', 'celular', 'gas'],
+        categoryNames: ['moradia', 'casa', 'contas', 'contas da casa'],
+        type: TransactionType.EXPENSE,
+      },
+      {
+        keywords: ['faculdade', 'escola', 'curso', 'livro', 'material escolar', 'udemy', 'alura'],
+        categoryNames: ['educacao', 'estudos', 'cursos'],
+        type: TransactionType.EXPENSE,
+      },
+      {
+        keywords: ['shopee', 'amazon', 'mercado livre', 'magalu', 'roupa', 'calcado'],
+        categoryNames: ['compras', 'vestuario', 'outros'],
         type: TransactionType.EXPENSE,
       },
       {
@@ -125,7 +153,7 @@ export class SmartCategoryService {
 
     for (const rule of rules) {
       if (rule.type && rule.type !== type) continue;
-      if (!rule.keywords.some((keyword) => normalized.includes(keyword))) continue;
+      if (!rule.keywords.some((keyword) => this.containsTerm(normalized, keyword))) continue;
       const matched = categories.find((category) =>
         rule.categoryNames.includes(this.normalize(category.name)),
       );
@@ -137,9 +165,12 @@ export class SmartCategoryService {
   private preferenceKeys(value: string): string[] {
     const normalized = this.preferenceKey(value);
     if (!normalized) return [];
-    const tokens = normalized.split(' ').filter((token) => token.length >= 3);
+    const tokens = normalized
+      .split(' ')
+      .filter((token) => token.length >= 3 && !this.ignoredPreferenceTokens.has(token) && !/^\d+$/.test(token));
     const compact = tokens.slice(0, 4).join(' ');
-    return [...new Set([normalized, compact, ...tokens.slice(0, 6)])].filter(Boolean);
+    const distinctiveTokens = tokens.filter((token) => token.length >= 4).slice(0, 6);
+    return [...new Set([normalized, compact, ...distinctiveTokens])].filter(Boolean);
   }
 
   private preferenceKey(value: string | null | undefined): string | null {
@@ -149,5 +180,10 @@ export class SmartCategoryService {
 
   private normalize(value: string): string {
     return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+  }
+
+  private containsTerm(normalizedText: string, normalizedTerm: string): boolean {
+    const escaped = normalizedTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(`(^|\\s)${escaped}(?=\\s|$)`).test(normalizedText.replace(/[^a-z0-9 ]/g, ' '));
   }
 }

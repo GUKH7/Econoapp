@@ -15,6 +15,15 @@ interface DashboardSummary {
     transactionCount: number;
   }>;
   cashFlow: Array<{ date: string; income: number; expense: number }>;
+  spendingByTime: SpendingByTime;
+}
+
+interface SpendingTimeRow { period: string; categoryName: string; total: number; transactionCount: number; }
+export interface SpendingByTime {
+  sampleSize: number;
+  hasEnoughData: boolean;
+  peakPeriod: string | null;
+  periods: Array<{ key: string; label: string; range: string; total: number; transactionCount: number; percentage: number; topCategory: string | null; topCategoryTotal: number }>;
 }
 
 @Injectable()
@@ -39,7 +48,7 @@ export class DashboardService {
     const scopeWhere = scope ? { scope } : {};
 
     // ── Fase 1: todas as queries independentes em paralelo ───────────────────
-    const [incomeAgg, expenseAgg, categoryGroups, channelGroups, cashFlowRaw] = await Promise.all([
+    const [incomeAgg, expenseAgg, categoryGroups, channelGroups, cashFlowRaw, spendingTimeRaw] = await Promise.all([
       // Soma das receitas
       this.prisma.transaction.aggregate({
         where: { userId, type: 'INCOME', ...dateWhere, ...scopeWhere },
@@ -83,6 +92,27 @@ export class DashboardService {
             ORDER BY date ASC
           `,
       ),
+      this.prisma.$queryRaw<SpendingTimeRow[]>(Prisma.sql`
+        SELECT
+          CASE
+            WHEN EXTRACT(HOUR FROM t."date" AT TIME ZONE 'America/Sao_Paulo') < 6 THEN 'DAWN'
+            WHEN EXTRACT(HOUR FROM t."date" AT TIME ZONE 'America/Sao_Paulo') < 12 THEN 'MORNING'
+            WHEN EXTRACT(HOUR FROM t."date" AT TIME ZONE 'America/Sao_Paulo') < 18 THEN 'AFTERNOON'
+            ELSE 'EVENING'
+          END AS period,
+          c."name" AS "categoryName",
+          SUM(t."amount")::float AS total,
+          COUNT(t."id")::int AS "transactionCount"
+        FROM "Transaction" t
+        INNER JOIN "Category" c ON c."id" = t."categoryId"
+        WHERE t."userId" = ${userId}::uuid
+          AND t."type" = 'EXPENSE'::"TransactionType"
+          AND t."source" NOT IN ('CSV'::"TransactionSource", 'RECURRENT'::"TransactionSource")
+          ${startDate ? Prisma.sql`AND t."date" >= ${startOfDayUtc(toUtcDate(startDate))}` : Prisma.empty}
+          ${endDate ? Prisma.sql`AND t."date" <= ${endOfDayUtc(toUtcDate(endDate))}` : Prisma.empty}
+          ${scope ? Prisma.sql`AND t."scope" = ${scope}::"FinancialScope"` : Prisma.empty}
+        GROUP BY period, c."name"
+      `),
     ]);
 
     // ── Totais ───────────────────────────────────────────────────────────────
@@ -142,7 +172,28 @@ export class DashboardService {
       income: Number(row.income),
       expense: Number(row.expense),
     }));
+    const spendingByTime = buildSpendingByTime(spendingTimeRaw);
 
-    return { balance, totalIncome, totalExpense, byCategory, byChannel, cashFlow };
+    return { balance, totalIncome, totalExpense, byCategory, byChannel, cashFlow, spendingByTime };
   }
+}
+
+export function buildSpendingByTime(rows: SpendingTimeRow[]): SpendingByTime {
+  const definitions = [
+    { key: 'DAWN', label: 'Madrugada', range: '0h às 5h59' },
+    { key: 'MORNING', label: 'Manhã', range: '6h às 11h59' },
+    { key: 'AFTERNOON', label: 'Tarde', range: '12h às 17h59' },
+    { key: 'EVENING', label: 'Noite', range: '18h às 23h59' },
+  ];
+  const sampleSize = rows.reduce((sum, row) => sum + Number(row.transactionCount || 0), 0);
+  const grandTotal = rows.reduce((sum, row) => sum + Number(row.total || 0), 0);
+  const periods = definitions.map((definition) => {
+    const periodRows = rows.filter((row) => row.period === definition.key);
+    const total = periodRows.reduce((sum, row) => sum + Number(row.total || 0), 0);
+    const transactionCount = periodRows.reduce((sum, row) => sum + Number(row.transactionCount || 0), 0);
+    const top = [...periodRows].sort((left, right) => Number(right.total) - Number(left.total))[0];
+    return { ...definition, total, transactionCount, percentage: grandTotal > 0 ? Number(((total / grandTotal) * 100).toFixed(1)) : 0, topCategory: top?.categoryName ?? null, topCategoryTotal: Number(top?.total ?? 0) };
+  });
+  const peak = [...periods].sort((left, right) => right.total - left.total)[0];
+  return { sampleSize, hasEnoughData: sampleSize >= 5, peakPeriod: peak && peak.total > 0 ? peak.key : null, periods };
 }

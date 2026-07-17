@@ -72,6 +72,15 @@ export interface DashboardSummaryResponse {
     income: number;
     expense: number;
   }>;
+  spendingByTime: {
+    sampleSize: number;
+    hasEnoughData: boolean;
+    peakPeriod: string | null;
+    periods: Array<{
+      key: string; label: string; range: string; total: number; transactionCount: number;
+      percentage: number; topCategory: string | null; topCategoryTotal: number;
+    }>;
+  };
 }
 
 export interface ApiEnvelope<T> {

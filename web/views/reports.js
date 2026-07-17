@@ -49,6 +49,7 @@ export function reportsView() {
       : currentTotals.income >= previousTotals.income
         ? `Receitas evoluíram ${Math.abs(percentChange(currentTotals.income, previousTotals.income))}% no comparativo mensal.`
         : `Receitas caíram ${Math.abs(percentChange(currentTotals.income, previousTotals.income))}% no comparativo mensal.`;
+  const spendingByTime = state.dashboard?.spendingByTime;
   return `
     <div class="report-tabs">
       ${reportTab('EXPENSE', 'Gastos')}
@@ -102,6 +103,7 @@ export function reportsView() {
         <div><span class="row-icon expense-bg">${icon('target')}</span><p>${escapeHtml(expenseInsight)}</p></div>
       </div>
     </article>
+    ${reportType === 'EXPENSE' ? spendingTimeReport(spendingByTime) : ''}
     <div class="split">
       <article class="card report-panel">
         <div class="panel-title">
@@ -142,6 +144,34 @@ export function reportsView() {
       </article>
     </div>
   `;
+}
+
+function spendingTimeReport(report) {
+  if (!report?.sampleSize) {
+    return `<article class="card time-report">
+      <span class="eyebrow">Comportamento</span>
+      <h2>Quando você mais gasta</h2>
+      <p>Ainda não há gastos com horário suficiente para identificar um padrão.</p>
+    </article>`;
+  }
+  const peak = report.periods.find((period) => period.key === report.peakPeriod);
+  const insight = report.hasEnoughData && peak
+    ? `Você costuma gastar mais à ${peak.label.toLowerCase()}, principalmente com ${peak.topCategory || 'gastos diversos'}.`
+    : `Já analisamos ${report.sampleSize} gastos, mas precisamos de pelo menos 5 para indicar um hábito com segurança.`;
+  return `<article class="card time-report">
+    <div class="panel-title"><div>
+      <span class="eyebrow">Comportamento</span>
+      <h2>Quando você mais gasta</h2>
+      <p>${escapeHtml(insight)}</p>
+    </div></div>
+    <div class="time-report-list">
+      ${report.periods.map((period) => `<div class="time-report-row ${period.key === report.peakPeriod ? 'active' : ''}">
+        <div><strong>${escapeHtml(period.label)}</strong><small>${escapeHtml(period.range)} · ${period.transactionCount} ${period.transactionCount === 1 ? 'gasto' : 'gastos'}</small></div>
+        <div class="time-report-value"><strong>${money.format(period.total)}</strong><small>${period.percentage}%${period.topCategory ? ` · ${escapeHtml(period.topCategory)}` : ''}</small></div>
+      </div>`).join('')}
+    </div>
+    <small class="time-report-note">Importações CSV e lançamentos recorrentes não entram nesta análise de horário.</small>
+  </article>`;
 }
 
 function reportTab(type, label) {
