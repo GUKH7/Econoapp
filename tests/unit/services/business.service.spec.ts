@@ -1,4 +1,4 @@
-import { BusinessCostType, BusinessEntryStatus, BusinessEntryType, RecurrenceFrequency } from '@prisma/client';
+import { BusinessContactType, BusinessCostType, BusinessEntryStatus, BusinessEntryType, RecurrenceFrequency } from '@prisma/client';
 import { describe, expect, it, vi } from 'vitest';
 import { BusinessService } from '@/modules/business/business.service';
 
@@ -42,6 +42,7 @@ function serviceFixture() {
           { id: 'p1', type: BusinessEntryType.PAYABLE, amount: 600, dueDate: new Date('2026-07-22T00:00:00.000Z'), categoryId: 'category-1' },
         ])
         .mockResolvedValueOnce([]),
+      updateMany: vi.fn(),
     },
   };
   const transactions = { create: vi.fn() };
@@ -121,5 +122,17 @@ describe('BusinessService', () => {
 
     expect(contacts[0]).toMatchObject({ name: 'João', totalSold: 700, totalPurchased: 0, pendingAmount: 200 });
     expect(contacts[0]?.lastMovementAt).toEqual(new Date('2026-07-11'));
+  });
+
+  it('vincula ao novo contato as contas antigas com o mesmo nome', async () => {
+    const { prisma, service } = serviceFixture();
+    prisma.businessContact.create.mockResolvedValue({ id: 'contact-1', userId: 'user-1', type: 'CLIENT', name: 'João', phone: '11999999999', email: null, notes: null });
+
+    await service.createContact('user-1', { type: BusinessContactType.CLIENT, name: 'João', phone: '11999999999' });
+
+    expect(prisma.businessEntry.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ userId: 'user-1', contactId: null }),
+      data: { contactId: 'contact-1' },
+    }));
   });
 });

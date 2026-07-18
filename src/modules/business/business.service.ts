@@ -276,6 +276,10 @@ export class BusinessService {
         notes: input.notes?.trim() || null,
       },
     });
+    await this.prisma.businessEntry.updateMany({
+      where: { userId, contactId: null, counterparty: { equals: contact.name, mode: 'insensitive' } },
+      data: { contactId: contact.id },
+    });
     return { ...contact, totalSold: 0, totalPurchased: 0, pendingAmount: 0, lastMovementAt: null };
   }
 
