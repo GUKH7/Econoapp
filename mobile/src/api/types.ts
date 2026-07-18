@@ -56,12 +56,14 @@ export interface DashboardSummaryResponse {
   totalIncome: number;
   totalExpense: number;
   byCategory: Array<{
+    type: 'INCOME' | 'EXPENSE';
     categoryName: string;
     color: string;
     total: number;
     percentage: number;
   }>;
   byChannel: Array<{
+    type: 'INCOME' | 'EXPENSE';
     channelName: string;
     total: number;
     netTotal: number;

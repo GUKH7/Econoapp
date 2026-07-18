@@ -4,8 +4,9 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
 import { AuthGuard } from '@/common/guards/auth.guard';
 import { JwtPayload } from '@/common/types';
-import { DashboardSummaryResponse } from '@/common/types/response.types';
+import { DashboardSummaryResponse, FinancialReportResponse } from '@/common/types/response.types';
 import { DashboardService } from './dashboard.service';
+import { FinancialReportQueryDto } from './dto/financial-report-query.dto';
 
 @ApiTags('Dashboard')
 @ApiBearerAuth('access-token')
@@ -13,6 +14,16 @@ import { DashboardService } from './dashboard.service';
 @Controller('dashboard')
 export class DashboardController {
   constructor(@Inject(DashboardService) private readonly dashboardService: DashboardService) {}
+
+  @ApiOperation({ summary: 'Retorna o relatório financeiro agregado para um período' })
+  @Get('reports')
+  async report(
+    @CurrentUser() user: JwtPayload,
+    @Query() query: FinancialReportQueryDto,
+  ): Promise<{ data: FinancialReportResponse }> {
+    const data = await this.dashboardService.getReport(user.sub, query.startDate, query.endDate, query.scope);
+    return { data };
+  }
 
   @ApiOperation({ summary: 'Retorna o resumo financeiro do usuário autenticado' })
   @Get()
