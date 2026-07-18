@@ -31,6 +31,8 @@ vi.mock('@/config/env', () => ({
     GMAIL_FROM_EMAIL: '',
     PASSWORD_RESET_URL: 'http://localhost:5173/?resetPassword=1',
     WHATSAPP_ADMIN_PHONES: '11999999999',
+    ADMIN_PANEL_LOGIN: 'aleta0129',
+    ADMIN_PANEL_PASSWORD: '123',
     PORT: 3001,
     NODE_ENV: 'test',
   },
@@ -44,9 +46,13 @@ vi.mock('bcryptjs', () => ({
 vi.mock('node:crypto', () => ({
   randomUUID: vi.fn().mockReturnValue('mock-refresh-token-uuid'),
   randomBytes: vi.fn().mockReturnValue({ toString: () => 'mock-password-reset-token' }),
-  createHash: vi.fn().mockReturnValue({
-    update: vi.fn().mockReturnValue({ digest: vi.fn().mockReturnValue('mock-token-hash') }),
-  }),
+  createHash: vi.fn().mockImplementation(() => ({
+    update: vi.fn().mockImplementation((value: string) => ({
+      digest: vi.fn().mockImplementation((encoding?: string) =>
+        encoding === 'hex' ? 'mock-token-hash' : Buffer.from(value)),
+    })),
+  })),
+  timingSafeEqual: vi.fn().mockImplementation((left: Buffer, right: Buffer) => left.equals(right)),
 }));
 
 vi.mock('google-auth-library', () => ({
@@ -79,6 +85,8 @@ const mockUser = {
   email: 'gustavo@example.com',
   passwordHash: 'hashed_password',
   googleSubject: null,
+  accessStatus: 'ACTIVE' as const,
+  paidUntil: null,
   createdAt: new Date('2024-01-01T00:00:00Z'),
   updatedAt: new Date('2024-01-01T00:00:00Z'),
 };
@@ -318,6 +326,25 @@ describe('AuthService', () => {
     });
   });
 
+  describe('adminLogin', () => {
+    it('autentica a credencial exclusiva e vincula a sessão ao administrador', async () => {
+      mockPrisma.user.findFirst.mockResolvedValue(mockUser);
+
+      const result = await service.adminLogin({ login: 'aleta0129', password: '123' });
+
+      expect(result).toEqual({ accessToken: 'mock-access-token', refreshToken: 'mock-refresh-token-uuid' });
+      expect(mockPrisma.user.findFirst).toHaveBeenCalledWith({
+        where: { phone: { in: expect.arrayContaining(['11999999999', '5511999999999']) } },
+      });
+    });
+
+    it('rejeita login ou senha administrativa incorretos', async () => {
+      await expect(service.adminLogin({ login: 'aleta0129', password: 'errada' }))
+        .rejects.toThrow('Login ou senha administrativa inválidos');
+      expect(mockPrisma.user.findFirst).not.toHaveBeenCalled();
+    });
+  });
+
   // =========================================================================
   // refresh
   // =========================================================================
@@ -405,6 +432,8 @@ describe('AuthService', () => {
         phone: '11999999999',
         email: 'gustavo@example.com',
         isWhatsappAdmin: true,
+        accessStatus: 'ACTIVE',
+        paidUntil: null,
       });
       expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({
         where: { id: 'user-1' },

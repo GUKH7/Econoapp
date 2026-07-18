@@ -136,6 +136,11 @@ export async function loadData() {
   const client = api();
   const me = await client.me();
   state.user = me.data;
+  const accessExpired = Boolean(state.user?.paidUntil && new Date(state.user.paidUntil) < new Date());
+  if ((state.user?.accessStatus && state.user.accessStatus !== 'ACTIVE') || accessExpired) {
+    state.loadWarnings = [];
+    return { warnings: [] };
+  }
 
   const resources = [
     ['dashboard', client.dashboard()],

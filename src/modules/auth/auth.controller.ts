@@ -16,6 +16,8 @@ import { GoogleLoginDto } from './dto/google-login.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { DeleteAccountDto } from './dto/delete-account.dto';
+import { AdminLoginDto } from './dto/admin-login.dto';
+import { AllowInactive } from '@/common/decorators/allow-inactive.decorator';
 
 class RefreshDto {
   @IsString()
@@ -41,6 +43,15 @@ export class AuthController {
   @Post('login')
   async login(@Body() dto: LoginDto): Promise<{ data: AuthTokensResponse }> {
     const data = await this.authService.login(dto);
+    return { data };
+  }
+
+  @ApiOperation({ summary: 'Autenticar no painel administrativo' })
+  @Public()
+  @Throttle({ default: { limit: env.NODE_ENV === 'development' ? 30 : 5, ttl: 60000 } })
+  @Post('admin-login')
+  async adminLogin(@Body() dto: AdminLoginDto): Promise<{ data: AuthTokensResponse }> {
+    const data = await this.authService.adminLogin(dto);
     return { data };
   }
 
@@ -84,6 +95,7 @@ export class AuthController {
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Encerrar sessão e invalidar refresh token' })
   @UseGuards(AuthGuard)
+  @AllowInactive()
   @Post('logout')
   @HttpCode(204)
   async logout(@Body() dto: RefreshDto): Promise<void> {
@@ -93,6 +105,7 @@ export class AuthController {
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Retornar dados do usuário autenticado' })
   @UseGuards(AuthGuard)
+  @AllowInactive()
   @Get('me')
   async me(@CurrentUser() user: JwtPayload): Promise<{ data: UserResponse }> {
     const data = await this.authService.me(user.sub);
@@ -101,6 +114,7 @@ export class AuthController {
 
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Atualizar perfil do usuário autenticado' })
+  @AllowInactive()
   @Patch('me')
   async updateProfile(
     @CurrentUser() user: JwtPayload,
@@ -112,6 +126,7 @@ export class AuthController {
 
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Exportar uma cópia dos dados da conta' })
+  @AllowInactive()
   @Get('me/export')
   async exportAccount(@CurrentUser() user: JwtPayload): Promise<{ data: unknown }> {
     const data = await this.authService.exportAccountData(user.sub);
@@ -120,6 +135,7 @@ export class AuthController {
 
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Excluir permanentemente a conta autenticada' })
+  @AllowInactive()
   @Delete('me')
   @HttpCode(204)
   async deleteAccount(

@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { hash, compare } from 'bcryptjs';
-import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import nodemailer from 'nodemailer';
 import { OAuth2Client } from 'google-auth-library';
 import { PrismaService } from '@/config/database';
@@ -16,6 +16,7 @@ import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { GoogleLoginDto } from './dto/google-login.dto';
+import { AdminLoginDto } from './dto/admin-login.dto';
 
 interface AuthTokens {
   accessToken: string;
@@ -121,6 +122,19 @@ export class AuthService {
     return this.issueTokens(user.id, user.phone, user.email ?? undefined);
   }
 
+  async adminLogin(input: AdminLoginDto): Promise<AuthTokens> {
+    const loginMatches = secureValueMatches(input.login, env.ADMIN_PANEL_LOGIN);
+    const passwordMatches = secureValueMatches(input.password, env.ADMIN_PANEL_PASSWORD);
+    if (!env.ADMIN_PANEL_LOGIN || !env.ADMIN_PANEL_PASSWORD || !loginMatches || !passwordMatches) {
+      throw new UnauthorizedException('Login ou senha administrativa inválidos');
+    }
+
+    const adminPhones = [...new Set(env.WHATSAPP_ADMIN_PHONES.split(',').flatMap(phoneCandidates))];
+    const user = await this.prisma.user.findFirst({ where: { phone: { in: adminPhones } } });
+    if (!user) throw new UnauthorizedException('Conta administrativa não configurada');
+    return this.issueTokens(user.id, user.phone, user.email ?? undefined);
+  }
+
   async googleLogin(input: GoogleLoginDto): Promise<AuthTokens | { requiresPhone: true }> {
     const clientIds = googleClientIds();
     if (!clientIds.length) {
@@ -200,6 +214,8 @@ export class AuthService {
     phone: string;
     email: string | null;
     isWhatsappAdmin: boolean;
+    accessStatus: 'PENDING' | 'ACTIVE' | 'SUSPENDED';
+    paidUntil: string | null;
   }> {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) {
@@ -212,13 +228,22 @@ export class AuthService {
       phone: user.phone,
       email: user.email,
       isWhatsappAdmin: isWhatsappAdminPhone(user.phone),
+      accessStatus: user.accessStatus,
+      paidUntil: user.paidUntil?.toISOString() ?? null,
     };
   }
 
   async updateProfile(
     userId: string,
     input: UpdateProfileDto,
-  ): Promise<{ id: string; name: string; phone: string; email: string | null }> {
+  ): Promise<{
+    id: string;
+    name: string;
+    phone: string;
+    email: string | null;
+    accessStatus: 'PENDING' | 'ACTIVE' | 'SUSPENDED';
+    paidUntil: string | null;
+  }> {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new NotFoundException('Usuário não encontrado');
 
@@ -228,7 +253,14 @@ export class AuthService {
     if (input.password !== undefined) data.passwordHash = await hash(input.password, 10);
 
     const updated = await this.prisma.user.update({ where: { id: userId }, data });
-    return { id: updated.id, name: updated.name, phone: updated.phone, email: updated.email };
+    return {
+      id: updated.id,
+      name: updated.name,
+      phone: updated.phone,
+      email: updated.email,
+      accessStatus: updated.accessStatus,
+      paidUntil: updated.paidUntil?.toISOString() ?? null,
+    };
   }
 
   async logout(refreshToken: string): Promise<void> {
@@ -411,6 +443,12 @@ export class AuthService {
 
 function passwordResetTokenHash(token: string): string {
   return createHash('sha256').update(token).digest('hex');
+}
+
+function secureValueMatches(received: string, expected: string): boolean {
+  const receivedHash = createHash('sha256').update(received).digest();
+  const expectedHash = createHash('sha256').update(expected).digest();
+  return timingSafeEqual(receivedHash, expectedHash);
 }
 
 export function isWhatsappAdminPhone(phone: string): boolean {

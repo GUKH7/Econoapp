@@ -37,6 +37,10 @@ services:
         value: /send-message
       - key: WHATSAPP_ADMIN_PHONES
         value: 5511934736234
+      - key: ADMIN_PANEL_LOGIN
+        value: aleta0129
+      - key: ADMIN_PANEL_PASSWORD
+        sync: false
       - key: WHATSAPP_WEBHOOK_TOKEN
         sync: false
       - key: WHATSAPP_BUDGET_ALERT_TOKEN
@@ -50,7 +54,7 @@ services:
       - key: NODE_ENV
         value: production
       - key: CORS_ORIGIN
-        value: https://econoapp-web.onrender.com
+        value: https://econoapp-web.onrender.com,https://econoapp-admin.onrender.com
 
   - type: web
     name: econoapp-web
@@ -68,4 +72,19 @@ services:
         value: https://econoapp-backend.onrender.com
       - key: GOOGLE_CLIENT_ID
         sync: false
+
+  - type: web
+    name: econoapp-admin
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile.admin
+    dockerContext: .
+    healthCheckPath: /health
+    envVars:
+      - key: WEB_PORT
+        value: 5174
+      - key: WEB_API_URL
+        value: https://econoapp-admin.onrender.com/api/v1
+      - key: API_TARGET
+        value: https://econoapp-backend.onrender.com
 

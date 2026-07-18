@@ -495,6 +495,11 @@ function cancelGooglePhone() {
 }
 
 function renderApp() {
+  const accessExpired = Boolean(state.user?.paidUntil && new Date(state.user.paidUntil) < new Date());
+  if ((state.user?.accessStatus && state.user.accessStatus !== 'ACTIVE') || accessExpired) {
+    renderAccessPending();
+    return;
+  }
   const totals = scopedTotals();
   app.innerHTML = `
     <section class="shell" data-swipe-shell>
@@ -540,6 +545,25 @@ function renderApp() {
 
   bindShellEvents();
   bindViewEvents();
+}
+
+function renderAccessPending() {
+  const suspended = state.user?.accessStatus === 'SUSPENDED';
+  const expired = Boolean(state.user?.paidUntil && new Date(state.user.paidUntil) < new Date());
+  app.innerHTML = `
+    <main class="auth-shell">
+      <section class="card" style="max-width:520px;margin:auto;text-align:center;padding:32px 24px">
+        <img class="din-mark" src="./assets/din-mark.svg" alt="Din" />
+          <span class="eyebrow">Acesso ${expired ? 'expirado' : suspended ? 'suspenso' : 'em análise'}</span>
+          <h1>${expired ? 'Seu período de acesso terminou' : suspended ? 'Sua conta está temporariamente suspensa' : 'Seu cadastro foi recebido'}</h1>
+          <p class="muted">${expired ? 'Renove o pagamento para continuar usando o app e o bot do Din.' : suspended ? 'Fale com o suporte para verificar o pagamento e reativar sua conta.' : 'Após a confirmação do pagamento, o administrador liberará seu acesso ao app e ao bot do Din.'}</p>
+        <button class="button secondary" type="button" data-pending-logout>Sair da conta</button>
+      </section>
+    </main>`;
+  document.querySelector('[data-pending-logout]')?.addEventListener('click', () => {
+    clearSession();
+    renderAuth();
+  });
 }
 
 function assistantInputHtml() {

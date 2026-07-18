@@ -1,0 +1,10 @@
+FROM node:20-alpine
+
+WORKDIR /app
+
+COPY admin-web ./admin-web
+
+ENV WEB_PORT=5174
+EXPOSE 5174
+
+CMD ["node", "admin-web/server.js"]

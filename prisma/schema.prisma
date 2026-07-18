@@ -44,6 +44,12 @@ enum ScheduledNotificationType {
   CREDIT_CARD_DUE
 }
 
+enum AccountAccessStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+}
+
 model User {
   id                     String                          @id @default(uuid()) @db.Uuid
   name                   String
@@ -52,6 +58,8 @@ model User {
   email                  String?                         @unique
   passwordHash           String?
   googleSubject          String?                         @unique
+  accessStatus           AccountAccessStatus             @default(PENDING)
+  paidUntil              DateTime?                       @db.Timestamptz(6)
   createdAt              DateTime                        @default(now()) @db.Timestamptz(6)
   updatedAt              DateTime                        @updatedAt @db.Timestamptz(6)
   refreshTokens          RefreshToken[]
@@ -67,6 +75,25 @@ model User {
   whatsappConversation   WhatsappConversation?
   dinActivityEvents      DinActivityEvent[]
   notificationDeliveries ScheduledNotificationDelivery[]
+  payments               Payment[]                       @relation("UserPayments")
+  paymentsRecorded       Payment[]                       @relation("PaymentRecorder")
+}
+
+model Payment {
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String   @db.Uuid
+  recordedById String   @db.Uuid
+  amount       Decimal  @db.Decimal(15, 2)
+  paidAt       DateTime @db.Timestamptz(6)
+  validUntil   DateTime @db.Timestamptz(6)
+  notes        String?
+  createdAt    DateTime @default(now()) @db.Timestamptz(6)
+
+  user       User @relation("UserPayments", fields: [userId], references: [id], onDelete: Cascade)
+  recordedBy User @relation("PaymentRecorder", fields: [recordedById], references: [id], onDelete: Restrict)
+
+  @@index([userId, paidAt])
+  @@index([validUntil])
 }
 
 model PasswordResetToken {
@@ -95,14 +122,14 @@ model RefreshToken {
 }
 
 model SalesChannel {
-  id           String        @id @default(uuid()) @db.Uuid
-  name         String
-  feePercent   Decimal       @db.Decimal(15, 4)
-  isActive     Boolean       @default(true)
-  userId       String        @db.Uuid
-  createdAt    DateTime      @default(now()) @db.Timestamptz(6)
-  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  transactions Transaction[]
+  id                    String                 @id @default(uuid()) @db.Uuid
+  name                  String
+  feePercent            Decimal                @db.Decimal(15, 4)
+  isActive              Boolean                @default(true)
+  userId                String                 @db.Uuid
+  createdAt             DateTime               @default(now()) @db.Timestamptz(6)
+  user                  User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions          Transaction[]
   recurringTransactions RecurringTransaction[]
 
   @@index([userId])
@@ -128,14 +155,14 @@ model CategoryBudget {
 }
 
 model Category {
-  id           String           @id @default(uuid()) @db.Uuid
-  name         String
-  color        String           @default("#6366f1")
-  userId       String           @db.Uuid
-  createdAt    DateTime         @default(now()) @db.Timestamptz(6)
-  user         User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  transactions Transaction[]
-  budgets      CategoryBudget[]
+  id                    String                 @id @default(uuid()) @db.Uuid
+  name                  String
+  color                 String                 @default("#6366f1")
+  userId                String                 @db.Uuid
+  createdAt             DateTime               @default(now()) @db.Timestamptz(6)
+  user                  User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions          Transaction[]
+  budgets               CategoryBudget[]
   recurringTransactions RecurringTransaction[]
 
   @@index([userId])
@@ -159,63 +186,63 @@ model CategoryPreference {
 }
 
 model FinancialAccount {
-  id           String               @id @default(uuid()) @db.Uuid
-  name         String
-  type         FinancialAccountType
-  balance      Decimal              @default(0) @db.Decimal(15, 4)
-  scope        FinancialScope       @default(PERSONAL)
-  isActive     Boolean              @default(true)
-  userId       String               @db.Uuid
-  createdAt    DateTime             @default(now()) @db.Timestamptz(6)
-  updatedAt    DateTime             @updatedAt @db.Timestamptz(6)
-  user         User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
-  transactions Transaction[]
+  id                    String                 @id @default(uuid()) @db.Uuid
+  name                  String
+  type                  FinancialAccountType
+  balance               Decimal                @default(0) @db.Decimal(15, 4)
+  scope                 FinancialScope         @default(PERSONAL)
+  isActive              Boolean                @default(true)
+  userId                String                 @db.Uuid
+  createdAt             DateTime               @default(now()) @db.Timestamptz(6)
+  updatedAt             DateTime               @updatedAt @db.Timestamptz(6)
+  user                  User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions          Transaction[]
   recurringTransactions RecurringTransaction[]
 
   @@index([userId, scope])
 }
 
 model CreditCard {
-  id           String         @id @default(uuid()) @db.Uuid
-  name         String
-  limit        Decimal        @default(0) @db.Decimal(15, 4)
-  closingDay   Int?
-  dueDay       Int?
-  scope        FinancialScope @default(PERSONAL)
-  isActive     Boolean        @default(true)
-  userId       String         @db.Uuid
-  createdAt    DateTime       @default(now()) @db.Timestamptz(6)
-  updatedAt    DateTime       @updatedAt @db.Timestamptz(6)
-  user         User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  transactions Transaction[]
+  id                    String                 @id @default(uuid()) @db.Uuid
+  name                  String
+  limit                 Decimal                @default(0) @db.Decimal(15, 4)
+  closingDay            Int?
+  dueDay                Int?
+  scope                 FinancialScope         @default(PERSONAL)
+  isActive              Boolean                @default(true)
+  userId                String                 @db.Uuid
+  createdAt             DateTime               @default(now()) @db.Timestamptz(6)
+  updatedAt             DateTime               @updatedAt @db.Timestamptz(6)
+  user                  User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions          Transaction[]
   recurringTransactions RecurringTransaction[]
 
   @@index([userId, scope])
 }
 
 model Transaction {
-  id           String            @id @default(uuid()) @db.Uuid
-  description  String
-  amount       Decimal           @db.Decimal(15, 4)
-  netAmount    Decimal           @db.Decimal(15, 4)
-  type         TransactionType
-  source       TransactionSource @default(TELEGRAM)
-  scope        FinancialScope    @default(PERSONAL)
-  categoryId   String            @db.Uuid
-  channelId    String?           @db.Uuid
-  accountId    String?           @db.Uuid
-  creditCardId String?           @db.Uuid
-  recurringRuleId String?        @db.Uuid
-  date         DateTime          @default(now()) @db.Timestamptz(6)
-  userId       String            @db.Uuid
-  importHash   String?
-  createdAt    DateTime          @default(now()) @db.Timestamptz(6)
+  id              String            @id @default(uuid()) @db.Uuid
+  description     String
+  amount          Decimal           @db.Decimal(15, 4)
+  netAmount       Decimal           @db.Decimal(15, 4)
+  type            TransactionType
+  source          TransactionSource @default(TELEGRAM)
+  scope           FinancialScope    @default(PERSONAL)
+  categoryId      String            @db.Uuid
+  channelId       String?           @db.Uuid
+  accountId       String?           @db.Uuid
+  creditCardId    String?           @db.Uuid
+  recurringRuleId String?           @db.Uuid
+  date            DateTime          @default(now()) @db.Timestamptz(6)
+  userId          String            @db.Uuid
+  importHash      String?
+  createdAt       DateTime          @default(now()) @db.Timestamptz(6)
 
-  user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  category   Category          @relation(fields: [categoryId], references: [id], onDelete: Restrict)
-  channel    SalesChannel?     @relation(fields: [channelId], references: [id], onDelete: SetNull)
-  account    FinancialAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
-  creditCard CreditCard?       @relation(fields: [creditCardId], references: [id], onDelete: SetNull)
+  user          User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category      Category              @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  channel       SalesChannel?         @relation(fields: [channelId], references: [id], onDelete: SetNull)
+  account       FinancialAccount?     @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  creditCard    CreditCard?           @relation(fields: [creditCardId], references: [id], onDelete: SetNull)
   recurringRule RecurringTransaction? @relation(fields: [recurringRuleId], references: [id], onDelete: SetNull)
 
   @@unique([userId, importHash])
@@ -230,32 +257,32 @@ model Transaction {
 }
 
 model RecurringTransaction {
-  id              String              @id @default(uuid()) @db.Uuid
-  userId          String              @db.Uuid
-  description     String
-  amount          Decimal             @db.Decimal(15, 4)
-  type            TransactionType
-  scope           FinancialScope      @default(PERSONAL)
-  categoryId      String              @db.Uuid
-  channelId       String?             @db.Uuid
-  accountId       String?             @db.Uuid
-  creditCardId    String?             @db.Uuid
-  frequency       RecurrenceFrequency @default(MONTHLY)
-  interval        Int                 @default(1)
-  startDate       DateTime            @db.Timestamptz(6)
-  nextRunAt       DateTime            @db.Timestamptz(6)
-  endDate         DateTime?           @db.Timestamptz(6)
-  maxOccurrences  Int?
-  generatedCount  Int                 @default(0)
-  isActive        Boolean             @default(true)
-  createdAt       DateTime            @default(now()) @db.Timestamptz(6)
-  updatedAt       DateTime            @updatedAt @db.Timestamptz(6)
+  id             String              @id @default(uuid()) @db.Uuid
+  userId         String              @db.Uuid
+  description    String
+  amount         Decimal             @db.Decimal(15, 4)
+  type           TransactionType
+  scope          FinancialScope      @default(PERSONAL)
+  categoryId     String              @db.Uuid
+  channelId      String?             @db.Uuid
+  accountId      String?             @db.Uuid
+  creditCardId   String?             @db.Uuid
+  frequency      RecurrenceFrequency @default(MONTHLY)
+  interval       Int                 @default(1)
+  startDate      DateTime            @db.Timestamptz(6)
+  nextRunAt      DateTime            @db.Timestamptz(6)
+  endDate        DateTime?           @db.Timestamptz(6)
+  maxOccurrences Int?
+  generatedCount Int                 @default(0)
+  isActive       Boolean             @default(true)
+  createdAt      DateTime            @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime            @updatedAt @db.Timestamptz(6)
 
-  user        User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  category    Category           @relation(fields: [categoryId], references: [id], onDelete: Restrict)
-  channel     SalesChannel?      @relation(fields: [channelId], references: [id], onDelete: SetNull)
-  account     FinancialAccount?  @relation(fields: [accountId], references: [id], onDelete: SetNull)
-  creditCard  CreditCard?        @relation(fields: [creditCardId], references: [id], onDelete: SetNull)
+  user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category     Category          @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  channel      SalesChannel?     @relation(fields: [channelId], references: [id], onDelete: SetNull)
+  account      FinancialAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  creditCard   CreditCard?       @relation(fields: [creditCardId], references: [id], onDelete: SetNull)
   transactions Transaction[]
 
   @@index([userId, isActive, nextRunAt])

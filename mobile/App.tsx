@@ -87,15 +87,17 @@ export default function App() {
   const loadPrivateData = useCallback(async () => {
     setLoading(true);
     try {
-      const [me, summary, transactionList, categoryList, channelList] = await Promise.all([
-        api.me(),
+      const me = await api.me();
+      setUser(me.data);
+      const accessExpired = Boolean(me.data.paidUntil && new Date(me.data.paidUntil) < new Date());
+      if (me.data.accessStatus !== 'ACTIVE' || accessExpired) return;
+      const [summary, transactionList, categoryList, channelList] = await Promise.all([
         api.dashboard(),
         api.listTransactions({ limit: 20 }),
         api.listCategories(),
         api.listChannels(),
       ]);
 
-      setUser(me.data);
       setDashboard(summary.data);
       setTransactions(transactionList.data);
       setCategories(categoryList.data);
@@ -199,6 +201,26 @@ export default function App() {
     );
   }
 
+  const accessExpired = Boolean(user?.paidUntil && new Date(user.paidUntil) < new Date());
+  if ((user?.accessStatus && user.accessStatus !== 'ACTIVE') || accessExpired) {
+    const suspended = user?.accessStatus === 'SUSPENDED';
+    const expired = accessExpired;
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <StatusBar style="dark" />
+        <View style={styles.accessState}>
+          <Image source={require('./assets/adaptive-icon.png')} style={styles.accessMark} />
+          <Text style={styles.accessEyebrow}>{expired ? 'ACESSO EXPIRADO' : suspended ? 'ACESSO SUSPENSO' : 'CADASTRO EM ANÁLISE'}</Text>
+          <Text style={styles.accessTitle}>{expired ? 'Seu período de acesso terminou' : suspended ? 'Sua conta está temporariamente suspensa' : 'Seu cadastro foi recebido'}</Text>
+          <Text style={styles.accessCopy}>{expired ? 'Renove o pagamento para continuar usando o app e o bot do Din.' : suspended ? 'Fale com o suporte para regularizar o pagamento e reativar o Din.' : 'Após a confirmação do pagamento, o administrador liberará seu acesso ao app e ao bot.'}</Text>
+          <TouchableOpacity style={styles.accessButton} onPress={handleLogout}>
+            <Text style={styles.accessButtonText}>Sair da conta</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar style="dark" />
@@ -242,6 +264,49 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  accessState: {
+    alignItems: 'center',
+    flex: 1,
+    justifyContent: 'center',
+    padding: spacing.xl,
+  },
+  accessMark: {
+    borderRadius: 22,
+    height: 88,
+    marginBottom: spacing.lg,
+    width: 88,
+  },
+  accessEyebrow: {
+    color: colors.primary,
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 1,
+  },
+  accessTitle: {
+    color: colors.text,
+    fontSize: 25,
+    fontWeight: '900',
+    marginTop: spacing.sm,
+    textAlign: 'center',
+  },
+  accessCopy: {
+    color: colors.muted,
+    lineHeight: 22,
+    marginTop: spacing.sm,
+    textAlign: 'center',
+  },
+  accessButton: {
+    borderColor: colors.border,
+    borderRadius: 14,
+    borderWidth: 1,
+    marginTop: spacing.xl,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+  },
+  accessButtonText: {
+    color: colors.text,
+    fontWeight: '800',
   },
   header: {
     alignItems: 'center',

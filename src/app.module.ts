@@ -8,6 +8,7 @@ import { env } from '@/config/env';
 import { DatabaseModule } from '@/config/database.module';
 import { HttpExceptionFilter } from '@/common/filters/http-exception.filter';
 import { AuthGuard } from '@/common/guards/auth.guard';
+import { AccountAccessGuard } from '@/common/guards/account-access.guard';
 import { AuthModule } from '@/modules/auth/auth.module';
 import { TransactionModule } from '@/modules/transactions/transaction.module';
 import { ChannelModule } from '@/modules/channels/channel.module';
@@ -19,6 +20,7 @@ import { TelegramModule } from '@/modules/telegram/telegram.module';
 import { WhatsappModule } from '@/modules/whatsapp/whatsapp.module';
 import { BudgetModule } from '@/modules/budgets/budget.module';
 import { AssistantModule } from '@/modules/assistant/assistant.module';
+import { AdminModule } from '@/modules/admin/admin.module';
 import { randomUUID } from 'node:crypto';
 
 @Module({
@@ -68,6 +70,7 @@ import { randomUUID } from 'node:crypto';
     AccountModule,
     BudgetModule,
     AssistantModule,
+    AdminModule,
 
     TelegramModule,
     WhatsappModule,
@@ -86,6 +89,10 @@ import { randomUUID } from 'node:crypto';
     {
       provide: APP_GUARD,
       useClass: AuthGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: AccountAccessGuard,
     },
   ],
 })

@@ -77,6 +77,8 @@ export interface UserResponse {
   phone: string;
   email: string | null;
   isWhatsappAdmin?: boolean;
+  accessStatus: 'PENDING' | 'ACTIVE' | 'SUSPENDED';
+  paidUntil: string | null;
 }
 
 export interface AuthTokensResponse {

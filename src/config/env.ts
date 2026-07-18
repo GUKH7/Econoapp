@@ -18,6 +18,8 @@ const envSchema = z.object({
   WHATSAPP_BOT_API_URL: z.string().url().default('http://64.181.189.107:3001/econoapp'),
   WHATSAPP_BOT_SEND_MESSAGE_PATH: z.string().default('/send-message'),
   WHATSAPP_ADMIN_PHONES: z.string().default('5511934736234'),
+  ADMIN_PANEL_LOGIN: z.string().default(''),
+  ADMIN_PANEL_PASSWORD: z.string().default(''),
   WHATSAPP_WEBHOOK_TOKEN: z.string().default(''),
   WHATSAPP_BUDGET_ALERT_TOKEN: z.string().default(''),
   WHATSAPP_BUDGET_ALERT_INTERVAL_MINUTES: z.coerce.number().int().min(5).default(60),

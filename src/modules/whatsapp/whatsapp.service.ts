@@ -226,6 +226,20 @@ export class WhatsappService {
       return { phone, reply };
     }
 
+    if (user.accessStatus && (user.accessStatus !== 'ACTIVE' || (user.paidUntil && user.paidUntil < new Date()))) {
+      const reply = user.accessStatus === 'SUSPENDED'
+        ? 'Seu acesso ao Din está suspenso. Fale com o suporte para regularizar sua conta.'
+        : user.paidUntil && user.paidUntil < new Date()
+          ? 'Seu período de acesso ao Din terminou. Renove o pagamento para continuar usando o bot.'
+          : 'Seu cadastro está aguardando liberação. Assim que o pagamento for confirmado, o bot será ativado.';
+      await this.finishDinActivityEvent(activityId, phone, {
+        userId: user.id,
+        status: 'ACCESS_BLOCKED',
+        replyText: reply,
+      });
+      return { phone, reply };
+    }
+
     const conversation = await this.getConversation(user.id, phone);
     const recentMessages = this.parseRecentMessages(conversation.recentMessages);
     const pendingValue = this.conversationPendingValue(conversation);
@@ -2844,6 +2858,7 @@ export class WhatsappService {
     phone: string,
     input: {
       eventType?: string;
+      userId?: string;
       status: string;
       replyText: string;
       errorMessage?: string | null;
@@ -2852,6 +2867,7 @@ export class WhatsappService {
     const delivery = await this.safeReply(phone, input.replyText);
     await this.updateDinActivityEvent(id, {
       ...(input.eventType !== undefined ? { eventType: input.eventType } : {}),
+      ...(input.userId !== undefined ? { userId: input.userId } : {}),
       status: input.status,
       sendStatus: delivery.sent ? 'SENT' : 'FAILED',
       replyText: input.replyText,
