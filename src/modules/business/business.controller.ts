@@ -8,6 +8,7 @@ import { BusinessService } from './business.service';
 import { CreateBusinessEntryDto } from './dto/create-business-entry.dto';
 import { CreateBusinessContactDto } from './dto/create-business-contact.dto';
 import { CreateBusinessOfferingDto } from './dto/create-business-offering.dto';
+import { CompleteBusinessOnboardingDto } from './dto/complete-business-onboarding.dto';
 import { SettleBusinessEntryDto } from './dto/settle-business-entry.dto';
 import { UpdateBusinessContactDto } from './dto/update-business-contact.dto';
 import { UpdateBusinessOfferingDto } from './dto/update-business-offering.dto';
@@ -34,6 +35,11 @@ export class BusinessController {
   @Patch('settings')
   async updateSettings(@CurrentUser() user: JwtPayload, @Body() dto: UpdateBusinessSettingsDto) {
     return { data: await this.service.updateSettings(user.sub, dto) };
+  }
+
+  @Post('onboarding')
+  async completeOnboarding(@CurrentUser() user: JwtPayload, @Body() dto: CompleteBusinessOnboardingDto) {
+    return { data: await this.service.completeOnboarding(user.sub, dto) };
   }
 
   @Get('contacts')

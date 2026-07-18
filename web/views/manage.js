@@ -259,9 +259,11 @@ export function manageView() {
     </article>`;
   const businessRows = state.businessEntries.map((entry) => businessEntryRow(entry)).join('');
   const businessSummary = state.businessSummary || {};
+  const businessSettings = state.businessSettings || businessSummary.configuration || {};
   const costCategories = businessSummary.expenseCategories || [];
   const businessResultConfig = `
     <section class="business-result-config">
+      ${businessSettings.onboardingCompleted ? `<div class="business-profile-summary"><div><span class="eyebrow">Perfil empresarial</span><strong>${escapeHtml(businessTypeLabel(businessSettings.businessType))}</strong><small>Meta ${money.format(Number(businessSettings.revenueGoal || 0))} · ${(businessSettings.receivingMethods || []).map(escapeHtml).join(', ')}</small></div><button class="button secondary compact-action" type="button" data-business-onboarding-edit>Editar perfil</button></div>` : ''}
       <div class="panel-title"><div><span class="eyebrow">Resultado empresarial</span><h2>Impostos e tipos de gasto</h2></div></div>
       <p class="muted">Essas informações permitem separar resultado do mês de lucro líquido estimado.</p>
       <form class="form" data-business-tax-form>
@@ -352,6 +354,10 @@ export function manageView() {
 
 function productPerformanceRow(item) {
   return `<div class="product-performance-row"><div><strong>${escapeHtml(item.name)}</strong><small>${Number(item.quantity).toLocaleString('pt-BR')} vendidos · ${money.format(Number(item.netRevenue))} de receita</small></div><div><strong>${money.format(Number(item.margin))}</strong><small>${Number(item.marginPercent).toFixed(1)}% margem</small></div></div>`;
+}
+
+function businessTypeLabel(value) {
+  return ({ COMMERCE: 'Comércio', SERVICES: 'Serviços', FOOD: 'Alimentação', BEAUTY: 'Beleza e bem-estar', FREELANCER: 'Profissional autônomo', OTHER: 'Outro negócio' })[value] || 'Negócio';
 }
 
 function businessOfferingRow(offering) {

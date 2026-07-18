@@ -107,6 +107,8 @@ export function api() {
       request(`/transactions/export/csv?scope=${state.scope}`, { method: 'GET', raw: true, timeoutMs: 120000 }),
     recurringTransactions: () => request(`/transactions/recurring?scope=${state.scope}`),
     businessSummary: () => request('/business/summary'),
+    businessSettings: () => request('/business/settings'),
+    completeBusinessOnboarding: (payload) => request('/business/onboarding', { method: 'POST', body: JSON.stringify(payload) }),
     businessEntries: () => request('/business/entries'),
     businessContacts: () => request('/business/contacts'),
     createBusinessContact: (payload) =>
@@ -184,7 +186,7 @@ export async function loadData() {
     ['recurring', client.recurringTransactions()],
     ['assistant', client.assistantActivity()],
     ...(state.scope === 'BUSINESS'
-      ? [['businessSummary', client.businessSummary()], ['businessEntries', client.businessEntries()], ['businessContacts', client.businessContacts()], ['businessOfferings', client.businessOfferings()], ['productReport', client.productReport()], ['businessReport', client.businessReport()]]
+      ? [['businessSummary', client.businessSummary()], ['businessSettings', client.businessSettings()], ['businessEntries', client.businessEntries()], ['businessContacts', client.businessContacts()], ['businessOfferings', client.businessOfferings()], ['productReport', client.productReport()], ['businessReport', client.businessReport()]]
       : []),
   ];
   const results = await Promise.allSettled(resources.map(([, promise]) => promise));
@@ -214,6 +216,22 @@ export async function loadData() {
     state.assistantMessages = loaded.assistant?.messages || [];
   }
   if ('businessSummary' in loaded) state.businessSummary = loaded.businessSummary;
+  if ('businessSettings' in loaded) {
+    state.businessSettings = loaded.businessSettings;
+    if (state.scope === 'BUSINESS' && !loaded.businessSettings?.onboardingCompleted && !state.businessOnboardingOpen) {
+      state.businessOnboardingDraft = {
+        businessType: loaded.businessSettings?.businessType || '',
+        salesChannels: loaded.businessSettings?.salesChannels || [],
+        recurringExpenses: loaded.businessSettings?.recurringExpenses || [],
+        receivingMethods: loaded.businessSettings?.receivingMethods || [],
+        revenueGoal: loaded.businessSettings?.revenueGoal ? Number(loaded.businessSettings.revenueGoal).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '',
+        reserveTaxes: Number(loaded.businessSettings?.taxRate || 0) > 0,
+        taxRate: Number(loaded.businessSettings?.taxRate || 6).toLocaleString('pt-BR'),
+      };
+      state.businessOnboardingStep = 0;
+      state.businessOnboardingOpen = true;
+    }
+  }
   if ('businessEntries' in loaded) state.businessEntries = loaded.businessEntries || [];
   if ('businessContacts' in loaded) state.businessContacts = loaded.businessContacts || [];
   if ('businessOfferings' in loaded) state.businessOfferings = loaded.businessOfferings || [];

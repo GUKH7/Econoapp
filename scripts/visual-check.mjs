@@ -163,6 +163,9 @@ const apiFixtures = {
     },
   },
   '/api/v1/transactions/recurring': { data: [] },
+  '/api/v1/business/settings': {
+    data: { taxRate: 0, taxConfigured: false, businessType: null, salesChannels: [], recurringExpenses: [], receivingMethods: [], revenueGoal: 0, onboardingCompleted: false },
+  },
   '/api/v1/business/summary': {
     data: {
       availableBalance: 8400,
@@ -175,7 +178,7 @@ const apiFixtures = {
       estimatedResult: 7204,
       resultLabel: 'Lucro líquido estimado',
       configurationComplete: true,
-      configuration: { taxRate: 6, taxConfigured: true, unclassifiedAmount: 0 },
+      configuration: { taxRate: 6, taxConfigured: true, unclassifiedAmount: 0, businessType: 'SERVICES', receivingMethods: ['Pix', 'Cartão'], revenueGoal: 20000, revenueGoalProgress: 66, revenueGoalGap: 6800, onboardingCompleted: true },
       statement: {
         grossRevenue: 13200,
         channelFees: 600,
@@ -236,6 +239,7 @@ const apiFixtures = {
   '/api/v1/business/reports': {
     data: {
       period: { startDate: currentMonthDate(1).slice(0, 10), endDate: currentMonthDate(31).slice(0, 10) },
+      profile: { businessType: 'SERVICES', revenueGoal: 20000, revenueGoalProgress: 66, revenueGoalGap: 6800 },
       cashFlow: { availableBalance: 8400, rows: [{ date: currentMonthDate(5).slice(0, 10), income: 2600, expense: 450, net: 2150 }, { date: currentMonthDate(12).slice(0, 10), income: 1800, expense: 920, net: 880 }] },
       incomeStatement: { grossRevenue: 13200, channelFees: 600, netRevenue: 12600, variableExpenses: 2700, fixedExpenses: 4650, unclassifiedExpenses: 0, taxRate: 6, taxProvision: 792, result: 4458 },
       revenueByClient: [{ name: 'Cliente Aurora', revenue: 5400 }, { name: 'Loja Horizonte', revenue: 3200 }],
@@ -352,6 +356,13 @@ async function assertText(page, text) {
   await page.getByText(text, { exact: false }).first().waitFor({ state: 'visible', timeout: 8000 });
 }
 
+async function selectChoice(page, selector) {
+  await page.locator(selector).evaluate((input) => {
+    input.checked = true;
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+}
+
 async function screenshot(page, name) {
   await page.waitForTimeout(350);
   await page.screenshot({ path: path.join(outputDir, `${name}.png`), fullPage: true });
@@ -386,8 +397,19 @@ async function disableMotion(page) {
 }
 
 async function routeApi(page) {
+  let businessOnboardingCompleted = false;
   await page.route('**/api/v1/**', async (route) => {
     const url = new URL(route.request().url());
+    if (url.pathname === '/api/v1/business/onboarding' && route.request().method() === 'POST') {
+      businessOnboardingCompleted = true;
+      const payload = route.request().postDataJSON();
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { ...payload, taxConfigured: true, onboardingCompleted: true } }) });
+      return;
+    }
+    if (url.pathname === '/api/v1/business/settings' && businessOnboardingCompleted) {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { taxRate: 6, taxConfigured: true, businessType: 'SERVICES', salesChannels: ['WhatsApp', 'Instagram'], recurringExpenses: ['Ferramentas e sistemas'], receivingMethods: ['Pix', 'Cartão'], revenueGoal: 20000, onboardingCompleted: true } }) });
+      return;
+    }
     const fixture = apiFixtures[url.pathname];
     if (!fixture) {
       await route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ message: 'Mock ausente' }) });
@@ -460,6 +482,23 @@ async function runViewport(browser, baseUrl, name, viewport) {
   await page.evaluate(() => window.scrollTo(0, 0));
 
   await page.locator('[data-scope] [data-value="BUSINESS"]').click();
+  await assertText(page, 'Qual é o tipo de negócio?');
+  await viewportScreenshot(page, `${name}-business-onboarding`);
+  await selectChoice(page, 'input[name="businessType"][value="SERVICES"]');
+  await page.getByRole('button', { name: 'Continuar' }).click();
+  await selectChoice(page, 'input[name="salesChannels"][value="WhatsApp"]');
+  await selectChoice(page, 'input[name="salesChannels"][value="Instagram"]');
+  await page.getByRole('button', { name: 'Continuar' }).click();
+  await selectChoice(page, 'input[name="recurringExpenses"][value="Ferramentas e sistemas"]');
+  await page.getByRole('button', { name: 'Continuar' }).click();
+  await selectChoice(page, 'input[name="receivingMethods"][value="Pix"]');
+  await selectChoice(page, 'input[name="receivingMethods"][value="Cartão"]');
+  await page.getByRole('button', { name: 'Continuar' }).click();
+  await page.locator('input[name="revenueGoal"]').fill('20000');
+  await page.getByRole('button', { name: 'Continuar' }).click();
+  await selectChoice(page, 'input[name="reserveTaxes"][value="true"]');
+  await page.locator('input[name="taxRate"]').fill('6');
+  await page.getByRole('button', { name: 'Concluir configuração' }).click();
   await assertText(page, 'Caixa do negócio');
   await assertText(page, 'Projeção do caixa');
   await assertText(page, 'Lucro líquido estimado');

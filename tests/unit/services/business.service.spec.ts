@@ -8,6 +8,11 @@ function serviceFixture() {
     category: {
       findFirst: vi.fn().mockResolvedValue({ id: 'category-1' }),
       findMany: vi.fn().mockResolvedValue([{ id: 'category-1', name: 'Operação', businessCostType: BusinessCostType.FIXED }]),
+      create: vi.fn().mockResolvedValue({ id: 'category-new' }),
+    },
+    salesChannel: {
+      findMany: vi.fn().mockResolvedValue([]),
+      create: vi.fn().mockResolvedValue({ id: 'channel-new' }),
     },
     financialAccount: {
       findFirst: vi.fn().mockResolvedValue({ id: 'account-1' }),
@@ -115,6 +120,25 @@ describe('BusinessService', () => {
     vi.useRealTimers();
   });
 
+  it('conclui o onboarding e adapta categorias e canais ao segmento', async () => {
+    const { prisma, service } = serviceFixture();
+    prisma.category.findMany.mockResolvedValue([{ name: 'Aluguel' }]);
+    prisma.businessSettings.upsert.mockResolvedValue({
+      userId: 'user-1', businessType: 'FOOD', salesChannels: ['WhatsApp'], recurringExpenses: ['Aluguel'],
+      receivingMethods: ['Pix'], revenueGoal: 12000, taxRate: 6, taxConfigured: true, onboardingCompleted: true,
+    });
+
+    const settings = await service.completeOnboarding('user-1', {
+      businessType: 'FOOD', salesChannels: [' WhatsApp '], recurringExpenses: ['Aluguel'], receivingMethods: ['Pix'],
+      revenueGoal: 12000, reserveTaxes: true, taxRate: 6,
+    });
+
+    expect(settings).toMatchObject({ businessType: 'FOOD', revenueGoal: 12000, onboardingCompleted: true });
+    expect(prisma.salesChannel.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ name: 'WhatsApp' }) }));
+    expect(prisma.category.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ name: 'Insumos e ingredientes', businessCostType: BusinessCostType.VARIABLE }) }));
+    expect(prisma.category.create).not.toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ name: 'Aluguel' }) }));
+  });
+
   it('resume vendas, compras e pendências por contato', async () => {
     const { prisma, service } = serviceFixture();
     prisma.businessContact.findMany.mockResolvedValue([{
@@ -189,6 +213,7 @@ describe('BusinessService', () => {
     const { service } = serviceFixture();
     const report = {
       period: { startDate: '2026-07-01', endDate: '2026-07-31' },
+      profile: { businessType: 'SERVICES', revenueGoal: 1000, revenueGoalProgress: 50, revenueGoalGap: 500 },
       cashFlow: { availableBalance: 1000, rows: [{ date: '2026-07-10', income: 500, expense: 100, net: 400 }] },
       incomeStatement: { grossRevenue: 500, channelFees: 20, netRevenue: 480, variableExpenses: 100, fixedExpenses: 0, unclassifiedExpenses: 0, taxRate: 5, taxProvision: 25, result: 355 },
       revenueByClient: [{ name: 'Cliente Aurora', revenue: 500 }], revenueByProduct: [{ id: 'p1', name: 'Serviço A', type: BusinessOfferingType.SERVICE, quantity: 1, grossRevenue: 500, netRevenue: 480, estimatedCost: 100, margin: 380, marginPercent: 79.17 }], revenueByChannel: [{ name: 'Direto', revenue: 480 }],

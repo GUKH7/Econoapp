@@ -28,6 +28,7 @@ import {
   viewHtml,
 } from './views.js';
 import { icon } from './views/shared.js';
+import { businessOnboardingHtml } from './views/business-onboarding.js';
 
 const MAIN_TABS = ['dashboard', 'transactions', 'reports', 'more'];
 const GOOGLE_CLIENT_ID = window.ECONOAPP_CONFIG?.googleClientId || '';
@@ -540,11 +541,137 @@ function renderApp() {
       ${state.fabOpen ? fabMenu() : ''}
       ${state.sheetOpen ? transactionSheet() : ''}
       ${state.transactionSuccess ? transactionSuccessSheet() : ''}
+      ${businessOnboardingHtml()}
     </section>
   `;
 
   bindShellEvents();
   bindViewEvents();
+  bindBusinessOnboarding();
+}
+
+async function activateBusinessScope(options = {}) {
+  try {
+    state.businessOnboardingReturnScope = state.scope;
+    const response = await api().businessSettings();
+    const settings = response.data || {};
+    state.businessSettings = settings;
+    state.scope = 'BUSINESS';
+    state.tab = options.tab || 'dashboard';
+    state.manageSection = options.manageSection || '';
+    state.fabOpen = false;
+    saveScopes();
+    if (!settings.onboardingCompleted) {
+      state.businessOnboardingDraft = {
+        businessType: settings.businessType || '',
+        salesChannels: settings.salesChannels || [],
+        recurringExpenses: settings.recurringExpenses || [],
+        receivingMethods: settings.receivingMethods || [],
+        revenueGoal: settings.revenueGoal ? Number(settings.revenueGoal).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '',
+        reserveTaxes: Number(settings.taxRate || 0) > 0,
+        taxRate: Number(settings.taxRate || 6).toLocaleString('pt-BR'),
+      };
+      state.businessOnboardingStep = 0;
+      state.businessOnboardingOpen = true;
+      renderApp();
+      return;
+    }
+    await loadData();
+    renderApp();
+  } catch (error) {
+    showToast(error.message, 'error');
+    renderApp();
+  }
+}
+
+function bindBusinessOnboarding() {
+  const form = document.querySelector('[data-business-onboarding-form]');
+  if (!form) return;
+  document.querySelectorAll('[data-business-onboarding-cancel]').forEach((button) => button.addEventListener('click', () => {
+    state.businessOnboardingOpen = false;
+    state.businessOnboardingStep = 0;
+    state.scope = state.businessOnboardingReturnScope || 'PERSONAL';
+    if (state.scope !== 'BUSINESS') state.manageSection = '';
+    saveScopes();
+    renderApp();
+  }));
+  document.querySelector('[data-business-onboarding-back]')?.addEventListener('click', () => {
+    state.businessOnboardingStep = Math.max(0, state.businessOnboardingStep - 1);
+    renderApp();
+  });
+  form.addEventListener('change', (event) => {
+    const input = event.target.closest('input');
+    if (!input) return;
+    if (input.type === 'radio') {
+      form.querySelectorAll(`input[name="${input.name}"]`).forEach((item) => item.closest('.business-choice')?.classList.toggle('selected', item.checked));
+    } else if (input.type === 'checkbox') {
+      input.closest('.business-choice')?.classList.toggle('selected', input.checked);
+    }
+    if (input.name === 'reserveTaxes') document.querySelector('[data-business-tax-rate]')?.classList.toggle('hidden', input.value !== 'true');
+  });
+  form.addEventListener('submit', handleBusinessOnboardingSubmit);
+}
+
+async function handleBusinessOnboardingSubmit(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const step = form.dataset.step;
+  const data = new FormData(form);
+  const draft = state.businessOnboardingDraft;
+  const error = form.querySelector('[data-business-onboarding-error]');
+  const fail = (message) => {
+    error.textContent = message;
+    error.classList.remove('hidden');
+  };
+  if (step === 'businessType') {
+    draft.businessType = data.get('businessType') || '';
+    if (!draft.businessType) return fail('Selecione o tipo do seu negócio.');
+  }
+  if (step === 'salesChannels') {
+    draft.salesChannels = data.getAll('salesChannels');
+    if (!draft.salesChannels.length) return fail('Selecione ao menos um canal de venda.');
+  }
+  if (step === 'recurringExpenses') draft.recurringExpenses = data.getAll('recurringExpenses');
+  if (step === 'receivingMethods') {
+    draft.receivingMethods = data.getAll('receivingMethods');
+    if (!draft.receivingMethods.length) return fail('Selecione ao menos uma forma de recebimento.');
+  }
+  if (step === 'revenueGoal') {
+    draft.revenueGoal = data.get('revenueGoal') || '';
+    if (parseAmount(draft.revenueGoal) <= 0) return fail('Informe uma meta mensal maior que zero.');
+  }
+  if (step === 'taxes') {
+    draft.reserveTaxes = data.get('reserveTaxes') === 'true';
+    draft.taxRate = data.get('taxRate') || '0';
+    if (draft.reserveTaxes && parseAmount(draft.taxRate) <= 0) return fail('Informe o percentual que deseja reservar.');
+  }
+  if (state.businessOnboardingStep < 5) {
+    state.businessOnboardingStep += 1;
+    renderApp();
+    return;
+  }
+  try {
+    setFormBusy(form, true, 'Preparando seu negócio...');
+    const response = await api().completeBusinessOnboarding({
+      businessType: draft.businessType,
+      salesChannels: draft.salesChannels,
+      recurringExpenses: draft.recurringExpenses,
+      receivingMethods: draft.receivingMethods,
+      revenueGoal: parseAmount(draft.revenueGoal),
+      reserveTaxes: draft.reserveTaxes,
+      taxRate: draft.reserveTaxes ? parseAmount(draft.taxRate) : 0,
+    });
+    state.businessSettings = response.data;
+    state.businessOnboardingOpen = false;
+    state.onboardingProfileDone = true;
+    saveOnboardingProfileDone();
+    await loadData();
+    renderApp();
+    showToast('Seu negócio está pronto. O Din já adaptou categorias e relatórios.');
+  } catch (submitError) {
+    fail(submitError.message);
+    setFormBusy(form, false);
+  }
 }
 
 function renderAccessPending() {
@@ -583,6 +710,10 @@ function bindShellEvents() {
     const switcher = event.currentTarget;
     switcher.classList.add('switching');
     setTimeout(() => {
+      if (button.dataset.value === 'BUSINESS') {
+        activateBusinessScope({ tab: 'dashboard' });
+        return;
+      }
       state.scope = button.dataset.value;
       saveScopes();
       loadData()
@@ -665,6 +796,22 @@ function bindViewEvents() {
   });
   document.querySelector('[data-export-account]')?.addEventListener('click', handlePrivacyExport);
   document.querySelector('[data-delete-account]')?.addEventListener('click', handlePrivacyAccountDelete);
+  document.querySelector('[data-business-onboarding-edit]')?.addEventListener('click', () => {
+    const settings = state.businessSettings || {};
+    state.businessOnboardingReturnScope = 'BUSINESS';
+    state.businessOnboardingDraft = {
+      businessType: settings.businessType || '',
+      salesChannels: settings.salesChannels || [],
+      recurringExpenses: settings.recurringExpenses || [],
+      receivingMethods: settings.receivingMethods || [],
+      revenueGoal: settings.revenueGoal ? Number(settings.revenueGoal).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '',
+      reserveTaxes: Number(settings.taxRate || 0) > 0,
+      taxRate: Number(settings.taxRate || 6).toLocaleString('pt-BR'),
+    };
+    state.businessOnboardingStep = 0;
+    state.businessOnboardingOpen = true;
+    renderApp();
+  });
 
   document.querySelectorAll('[data-tab-jump]').forEach((button) => {
     button.addEventListener('click', () => {
@@ -681,12 +828,12 @@ function bindViewEvents() {
 
   document.querySelectorAll('[data-manage-section]').forEach((button) => {
     button.addEventListener('click', () => {
+      const requestedSection = button.dataset.manageSection;
+      if (requestedSection === 'business' && state.scope !== 'BUSINESS') {
+        activateBusinessScope({ tab: 'more', manageSection: 'business' });
+        return;
+      }
       renderWithTransition(() => {
-        const requestedSection = button.dataset.manageSection;
-        if (requestedSection === 'business') {
-          state.scope = 'BUSINESS';
-          saveScopes();
-        }
         state.tab = 'more';
         state.manageSection = requestedSection === 'cards' ? 'accounts' : requestedSection;
         if (requestedSection === 'cards') state.manageAccountTab = 'cards';
@@ -749,11 +896,14 @@ function bindViewEvents() {
         return;
       }
       if (action === 'profile-personal' || action === 'profile-business') {
-        const nextScope = action === 'profile-business' ? 'BUSINESS' : 'PERSONAL';
-        state.scope = nextScope;
         state.onboardingProfileDone = true;
-        saveScopes();
         saveOnboardingProfileDone();
+        if (action === 'profile-business') {
+          activateBusinessScope({ tab: 'dashboard' });
+          return;
+        }
+        state.scope = 'PERSONAL';
+        saveScopes();
         loadData()
           .then(() => renderApp())
           .catch((error) => showToast(error.message, 'error'));
@@ -1044,15 +1194,7 @@ function handleAssistantAction(action) {
   }
 
   if (action === 'business') {
-    renderWithTransition(() => {
-      state.scope = 'BUSINESS';
-      saveScopes();
-      state.tab = 'dashboard';
-      state.fabOpen = false;
-    });
-    loadData()
-      .then(() => renderApp())
-      .catch((error) => showToast(error.message, 'error'));
+    activateBusinessScope({ tab: 'dashboard' });
     return;
   }
 

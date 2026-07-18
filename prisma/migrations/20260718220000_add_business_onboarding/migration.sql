@@ -1,0 +1,7 @@
+ALTER TABLE "BusinessSettings"
+ADD COLUMN "businessType" TEXT,
+ADD COLUMN "salesChannels" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+ADD COLUMN "recurringExpenses" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+ADD COLUMN "receivingMethods" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+ADD COLUMN "revenueGoal" DECIMAL(15,4) NOT NULL DEFAULT 0,
+ADD COLUMN "onboardingCompleted" BOOLEAN NOT NULL DEFAULT false;

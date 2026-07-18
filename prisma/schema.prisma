@@ -240,11 +240,17 @@ model BusinessEntry {
 }
 
 model BusinessSettings {
-  userId        String   @id @db.Uuid
-  taxRate       Decimal  @default(0) @db.Decimal(7, 4)
-  taxConfigured Boolean  @default(false)
-  createdAt     DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt     DateTime @updatedAt @db.Timestamptz(6)
+  userId              String   @id @db.Uuid
+  taxRate             Decimal  @default(0) @db.Decimal(7, 4)
+  taxConfigured       Boolean  @default(false)
+  businessType        String?
+  salesChannels       String[] @default([])
+  recurringExpenses   String[] @default([])
+  receivingMethods    String[] @default([])
+  revenueGoal         Decimal  @default(0) @db.Decimal(15, 4)
+  onboardingCompleted Boolean  @default(false)
+  createdAt           DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime @updatedAt @db.Timestamptz(6)
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }

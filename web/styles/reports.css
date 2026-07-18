@@ -282,6 +282,11 @@
 .business-report-hero { background: linear-gradient(135deg, #07172a, #0b4a46); color: white; }
 .business-report-hero .eyebrow, .business-report-hero p { color: #b7f7e9; }
 .business-report-hero h2 { color: white; font-size: clamp(28px, 7vw, 44px); margin: 8px 0; }
+.business-report-goal { display: grid; grid-template-columns: 1fr auto; gap: 7px 12px; margin-top: 18px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,.16); color: #d7f7f1; font-size: 13px; }
+.business-report-goal strong { color: #fff; }
+.business-report-goal i { grid-column: 1 / -1; height: 7px; overflow: hidden; border-radius: 99px; background: rgba(255,255,255,.15); }
+.business-report-goal i b { display: block; height: 100%; border-radius: inherit; background: #00d19a; }
+.business-report-goal small { grid-column: 1 / -1; color: #b9e8df; }
 .business-report-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .business-report-section h2 { margin: 6px 0 16px; }
 .business-report-rows, .business-ranking, .business-report-table { display: grid; gap: 0; }

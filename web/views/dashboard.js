@@ -159,6 +159,7 @@ function dashboardInsightsHtml() {
     .sort((a, b) => transactionValue(b) - transactionValue(a))[0];
   const projected = projectedMonthBalance(currentTotals);
   const budgetAlert = budgetAlertInfo(currentTotals.expense);
+  const goalAlert = businessGoalAlert();
 
   return `
     <section class="dashboard-insights">
@@ -168,6 +169,7 @@ function dashboardInsightsHtml() {
         ${dashboardKpiCard('Orcamento', budgetAlert.title, budgetAlert.value, budgetAlert.tone)}
       </div>
       ${budgetAlert.copy ? `<article class="dashboard-alert ${budgetAlert.tone}"><span>${icon('target')}</span><p>${escapeHtml(budgetAlert.copy)}</p></article>` : ''}
+      ${goalAlert ? `<article class="dashboard-alert ${goalAlert.tone}"><span>${icon('reports')}</span><p><strong>${escapeHtml(goalAlert.title)}.</strong> ${escapeHtml(goalAlert.copy)}</p></article>` : ''}
     </section>
   `;
 }
@@ -329,6 +331,7 @@ function businessSummaryCard() {
   const projections = summary.projections || [];
   const alerts = summary.alerts || [];
   const statement = summary.statement || {};
+  const businessConfig = summary.configuration || {};
 
   return `
     <article class="business-summary-card">
@@ -345,6 +348,7 @@ function businessSummaryCard() {
         <div><span>A pagar</span><strong class="expense">${money.format(Number(summary.payable || 0))}</strong></div>
         <div><span>${escapeHtml(summary.resultLabel || 'Resultado do mês')}</span><strong>${money.format(Number(summary.estimatedResult || 0))}</strong></div>
       </div>
+      ${Number(businessConfig.revenueGoal || 0) > 0 ? `<div class="business-goal-progress"><header><span>Meta de faturamento · ${escapeHtml(businessTypeLabel(businessConfig.businessType))}</span><strong>${Number(businessConfig.revenueGoalProgress || 0)}%</strong></header><div><span style="width:${Math.min(100, Number(businessConfig.revenueGoalProgress || 0))}%"></span></div><small>${money.format(Number(statement.grossRevenue || 0))} de ${money.format(Number(businessConfig.revenueGoal || 0))} · faltam ${money.format(Number(businessConfig.revenueGoalGap || 0))}</small></div>` : ''}
       <div class="business-statement">
         <div><span>Faturamento bruto</span><strong>${money.format(Number(statement.grossRevenue || 0))}</strong></div>
         <div><span>(−) Taxas dos canais</span><strong class="expense">${money.format(Number(statement.channelFees || 0))}</strong></div>
@@ -368,6 +372,17 @@ function businessSummaryCard() {
       ${alerts.length ? `<div class="business-alerts"><span class="eyebrow">Precisa de atenção</span>${alerts.slice(0, 3).map((entry) => `<button type="button" data-manage-section="business"><strong>${escapeHtml(entry.title)}</strong><small>${entry.effectiveStatus === 'OVERDUE' ? 'Vencida' : 'Vence em breve'} · ${money.format(Number(entry.amount))}</small></button>`).join('')}</div>` : ''}
     </article>
   `;
+}
+
+function businessGoalAlert() {
+  const config = state.businessSummary?.configuration;
+  if (state.scope !== 'BUSINESS' || Number(config?.revenueGoal || 0) <= 0) return null;
+  const progress = Number(config.revenueGoalProgress || 0);
+  const today = new Date();
+  const expected = Math.round((today.getDate() / new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate()) * 100);
+  if (progress >= 100) return { title: 'Meta alcançada', copy: `${businessTypeLabel(config.businessType)} chegou a ${progress}% da meta mensal.`, tone: 'income' };
+  if (progress < expected - 10) return { title: 'Meta abaixo do ritmo', copy: `Você chegou a ${progress}% e o mês avançou ${expected}%. Priorize os canais e produtos com maior receita.`, tone: 'warning' };
+  return { title: 'Meta no ritmo', copy: `Seu faturamento está em ${progress}% da meta mensal.`, tone: 'income' };
 }
 
 function channelSummary(transactions) {
@@ -439,6 +454,21 @@ function assistantInsight() {
     };
   }
 
+  const businessConfig = state.businessSummary?.configuration;
+  if (state.scope === 'BUSINESS' && Number(businessConfig?.revenueGoal || 0) > 0) {
+    const progress = Number(businessConfig.revenueGoalProgress || 0);
+    const expected = Math.round((new Date().getDate() / new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate()) * 100);
+    if (progress < expected - 10) {
+      return {
+        action: 'Abrir análise',
+        copy: `${businessTypeLabel(businessConfig.businessType)} está em ${progress}% da meta, enquanto o mês já avançou ${expected}%. Veja os canais e produtos com maior receita para priorizar as próximas vendas.`,
+        target: 'reports',
+        title: 'Meta pede atenção',
+        tone: 'attention',
+      };
+    }
+  }
+
   if (budget > 0 && budgetUsed >= 90) {
     return {
       action: 'Abrir Din',
@@ -508,4 +538,8 @@ function assistantInsight() {
     title: 'Saldo positivo',
     tone: 'positive',
   };
+}
+
+function businessTypeLabel(value) {
+  return ({ COMMERCE: 'Comércio', SERVICES: 'Serviços', FOOD: 'Alimentação', BEAUTY: 'Beleza e bem-estar', FREELANCER: 'Profissional autônomo', OTHER: 'Outro negócio' })[value] || 'Negócio';
 }

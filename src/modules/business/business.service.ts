@@ -2,6 +2,7 @@ import { BadRequestException, Inject, Injectable, NotFoundException } from '@nes
 import {
   BusinessEntryStatus,
   BusinessEntryType,
+  BusinessSettings,
   BusinessCostType,
   FinancialScope,
   RecurrenceFrequency,
@@ -20,6 +21,16 @@ import { UpdateBusinessContactDto } from './dto/update-business-contact.dto';
 import { UpdateBusinessEntryDto } from './dto/update-business-entry.dto';
 import { UpdateBusinessOfferingDto } from './dto/update-business-offering.dto';
 import { UpdateBusinessSettingsDto } from './dto/update-business-settings.dto';
+import { CompleteBusinessOnboardingDto } from './dto/complete-business-onboarding.dto';
+
+const BUSINESS_CATEGORY_PRESETS: Record<string, Array<{ name: string; costType: BusinessCostType | null }>> = {
+  COMMERCE: [{ name: 'Vendas', costType: null }, { name: 'Estoque e mercadorias', costType: BusinessCostType.VARIABLE }, { name: 'Embalagens', costType: BusinessCostType.VARIABLE }],
+  SERVICES: [{ name: 'Serviços prestados', costType: null }, { name: 'Prestadores e comissões', costType: BusinessCostType.VARIABLE }, { name: 'Ferramentas e sistemas', costType: BusinessCostType.FIXED }],
+  FOOD: [{ name: 'Vendas', costType: null }, { name: 'Insumos e ingredientes', costType: BusinessCostType.VARIABLE }, { name: 'Embalagens', costType: BusinessCostType.VARIABLE }],
+  BEAUTY: [{ name: 'Serviços prestados', costType: null }, { name: 'Produtos e insumos', costType: BusinessCostType.VARIABLE }, { name: 'Aluguel do espaço', costType: BusinessCostType.FIXED }],
+  FREELANCER: [{ name: 'Serviços prestados', costType: null }, { name: 'Ferramentas e assinaturas', costType: BusinessCostType.FIXED }, { name: 'Prestadores', costType: BusinessCostType.VARIABLE }],
+  OTHER: [{ name: 'Receitas do negócio', costType: null }, { name: 'Operação', costType: BusinessCostType.VARIABLE }, { name: 'Administração', costType: BusinessCostType.FIXED }],
+};
 
 @Injectable()
 export class BusinessService {
@@ -181,6 +192,8 @@ export class BusinessService {
     const unclassifiedExpenses = expenseTotalFor(null);
     const monthExpense = variableCosts + fixedExpenses + unclassifiedExpenses;
     const taxRate = Number(settings?.taxRate ?? 0);
+    const revenueGoal = Number(settings?.revenueGoal ?? 0);
+    const revenueGoalProgress = revenueGoal > 0 ? Math.min(100, Math.round(grossRevenue / revenueGoal * 100)) : 0;
     const taxProvision = grossRevenue * taxRate / 100;
     const resultOfMonth = netRevenue - variableCosts - fixedExpenses - unclassifiedExpenses - taxProvision;
     const receivable = this.sum(pending.filter((entry) => entry.type === BusinessEntryType.RECEIVABLE));
@@ -217,6 +230,12 @@ export class BusinessService {
         taxRate,
         taxConfigured: Boolean(settings?.taxConfigured),
         unclassifiedAmount: unclassifiedExpenses + unclassifiedPending,
+        businessType: settings?.businessType ?? null,
+        receivingMethods: settings?.receivingMethods ?? [],
+        revenueGoal,
+        revenueGoalProgress,
+        revenueGoalGap: Math.max(0, revenueGoal - grossRevenue),
+        onboardingCompleted: Boolean(settings?.onboardingCompleted),
       },
       statement: {
         grossRevenue,
@@ -245,7 +264,7 @@ export class BusinessService {
 
   async settings(userId: string) {
     const settings = await this.prisma.businessSettings.findUnique({ where: { userId } });
-    return { taxRate: Number(settings?.taxRate ?? 0), taxConfigured: Boolean(settings?.taxConfigured) };
+    return this.settingsResponse(settings);
   }
 
   async updateSettings(userId: string, input: UpdateBusinessSettingsDto) {
@@ -254,7 +273,60 @@ export class BusinessService {
       create: { userId, taxRate: input.taxRate, taxConfigured: true },
       update: { taxRate: input.taxRate, taxConfigured: true },
     });
-    return { taxRate: Number(settings.taxRate), taxConfigured: settings.taxConfigured };
+    return this.settingsResponse(settings);
+  }
+
+  async completeOnboarding(userId: string, input: CompleteBusinessOnboardingDto) {
+    const salesChannels = this.cleanLabels(input.salesChannels);
+    const recurringExpenses = this.cleanLabels(input.recurringExpenses);
+    const receivingMethods = this.cleanLabels(input.receivingMethods);
+    if (!salesChannels.length || !receivingMethods.length) throw new BadRequestException('Informe ao menos um canal de venda e uma forma de recebimento');
+
+    const [categories, channels] = await Promise.all([
+      this.prisma.category.findMany({ where: { userId }, select: { name: true } }),
+      this.prisma.salesChannel.findMany({ where: { userId }, select: { name: true } }),
+    ]);
+    const existingCategories = new Set(categories.map((item) => item.name.trim().toLocaleLowerCase('pt-BR')));
+    const existingChannels = new Set(channels.map((item) => item.name.trim().toLocaleLowerCase('pt-BR')));
+    const presetCategories = [
+      ...(BUSINESS_CATEGORY_PRESETS[input.businessType] ?? BUSINESS_CATEGORY_PRESETS.OTHER!),
+      ...recurringExpenses.map((name) => ({ name, costType: BusinessCostType.FIXED })),
+    ].filter((item, index, all) => all.findIndex((candidate) => candidate.name.toLocaleLowerCase('pt-BR') === item.name.toLocaleLowerCase('pt-BR')) === index);
+    const taxRate = input.reserveTaxes ? input.taxRate : 0;
+    const operations = [
+      this.prisma.businessSettings.upsert({
+        where: { userId },
+        create: {
+          userId,
+          businessType: input.businessType,
+          salesChannels,
+          recurringExpenses,
+          receivingMethods,
+          revenueGoal: input.revenueGoal,
+          taxRate,
+          taxConfigured: true,
+          onboardingCompleted: true,
+        },
+        update: {
+          businessType: input.businessType,
+          salesChannels,
+          recurringExpenses,
+          receivingMethods,
+          revenueGoal: input.revenueGoal,
+          taxRate,
+          taxConfigured: true,
+          onboardingCompleted: true,
+        },
+      }),
+      ...presetCategories
+        .filter((item) => !existingCategories.has(item.name.toLocaleLowerCase('pt-BR')))
+        .map((item) => this.prisma.category.create({ data: { userId, name: item.name, color: item.costType === BusinessCostType.FIXED ? '#8B5CF6' : item.costType === BusinessCostType.VARIABLE ? '#F59E0B' : '#00BFA6', businessCostType: item.costType } })),
+      ...salesChannels
+        .filter((name) => !existingChannels.has(name.toLocaleLowerCase('pt-BR')))
+        .map((name) => this.prisma.salesChannel.create({ data: { userId, name, feePercent: 0, isActive: true } })),
+    ];
+    const [settings] = await this.prisma.$transaction(operations);
+    return this.settingsResponse(settings as BusinessSettings);
   }
 
   async listContacts(userId: string) {
@@ -422,8 +494,15 @@ export class BusinessService {
     const revenueByClient = aggregateNamed(clientEntries, (item) => item.contact?.name ?? item.counterparty, (item) => Number(item.amount));
     const revenueByChannel = aggregateNamed(incomes, (item) => item.channel?.name ?? 'Sem canal', (item) => Number(item.netAmount));
     const timing = this.salesTiming(incomes.map((item) => ({ date: item.date, revenue: Number(item.netAmount) })));
+    const revenueGoal = Number(settings?.revenueGoal ?? 0);
     return {
       period: { startDate: this.dateKey(start), endDate: this.dateKey(this.addDays(end, -1)) },
+      profile: {
+        businessType: settings?.businessType ?? null,
+        revenueGoal,
+        revenueGoalProgress: revenueGoal > 0 ? Math.min(100, Math.round(grossRevenue / revenueGoal * 100)) : 0,
+        revenueGoalGap: Math.max(0, revenueGoal - grossRevenue),
+      },
       cashFlow: { availableBalance: Number(accounts._sum.balance ?? 0), rows: [...cashFlowMap.values()].map((row) => ({ ...row, net: row.income - row.expense })) },
       incomeStatement: { grossRevenue, channelFees, netRevenue, variableExpenses, fixedExpenses, unclassifiedExpenses, taxRate, taxProvision, result },
       revenueByClient,
@@ -438,7 +517,7 @@ export class BusinessService {
 
   async accountingReportCsv(userId: string, startDate?: string, endDate?: string): Promise<string> {
     const report = await this.accountingReport(userId, startDate, endDate);
-    const lines: string[][] = [['RELATORIO EMPRESARIAL DIN'], ['Periodo', `${report.period.startDate} a ${report.period.endDate}`], [], ['DRE SIMPLIFICADO'], ['Item', 'Valor'],
+    const lines: string[][] = [['RELATORIO EMPRESARIAL DIN'], ['Periodo', `${report.period.startDate} a ${report.period.endDate}`], ['Meta de faturamento', String(report.profile.revenueGoal)], ['Progresso da meta (%)', String(report.profile.revenueGoalProgress)], [], ['DRE SIMPLIFICADO'], ['Item', 'Valor'],
       ['Faturamento bruto', String(report.incomeStatement.grossRevenue)], ['Taxas dos canais', String(report.incomeStatement.channelFees)], ['Faturamento liquido', String(report.incomeStatement.netRevenue)], ['Custos variaveis', String(report.incomeStatement.variableExpenses)], ['Despesas fixas', String(report.incomeStatement.fixedExpenses)], ['Provisao de impostos', String(report.incomeStatement.taxProvision)], ['Resultado', String(report.incomeStatement.result)],
       [], ['RECEITAS POR CLIENTE'], ['Cliente', 'Receita'], ...report.revenueByClient.map((item) => [item.name, String(item.revenue)]),
       [], ['RECEITAS POR PRODUTO/SERVICO'], ['Item', 'Quantidade', 'Receita liquida', 'Custo estimado', 'Margem'], ...report.revenueByProduct.map((item) => [item.name, String(item.quantity), String(item.netRevenue), String(item.estimatedCost), String(item.margin)]),
@@ -465,6 +544,7 @@ export class BusinessService {
     const row = (label: string, value: string) => { ensure(24); const y = doc.y; doc.font('Helvetica').fontSize(9).fillColor('#475569').text(label, 42, y, { width: 360 }); doc.font('Helvetica-Bold').fillColor('#0f172a').text(value, 402, y, { width: 150, align: 'right' }); doc.moveDown(.75); };
     doc.font('Helvetica-Bold').fontSize(22).fillColor('#07172a').text('Din - Relatório empresarial');
     doc.font('Helvetica').fontSize(10).fillColor('#64748b').text(`Período: ${report.period.startDate} a ${report.period.endDate}`);
+    if (report.profile.revenueGoal > 0) row('Meta de faturamento', `${money(report.profile.revenueGoal)} · ${report.profile.revenueGoalProgress}% alcançada`);
     heading('Demonstrativo simplificado de resultado');
     row('Faturamento bruto', money(report.incomeStatement.grossRevenue)); row('(-) Taxas dos canais', money(report.incomeStatement.channelFees)); row('Faturamento líquido', money(report.incomeStatement.netRevenue)); row('(-) Custos variáveis', money(report.incomeStatement.variableExpenses)); row('(-) Despesas fixas', money(report.incomeStatement.fixedExpenses)); row('(-) Provisão para impostos', money(report.incomeStatement.taxProvision)); row('Resultado do período', money(report.incomeStatement.result));
     heading('Previsão para o fechamento'); row('Resultado realizado', money(report.forecast.realizedResult)); row('(+) Valores a receber', money(report.forecast.pendingReceivable)); row('(-) Valores a pagar', money(report.forecast.pendingPayable)); row('Resultado estimado', money(report.forecast.estimatedClosingResult));
@@ -490,6 +570,23 @@ export class BusinessService {
     const entry = await this.prisma.businessEntry.findFirst({ where: { id, userId } });
     if (!entry) throw new NotFoundException('Conta empresarial não encontrada');
     return entry;
+  }
+
+  private settingsResponse(settings: BusinessSettings | null) {
+    return {
+      taxRate: Number(settings?.taxRate ?? 0),
+      taxConfigured: Boolean(settings?.taxConfigured),
+      businessType: settings?.businessType ?? null,
+      salesChannels: settings?.salesChannels ?? [],
+      recurringExpenses: settings?.recurringExpenses ?? [],
+      receivingMethods: settings?.receivingMethods ?? [],
+      revenueGoal: Number(settings?.revenueGoal ?? 0),
+      onboardingCompleted: Boolean(settings?.onboardingCompleted),
+    };
+  }
+
+  private cleanLabels(values: string[]) {
+    return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
   }
 
   private async validateReferences(userId: string, categoryId: string, accountId?: string, contactId?: string, offeringId?: string) {
