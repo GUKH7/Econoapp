@@ -2317,3 +2317,18 @@ textarea:focus {
   min-height: 36px;
   padding: 0;
 }
+
+.business-contact-form { margin-top: 18px; }
+.business-contact-list { display: grid; gap: 12px; margin-top: 20px; }
+.business-contact-card { border: 1px solid var(--line); border-radius: 18px; padding: 16px; background: var(--surface); }
+.business-contact-head, .business-contact-head > div { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.business-contact-head > div { justify-content: flex-start; flex-wrap: wrap; }
+.business-contact-card > p, .business-contact-notes { display: block; margin: 8px 0 0; color: var(--muted); }
+.business-contact-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 14px; }
+.business-contact-metrics span { display: grid; gap: 4px; color: var(--muted); font-size: .72rem; }
+.business-contact-metrics strong { color: var(--ink); font-size: .88rem; }
+
+@media (max-width: 520px) {
+  .business-contact-metrics { grid-template-columns: 1fr 1fr; }
+  .business-contact-metrics span:last-child { grid-column: 1 / -1; }
+}

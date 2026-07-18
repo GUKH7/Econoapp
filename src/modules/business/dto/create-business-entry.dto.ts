@@ -14,6 +14,10 @@ export class CreateBusinessEntryDto {
   @MinLength(2)
   counterparty!: string;
 
+  @IsOptional()
+  @IsUUID()
+  contactId?: string;
+
   @Type(() => Number)
   @IsNumber()
   @Min(0.01)

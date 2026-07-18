@@ -115,6 +115,7 @@ export function manageView() {
   const totalBalance = scopedWallets.reduce((sum, wallet) => sum + Number(wallet.balance || 0), 0);
   const sections = [
     { id: 'business', label: 'Agenda', meta: `${state.businessEntries.length} contas`, icon: icon('shop') },
+    { id: 'contacts', label: 'Clientes', meta: `${state.businessContacts.length} contatos`, icon: icon('profile') },
     { id: 'accounts', label: 'Contas', meta: `${scopedWallets.length + scopedCards.length} itens`, icon: icon('wallet') },
     { id: 'categories', label: 'Categorias', meta: `${state.categories.length} itens`, icon: icon('tag') },
     { id: 'channels', label: 'Canais', meta: `${state.channels.length} meios`, icon: icon('shop') },
@@ -210,6 +211,29 @@ export function manageView() {
     .filter((account) => account.scope === 'BUSINESS')
     .map((account) => `<option value="${account.id}">${escapeHtml(account.name)}</option>`)
     .join('');
+  const businessContactOptions = state.businessContacts
+    .map((contact) => `<option value="${contact.id}" data-contact-name="${escapeHtml(contact.name)}">${escapeHtml(contact.name)} · ${contact.type === 'CLIENT' ? 'Cliente' : contact.type === 'SUPPLIER' ? 'Fornecedor' : 'Cliente e fornecedor'}</option>`)
+    .join('');
+  const contactsPanel = `
+    <article class="card manage-panel business-contacts-panel">
+      <div class="panel-title"><div><span class="eyebrow">Relacionamentos</span><h2>Clientes e fornecedores</h2></div></div>
+      <p class="muted">Um cadastro curto para acompanhar vendas, compras e valores pendentes.</p>
+      <form class="form business-contact-form" data-business-contact-form>
+        <div class="form-grid two-columns">
+          <label class="field">Nome<input name="name" required minlength="2" placeholder="Ex: João ou Fornecedor Central" /></label>
+          <label class="field">Tipo<select name="type" required><option value="CLIENT">Cliente</option><option value="SUPPLIER">Fornecedor</option><option value="BOTH">Cliente e fornecedor</option></select></label>
+        </div>
+        <div class="form-grid two-columns">
+          <label class="field">Telefone<input name="phone" inputmode="tel" placeholder="(11) 99999-9999" /></label>
+          <label class="field">E-mail<input name="email" type="email" placeholder="contato@empresa.com" /></label>
+        </div>
+        <label class="field">Observações<textarea name="notes" rows="2" maxlength="500" placeholder="Preferências, condições ou lembretes"></textarea></label>
+        <button class="button" type="submit">Adicionar contato</button>
+      </form>
+      <div class="business-contact-list surface-list">
+        ${state.businessContacts.length ? state.businessContacts.map(businessContactCard).join('') : '<p class="empty">Nenhum cliente ou fornecedor cadastrado.</p>'}
+      </div>
+    </article>`;
   const businessRows = state.businessEntries.map((entry) => businessEntryRow(entry)).join('');
   const businessSummary = state.businessSummary || {};
   const costCategories = businessSummary.expenseCategories || [];
@@ -236,6 +260,7 @@ export function manageView() {
           <label class="field">Vencimento<input name="dueDate" type="date" required /></label>
         </div>
         <label class="field">Descrição<input name="title" required placeholder="Ex: Mensalidade, aluguel, fornecedor" /></label>
+        <label class="field">Usar cadastro<select name="contactId" data-business-contact-select><option value="">Selecionar cliente ou fornecedor</option>${businessContactOptions}</select></label>
         <label class="field">Cliente ou fornecedor<input name="counterparty" required placeholder="Nome da pessoa ou empresa" /></label>
         <div class="form-grid two-columns">
           <label class="field">Valor<input name="amount" inputmode="decimal" placeholder="0,00" required /></label>
@@ -282,6 +307,7 @@ export function manageView() {
 
   const panels = {
     business: businessPanel,
+    contacts: contactsPanel,
     accounts: accountsPanel,
     cards: accountsPanel,
     categories: categoriesPanel,
@@ -297,6 +323,20 @@ export function manageView() {
       ${manageModalHtml()}
     </section>
   `;
+}
+
+function businessContactCard(contact) {
+  const typeLabel = contact.type === 'CLIENT' ? 'Cliente' : contact.type === 'SUPPLIER' ? 'Fornecedor' : 'Cliente e fornecedor';
+  const movedMetric = contact.type === 'BOTH'
+    ? `<span>Total vendido<strong>${money.format(Number(contact.totalSold || 0))}</strong></span><span>Total comprado<strong>${money.format(Number(contact.totalPurchased || 0))}</strong></span>`
+    : `<span>${contact.type === 'SUPPLIER' ? 'Total comprado' : 'Total vendido'}<strong>${money.format(Number((contact.type === 'SUPPLIER' ? contact.totalPurchased : contact.totalSold) || 0))}</strong></span>`;
+  const lastMovement = contact.lastMovementAt ? businessDate(contact.lastMovementAt) : 'Sem movimentações';
+  return `<article class="business-contact-card">
+    <div class="business-contact-head"><div><strong>${escapeHtml(contact.name)}</strong><span class="badge neutral">${typeLabel}</span></div><button class="danger-link" type="button" data-business-contact-delete="${contact.id}" data-contact-name="${escapeHtml(contact.name)}">Excluir</button></div>
+    <p>${escapeHtml(contact.phone || contact.email || '')}${contact.phone && contact.email ? ` · ${escapeHtml(contact.email)}` : ''}</p>
+    ${contact.notes ? `<small class="business-contact-notes">${escapeHtml(contact.notes)}</small>` : ''}
+    <div class="business-contact-metrics">${movedMetric}<span>Pendente<strong>${money.format(Number(contact.pendingAmount || 0))}</strong></span><span>Última movimentação<strong>${lastMovement}</strong></span></div>
+  </article>`;
 }
 
 function businessEntryRow(entry) {

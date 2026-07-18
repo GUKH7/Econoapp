@@ -5,7 +5,9 @@ import { CurrentUser } from '@/common/decorators/current-user.decorator';
 import { JwtPayload } from '@/common/types';
 import { BusinessService } from './business.service';
 import { CreateBusinessEntryDto } from './dto/create-business-entry.dto';
+import { CreateBusinessContactDto } from './dto/create-business-contact.dto';
 import { SettleBusinessEntryDto } from './dto/settle-business-entry.dto';
+import { UpdateBusinessContactDto } from './dto/update-business-contact.dto';
 import { UpdateBusinessEntryDto } from './dto/update-business-entry.dto';
 import { UpdateBusinessSettingsDto } from './dto/update-business-settings.dto';
 
@@ -29,6 +31,27 @@ export class BusinessController {
   @Patch('settings')
   async updateSettings(@CurrentUser() user: JwtPayload, @Body() dto: UpdateBusinessSettingsDto) {
     return { data: await this.service.updateSettings(user.sub, dto) };
+  }
+
+  @Get('contacts')
+  async listContacts(@CurrentUser() user: JwtPayload) {
+    return { data: await this.service.listContacts(user.sub) };
+  }
+
+  @Post('contacts')
+  async createContact(@CurrentUser() user: JwtPayload, @Body() dto: CreateBusinessContactDto) {
+    return { data: await this.service.createContact(user.sub, dto) };
+  }
+
+  @Patch('contacts/:id')
+  async updateContact(@CurrentUser() user: JwtPayload, @Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateBusinessContactDto) {
+    return { data: await this.service.updateContact(user.sub, id, dto) };
+  }
+
+  @Delete('contacts/:id')
+  @HttpCode(204)
+  async deleteContact(@CurrentUser() user: JwtPayload, @Param('id', ParseUUIDPipe) id: string): Promise<void> {
+    await this.service.deleteContact(user.sub, id);
   }
 
   @Get('entries')

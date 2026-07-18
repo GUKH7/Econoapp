@@ -793,6 +793,15 @@ function bindViewEvents() {
   document.querySelector('[data-onboarding-account-form]')?.addEventListener('submit', handleOnboardingAccountSubmit);
   document.querySelector('[data-channel-form]')?.addEventListener('submit', handleChannelSubmit);
   document.querySelector('[data-business-entry-form]')?.addEventListener('submit', handleBusinessEntrySubmit);
+  document.querySelector('[data-business-contact-form]')?.addEventListener('submit', handleBusinessContactSubmit);
+  document.querySelectorAll('[data-business-contact-delete]').forEach((button) => {
+    button.addEventListener('click', () => handleBusinessContactDelete(button));
+  });
+  document.querySelector('[data-business-contact-select]')?.addEventListener('change', (event) => {
+    const option = event.currentTarget.selectedOptions[0];
+    const input = event.currentTarget.form?.querySelector('input[name="counterparty"]');
+    if (input && option?.dataset.contactName) input.value = option.dataset.contactName;
+  });
   document.querySelector('[data-business-tax-form]')?.addEventListener('submit', handleBusinessTaxSubmit);
   document.querySelectorAll('[data-business-cost-category]').forEach((select) => {
     select.addEventListener('change', () => handleBusinessCostTypeChange(select));
@@ -1569,6 +1578,7 @@ async function handleBusinessEntrySubmit(event) {
       type: data.type,
       title: String(data.title || '').trim(),
       counterparty: String(data.counterparty || '').trim(),
+      ...(data.contactId ? { contactId: data.contactId } : {}),
       amount: parseAmount(data.amount),
       dueDate: data.dueDate,
       categoryId: data.categoryId,
@@ -1582,6 +1592,50 @@ async function handleBusinessEntrySubmit(event) {
     showToast(generated > 1 ? `${generated} contas recorrentes adicionadas.` : 'Conta adicionada à agenda.');
   } catch (error) {
     setFormBusy(form, false);
+    showToast(error.message, 'error');
+  }
+}
+
+async function handleBusinessContactSubmit(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const data = Object.fromEntries(new FormData(form));
+  if (!String(data.phone || '').trim() && !String(data.email || '').trim()) {
+    showToast('Informe um telefone ou e-mail.', 'error');
+    return;
+  }
+  setFormBusy(form, true, 'Adicionando...');
+  try {
+    await api().createBusinessContact({
+      type: data.type,
+      name: String(data.name || '').trim(),
+      ...(String(data.phone || '').trim() ? { phone: String(data.phone).trim() } : {}),
+      ...(String(data.email || '').trim() ? { email: String(data.email).trim() } : {}),
+      ...(String(data.notes || '').trim() ? { notes: String(data.notes).trim() } : {}),
+    });
+    await loadData();
+    state.manageSection = 'contacts';
+    renderApp();
+    showToast('Contato empresarial adicionado.');
+  } catch (error) {
+    setFormBusy(form, false);
+    showToast(error.message, 'error');
+  }
+}
+
+async function handleBusinessContactDelete(button) {
+  const id = button.dataset.businessContactDelete;
+  const name = button.dataset.contactName || 'este contato';
+  if (!id || !window.confirm(`Excluir ${name}? As movimentações antigas serão preservadas.`)) return;
+  button.disabled = true;
+  try {
+    await api().deleteBusinessContact(id);
+    await loadData();
+    state.manageSection = 'contacts';
+    renderApp();
+    showToast('Contato excluído.');
+  } catch (error) {
+    button.disabled = false;
     showToast(error.message, 'error');
   }
 }

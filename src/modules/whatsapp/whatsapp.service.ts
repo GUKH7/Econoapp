@@ -771,6 +771,10 @@ export class WhatsappService {
     const period = this.resolveFinancialPeriod(lower);
     const { start, end } = period;
 
+    if (this.isContactDebtQuestion(lower)) return this.answerContactDebt(userId, lower);
+    if (this.isSuppliersDueQuestion(lower)) return this.answerSuppliersDueThisWeek(userId);
+    if (this.isTopCustomerQuestion(lower)) return this.answerTopCustomers(userId, start, end, period.label);
+
     if (this.isCompleteSummaryQuestion(lower)) {
       return this.answerCompleteSummary(userId, period);
     }
@@ -866,6 +870,72 @@ export class WhatsappService {
     }
 
     return `📊 *Resumo ${this.periodOf(period.label)}*\n\n💰 *Receitas: ${this.formatMoney(totals.income)}*\n💸 *Gastos: ${this.formatMoney(totals.expense)}*\n💵 *Saldo: ${this.formatMoney(totals.balance)}*.`;
+  }
+
+  private async answerContactDebt(userId: string, message: string): Promise<string> {
+    const match = message.match(/cliente\s+(.+?)(?:\s+(?:ainda\s+)?deve|\s+esta\s+devendo|\s+tem\s+pendente|$)/);
+    const name = match?.[1]?.trim();
+    if (!name) return 'Qual é o nome do cliente que você quer consultar?';
+
+    const contact = await this.prisma.businessContact.findFirst({
+      where: { userId, name: { contains: name, mode: 'insensitive' }, type: { in: ['CLIENT', 'BOTH'] } },
+      select: { id: true, name: true },
+    });
+    if (!contact) return `Não encontrei o cliente “${name}” no cadastro empresarial.`;
+
+    const pending = await this.prisma.businessEntry.findMany({
+      where: { userId, contactId: contact.id, type: 'RECEIVABLE', status: 'PENDING' },
+      select: { amount: true, dueDate: true },
+      orderBy: { dueDate: 'asc' },
+    });
+    const total = this.sumAmounts(pending);
+    const overdue = this.sumAmounts(pending.filter((entry) => entry.dueDate < new Date()));
+    if (!pending.length) return `✅ ${contact.name} não possui valores pendentes.`;
+    return [
+      `💰 *${contact.name} ainda deve ${this.formatMoney(total)}.*`,
+      `${pending.length} ${pending.length === 1 ? 'conta pendente' : 'contas pendentes'}.`,
+      overdue > 0 ? `⚠️ Desse total, ${this.formatMoney(overdue)} está vencido.` : 'Nenhuma conta está vencida.',
+    ].join('\n');
+  }
+
+  private async answerSuppliersDueThisWeek(userId: string): Promise<string> {
+    const now = new Date();
+    const day = now.getUTCDay() || 7;
+    const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - day + 1));
+    const end = new Date(start.getTime() + 7 * 86_400_000);
+    const entries = await this.prisma.businessEntry.findMany({
+      where: { userId, type: 'PAYABLE', status: 'PENDING', dueDate: { gte: start, lt: end } },
+      select: { counterparty: true, amount: true, dueDate: true },
+      orderBy: { dueDate: 'asc' },
+    });
+    if (!entries.length) return '✅ Nenhum fornecedor possui vencimento nesta semana.';
+    return [
+      '📅 *Fornecedores com vencimento nesta semana:*',
+      ...entries.map((entry) => `• ${entry.counterparty}: ${this.formatMoney(Number(entry.amount))} — ${this.shortDate(entry.dueDate)}`),
+    ].join('\n');
+  }
+
+  private async answerTopCustomers(userId: string, start: Date, end: Date, periodLabel: string): Promise<string> {
+    const entries = await this.prisma.businessEntry.findMany({
+      where: { userId, type: 'RECEIVABLE', status: { not: 'CANCELLED' }, dueDate: { gte: start, lt: end } },
+      select: { counterparty: true, amount: true },
+    });
+    if (!entries.length) return `Ainda não há vendas vinculadas a clientes ${this.periodAt(periodLabel).toLocaleLowerCase('pt-BR')}.`;
+    const totals = new Map<string, number>();
+    entries.forEach((entry) => totals.set(entry.counterparty, (totals.get(entry.counterparty) ?? 0) + Number(entry.amount)));
+    const ranking = [...totals.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
+    return [
+      `🏆 *Clientes que mais compraram ${this.periodOf(periodLabel)}:*`,
+      ...ranking.map(([name, total], index) => `${index + 1}. ${name}: ${this.formatMoney(total)}`),
+    ].join('\n');
+  }
+
+  private sumAmounts(entries: Array<{ amount: unknown }>): number {
+    return entries.reduce((total, entry) => total + Number(entry.amount), 0);
+  }
+
+  private shortDate(value: Date): string {
+    return new Intl.DateTimeFormat('pt-BR', { timeZone: 'UTC', day: '2-digit', month: '2-digit' }).format(value);
   }
 
   private async answerMonthComparison(
@@ -3176,6 +3246,9 @@ export class WhatsappService {
   private isKnownFinancialQuestion(message: string): boolean {
     const lower = this.normalizeText(message);
     return (
+      this.isContactDebtQuestion(lower) ||
+      this.isSuppliersDueQuestion(lower) ||
+      this.isTopCustomerQuestion(lower) ||
       this.isCompleteSummaryQuestion(lower) ||
       this.isCategoryExpenseQuestion(lower) ||
       this.isIncomeOriginQuestion(lower) ||
@@ -3192,6 +3265,21 @@ export class WhatsappService {
       lower.includes('meu negocio esta no lucro') ||
       lower.includes('como esta meu negocio')
     );
+  }
+
+  private isContactDebtQuestion(message: string): boolean {
+    const lower = this.normalizeText(message);
+    return /\bcliente\b/.test(lower) && /\b(deve|devendo|pendente|pendencia)\b/.test(lower);
+  }
+
+  private isSuppliersDueQuestion(message: string): boolean {
+    const lower = this.normalizeText(message);
+    return /\bfornecedores?\b/.test(lower) && /\b(vencem|vencimento|vencer|pagar)\b/.test(lower) && /\bsemana\b/.test(lower);
+  }
+
+  private isTopCustomerQuestion(message: string): boolean {
+    const lower = this.normalizeText(message);
+    return /\b(quem|clientes?)\b/.test(lower) && /\b(mais comprou|mais compraram|maior cliente|melhores clientes)\b/.test(lower);
   }
 
   private isCompleteSummaryQuestion(message: string): boolean {

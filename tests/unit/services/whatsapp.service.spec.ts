@@ -48,6 +48,8 @@ describe('WhatsappService', () => {
       findMany: ReturnType<typeof vi.fn>;
       update: ReturnType<typeof vi.fn>;
     };
+    businessContact: { findFirst: ReturnType<typeof vi.fn> };
+    businessEntry: { findMany: ReturnType<typeof vi.fn> };
     whatsappConversation: {
       findUnique: ReturnType<typeof vi.fn>;
       upsert: ReturnType<typeof vi.fn>;
@@ -88,6 +90,8 @@ describe('WhatsappService', () => {
         findMany: vi.fn(),
         update: vi.fn(),
       },
+      businessContact: { findFirst: vi.fn() },
+      businessEntry: { findMany: vi.fn() },
       whatsappConversation: { findUnique: vi.fn(), upsert: vi.fn(), update: vi.fn() },
       dinActivityEvent: { create: vi.fn(), update: vi.fn(), findMany: vi.fn() },
     };
@@ -3046,5 +3050,39 @@ describe('WhatsappService', () => {
         }),
       }),
     );
+  });
+
+  it('informa quanto um cliente ainda deve', async () => {
+    prismaMock.businessContact.findFirst.mockResolvedValue({ id: 'contact-1', name: 'João' });
+    prismaMock.businessEntry.findMany.mockResolvedValue([
+      { amount: 300, dueDate: new Date('2026-07-01T00:00:00.000Z') },
+      { amount: 200, dueDate: new Date('2099-07-30T00:00:00.000Z') },
+    ]);
+    const answerQuestion = Reflect.get(service, 'answerQuestion') as (userId: string, message: string) => Promise<string>;
+    const reply = (await answerQuestion.call(service, 'user-1', 'quanto o cliente joao ainda deve')).replace(/\u00a0/g, ' ');
+    expect(reply).toContain('João ainda deve R$ 500,00');
+    expect(reply).toContain('R$ 300,00 está vencido');
+  });
+
+  it('lista fornecedores que vencem na semana', async () => {
+    prismaMock.businessEntry.findMany.mockResolvedValue([
+      { counterparty: 'Fornecedor Central', amount: 850, dueDate: new Date('2026-07-20T00:00:00.000Z') },
+    ]);
+    const answerQuestion = Reflect.get(service, 'answerQuestion') as (userId: string, message: string) => Promise<string>;
+    const reply = (await answerQuestion.call(service, 'user-1', 'quais fornecedores vencem esta semana')).replace(/\u00a0/g, ' ');
+    expect(reply).toContain('Fornecedor Central');
+    expect(reply).toContain('R$ 850,00');
+  });
+
+  it('ranqueia os clientes que mais compraram no mês', async () => {
+    prismaMock.businessEntry.findMany.mockResolvedValue([
+      { counterparty: 'João', amount: 400 },
+      { counterparty: 'Maria', amount: 900 },
+      { counterparty: 'João', amount: 700 },
+    ]);
+    const answerQuestion = Reflect.get(service, 'answerQuestion') as (userId: string, message: string) => Promise<string>;
+    const reply = (await answerQuestion.call(service, 'user-1', 'quem mais comprou neste mes')).replace(/\u00a0/g, ' ');
+    expect(reply).toContain('1. João: R$ 1.100,00');
+    expect(reply).toContain('2. Maria: R$ 900,00');
   });
 });

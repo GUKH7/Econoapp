@@ -108,6 +108,12 @@ export function api() {
     recurringTransactions: () => request(`/transactions/recurring?scope=${state.scope}`),
     businessSummary: () => request('/business/summary'),
     businessEntries: () => request('/business/entries'),
+    businessContacts: () => request('/business/contacts'),
+    createBusinessContact: (payload) =>
+      request('/business/contacts', { method: 'POST', body: JSON.stringify(payload) }),
+    updateBusinessContact: (id, payload) =>
+      request(`/business/contacts/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+    deleteBusinessContact: (id) => request(`/business/contacts/${id}`, { method: 'DELETE' }),
     createBusinessEntry: (payload) =>
       request('/business/entries', { method: 'POST', body: JSON.stringify(payload) }),
     settleBusinessEntry: (id, payload = {}) =>
@@ -165,7 +171,7 @@ export async function loadData() {
     ['recurring', client.recurringTransactions()],
     ['assistant', client.assistantActivity()],
     ...(state.scope === 'BUSINESS'
-      ? [['businessSummary', client.businessSummary()], ['businessEntries', client.businessEntries()]]
+      ? [['businessSummary', client.businessSummary()], ['businessEntries', client.businessEntries()], ['businessContacts', client.businessContacts()]]
       : []),
   ];
   const results = await Promise.allSettled(resources.map(([, promise]) => promise));
@@ -196,6 +202,7 @@ export async function loadData() {
   }
   if ('businessSummary' in loaded) state.businessSummary = loaded.businessSummary;
   if ('businessEntries' in loaded) state.businessEntries = loaded.businessEntries || [];
+  if ('businessContacts' in loaded) state.businessContacts = loaded.businessContacts || [];
   localStorage.removeItem('econoapp.budgets');
   return { warnings: state.loadWarnings };
 }

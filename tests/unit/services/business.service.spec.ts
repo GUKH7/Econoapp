@@ -21,6 +21,13 @@ function serviceFixture() {
       findUnique: vi.fn().mockResolvedValue(null),
       upsert: vi.fn(),
     },
+    businessContact: {
+      findMany: vi.fn().mockResolvedValue([]),
+      findFirst: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+      delete: vi.fn(),
+    },
     businessEntry: {
       create: vi.fn().mockImplementation(({ data }) => Promise.resolve({
         id: `entry-${String(data.dueDate)}`,
@@ -98,5 +105,21 @@ describe('BusinessService', () => {
     expect(summary.statement.pendingTaxProvision).toBe(90);
     expect(summary.statement.estimatedNetResult).toBe(2618);
     vi.useRealTimers();
+  });
+
+  it('resume vendas, compras e pendências por contato', async () => {
+    const { prisma, service } = serviceFixture();
+    prisma.businessContact.findMany.mockResolvedValue([{
+      id: 'contact-1', userId: 'user-1', type: 'CLIENT', name: 'João', phone: '11999999999', email: null, notes: null,
+      businessEntries: [
+        { type: BusinessEntryType.RECEIVABLE, status: BusinessEntryStatus.PENDING, amount: 200, dueDate: new Date('2026-07-20'), settledAt: null, updatedAt: new Date('2026-07-11') },
+        { type: BusinessEntryType.RECEIVABLE, status: BusinessEntryStatus.SETTLED, amount: 500, dueDate: new Date('2026-07-10'), settledAt: new Date('2026-07-10'), updatedAt: new Date('2026-07-10') },
+      ],
+    }]);
+
+    const contacts = await service.listContacts('user-1');
+
+    expect(contacts[0]).toMatchObject({ name: 'João', totalSold: 700, totalPurchased: 0, pendingAmount: 200 });
+    expect(contacts[0]?.lastMovementAt).toEqual(new Date('2026-07-11'));
   });
 });

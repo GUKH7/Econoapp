@@ -140,6 +140,7 @@ function makePrismaMock() {
     recurringTransaction: { findMany: vi.fn() },
     businessEntry: { findMany: vi.fn() },
     businessSettings: { findUnique: vi.fn() },
+    businessContact: { findMany: vi.fn() },
     $transaction: vi.fn().mockResolvedValue([]),
   };
 }

@@ -43,6 +43,7 @@ export const state = {
   recurringEditingId: '',
   businessSummary: null,
   businessEntries: [],
+  businessContacts: [],
   reportType: 'EXPENSE',
   report: null,
   reportPeriodOffset: 0,

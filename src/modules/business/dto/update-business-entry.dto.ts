@@ -18,6 +18,10 @@ export class UpdateBusinessEntryDto {
   counterparty?: string;
 
   @IsOptional()
+  @IsUUID()
+  contactId?: string;
+
+  @IsOptional()
   @Type(() => Number)
   @IsNumber()
   @Min(0.01)

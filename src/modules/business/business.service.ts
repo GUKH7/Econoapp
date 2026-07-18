@@ -12,7 +12,9 @@ import { randomUUID } from 'node:crypto';
 import { PrismaService } from '@/config/database';
 import { TransactionService } from '@/modules/transactions/transaction.service';
 import { CreateBusinessEntryDto } from './dto/create-business-entry.dto';
+import { CreateBusinessContactDto } from './dto/create-business-contact.dto';
 import { SettleBusinessEntryDto } from './dto/settle-business-entry.dto';
+import { UpdateBusinessContactDto } from './dto/update-business-contact.dto';
 import { UpdateBusinessEntryDto } from './dto/update-business-entry.dto';
 import { UpdateBusinessSettingsDto } from './dto/update-business-settings.dto';
 
@@ -24,7 +26,7 @@ export class BusinessService {
   ) {}
 
   async create(userId: string, input: CreateBusinessEntryDto) {
-    await this.validateReferences(userId, input.categoryId, input.accountId);
+    const references = await this.validateReferences(userId, input.categoryId, input.accountId, input.contactId);
     const firstDueDate = new Date(input.dueDate);
     const seriesId = input.recurrenceFrequency ? randomUUID() : null;
     const dueDates = this.recurrenceDates(firstDueDate, input.recurrenceFrequency, input.recurrenceEndDate);
@@ -32,9 +34,10 @@ export class BusinessService {
       dueDates.map((dueDate) => this.prisma.businessEntry.create({
         data: {
           userId,
+          contactId: input.contactId ?? null,
           type: input.type,
           title: input.title.trim(),
-          counterparty: input.counterparty.trim(),
+          counterparty: references.contact?.name ?? input.counterparty.trim(),
           amount: input.amount,
           dueDate,
           categoryId: input.categoryId,
@@ -64,14 +67,14 @@ export class BusinessService {
     if (entry.status !== BusinessEntryStatus.PENDING) {
       throw new BadRequestException('Somente contas pendentes podem ser editadas');
     }
-    await this.validateReferences(userId, input.categoryId ?? entry.categoryId, input.accountId);
+    const references = await this.validateReferences(userId, input.categoryId ?? entry.categoryId, input.accountId, input.contactId);
     const updated = await this.prisma.businessEntry.update({
       where: { id },
       data: {
         ...input,
         ...(input.dueDate ? { dueDate: new Date(input.dueDate) } : {}),
         ...(input.title ? { title: input.title.trim() } : {}),
-        ...(input.counterparty ? { counterparty: input.counterparty.trim() } : {}),
+        ...(references.contact ? { counterparty: references.contact.name } : input.counterparty ? { counterparty: input.counterparty.trim() } : {}),
         ...(input.notes !== undefined ? { notes: input.notes.trim() || null } : {}),
       },
       include: this.entryInclude(),
@@ -246,21 +249,103 @@ export class BusinessService {
     return { taxRate: Number(settings.taxRate), taxConfigured: settings.taxConfigured };
   }
 
+  async listContacts(userId: string) {
+    const contacts = await this.prisma.businessContact.findMany({
+      where: { userId },
+      include: {
+        businessEntries: {
+          where: { status: { not: BusinessEntryStatus.CANCELLED } },
+          select: { type: true, status: true, amount: true, dueDate: true, settledAt: true, updatedAt: true },
+          orderBy: { updatedAt: 'desc' },
+        },
+      },
+      orderBy: { name: 'asc' },
+    });
+    return contacts.map((contact) => this.contactSummary(contact));
+  }
+
+  async createContact(userId: string, input: CreateBusinessContactDto) {
+    this.validateContactDetails(input.phone, input.email);
+    const contact = await this.prisma.businessContact.create({
+      data: {
+        userId,
+        type: input.type,
+        name: input.name.trim(),
+        phone: input.phone?.trim() || null,
+        email: input.email?.trim().toLowerCase() || null,
+        notes: input.notes?.trim() || null,
+      },
+    });
+    return { ...contact, totalSold: 0, totalPurchased: 0, pendingAmount: 0, lastMovementAt: null };
+  }
+
+  async updateContact(userId: string, id: string, input: UpdateBusinessContactDto) {
+    const current = await this.findOwnedContact(userId, id);
+    const phone = input.phone === undefined ? current.phone : input.phone.trim() || null;
+    const email = input.email === undefined ? current.email : input.email.trim().toLowerCase() || null;
+    this.validateContactDetails(phone, email);
+    return this.prisma.businessContact.update({
+      where: { id },
+      data: {
+        ...(input.type ? { type: input.type } : {}),
+        ...(input.name ? { name: input.name.trim() } : {}),
+        phone,
+        email,
+        ...(input.notes !== undefined ? { notes: input.notes.trim() || null } : {}),
+      },
+    });
+  }
+
+  async deleteContact(userId: string, id: string): Promise<void> {
+    await this.findOwnedContact(userId, id);
+    await this.prisma.businessContact.delete({ where: { id } });
+  }
+
   private async findOwned(userId: string, id: string) {
     const entry = await this.prisma.businessEntry.findFirst({ where: { id, userId } });
     if (!entry) throw new NotFoundException('Conta empresarial não encontrada');
     return entry;
   }
 
-  private async validateReferences(userId: string, categoryId: string, accountId?: string) {
-    const [category, account] = await Promise.all([
+  private async validateReferences(userId: string, categoryId: string, accountId?: string, contactId?: string) {
+    const [category, account, contact] = await Promise.all([
       this.prisma.category.findFirst({ where: { id: categoryId, userId }, select: { id: true } }),
       accountId
         ? this.prisma.financialAccount.findFirst({ where: { id: accountId, userId, scope: FinancialScope.BUSINESS }, select: { id: true } })
         : Promise.resolve({ id: '' }),
+      contactId
+        ? this.prisma.businessContact.findFirst({ where: { id: contactId, userId }, select: { id: true, name: true } })
+        : Promise.resolve(null),
     ]);
     if (!category) throw new NotFoundException('Categoria não encontrada');
     if (accountId && !account) throw new NotFoundException('Conta empresarial não encontrada');
+    if (contactId && !contact) throw new NotFoundException('Cliente ou fornecedor não encontrado');
+    return { contact };
+  }
+
+  private async findOwnedContact(userId: string, id: string) {
+    const contact = await this.prisma.businessContact.findFirst({ where: { id, userId } });
+    if (!contact) throw new NotFoundException('Cliente ou fornecedor não encontrado');
+    return contact;
+  }
+
+  private validateContactDetails(phone?: string | null, email?: string | null) {
+    if (!phone && !email) throw new BadRequestException('Informe um telefone ou e-mail');
+  }
+
+  private contactSummary<T extends { businessEntries: Array<{ type: BusinessEntryType; status: BusinessEntryStatus; amount: unknown; dueDate: Date; settledAt: Date | null; updatedAt: Date }> }>(contact: T) {
+    const { businessEntries, ...details } = contact;
+    const totalSold = this.sum(businessEntries.filter((entry) => entry.type === BusinessEntryType.RECEIVABLE));
+    const totalPurchased = this.sum(businessEntries.filter((entry) => entry.type === BusinessEntryType.PAYABLE));
+    const pendingAmount = this.sum(businessEntries.filter((entry) => entry.status === BusinessEntryStatus.PENDING));
+    const last = businessEntries[0];
+    return {
+      ...details,
+      totalSold,
+      totalPurchased,
+      pendingAmount,
+      lastMovementAt: last ? (last.settledAt ?? last.updatedAt ?? last.dueDate) : null,
+    };
   }
 
   private recurrenceDates(first: Date, frequency?: RecurrenceFrequency, endDate?: string): Date[] {
@@ -300,6 +385,7 @@ export class BusinessService {
     return {
       category: { select: { id: true, name: true, color: true } },
       account: { select: { id: true, name: true } },
+      contact: { select: { id: true, name: true, type: true } },
     } as const;
   }
 

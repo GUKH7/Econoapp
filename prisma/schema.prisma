@@ -68,6 +68,12 @@ enum BusinessCostType {
   FIXED
 }
 
+enum BusinessContactType {
+  CLIENT
+  SUPPLIER
+  BOTH
+}
+
 model User {
   id                     String                          @id @default(uuid()) @db.Uuid
   name                   String
@@ -96,7 +102,25 @@ model User {
   payments               Payment[]                       @relation("UserPayments")
   paymentsRecorded       Payment[]                       @relation("PaymentRecorder")
   businessEntries        BusinessEntry[]
+  businessContacts       BusinessContact[]
   businessSettings       BusinessSettings?
+}
+
+model BusinessContact {
+  id        String              @id @default(uuid()) @db.Uuid
+  userId    String              @db.Uuid
+  type      BusinessContactType
+  name      String
+  phone     String?
+  email     String?
+  notes     String?
+  createdAt DateTime            @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime            @updatedAt @db.Timestamptz(6)
+
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  businessEntries BusinessEntry[]
+
+  @@index([userId, type, name])
 }
 
 model Payment {
@@ -158,6 +182,7 @@ model SalesChannel {
 model BusinessEntry {
   id                  String               @id @default(uuid()) @db.Uuid
   userId              String               @db.Uuid
+  contactId           String?              @db.Uuid
   type                BusinessEntryType
   status              BusinessEntryStatus  @default(PENDING)
   title               String
@@ -176,11 +201,13 @@ model BusinessEntry {
   updatedAt           DateTime             @updatedAt @db.Timestamptz(6)
 
   user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  contact     BusinessContact?  @relation(fields: [contactId], references: [id], onDelete: SetNull)
   category    Category          @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   account     FinancialAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
   transaction Transaction?      @relation(fields: [transactionId], references: [id], onDelete: SetNull)
 
   @@index([userId, type, status, dueDate])
+  @@index([userId, contactId])
   @@index([userId, seriesId, dueDate])
 }
 

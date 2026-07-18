@@ -210,6 +210,12 @@ const apiFixtures = {
       { id: 'entry-rent', title: 'Aluguel da loja', counterparty: 'Imobiliária Central', amount: 1800, type: 'PAYABLE', status: 'PENDING', effectiveStatus: 'PENDING', dueDate: currentMonthDate(26), category: categories[1] },
     ],
   },
+  '/api/v1/business/contacts': {
+    data: [
+      { id: 'contact-client', type: 'CLIENT', name: 'Cliente Aurora', phone: '11999999999', email: 'aurora@example.com', notes: 'Compra recorrente', totalSold: 5400, totalPurchased: 0, pendingAmount: 1200, lastMovementAt: currentMonthDate(2) },
+      { id: 'contact-supplier', type: 'SUPPLIER', name: 'Imobiliária Central', phone: '11888888888', email: null, notes: null, totalSold: 0, totalPurchased: 3600, pendingAmount: 1800, lastMovementAt: currentMonthDate(6) },
+    ],
+  },
   '/api/v1/assistant/activity': {
     data: {
       messages: [
@@ -432,6 +438,11 @@ async function runViewport(browser, baseUrl, name, viewport) {
   await assertText(page, 'Contas a pagar e receber');
   await assertVisible(page, '[data-business-entry-form]', 'formulário empresarial');
   await screenshot(page, `${name}-business-agenda`);
+  await page.locator('[data-manage-section="contacts"]').click();
+  await assertText(page, 'Clientes e fornecedores');
+  await assertVisible(page, '[data-business-contact-form]', 'formulário de clientes e fornecedores');
+  await assertText(page, 'Cliente Aurora');
+  await screenshot(page, `${name}-business-contacts`);
   await page.locator('[data-manage-back]').click();
   await page.locator('[data-tab="dashboard"]').click();
   await page.locator('[data-scope] [data-value="PERSONAL"]').click();
