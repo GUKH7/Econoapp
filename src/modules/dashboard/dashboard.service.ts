@@ -1,5 +1,6 @@
-import { Inject, Injectable } from '@nestjs/common';
-import { FinancialScope, Prisma } from '@prisma/client';
+import { BadRequestException, Inject, Injectable } from '@nestjs/common';
+import { FinancialScope, Prisma, TransactionType } from '@prisma/client';
+import { FinancialReportResponse } from '@/common/types/response.types';
 import { PrismaService } from '@/config/database';
 import { startOfDayUtc, endOfDayUtc, toUtcDate } from '@/utils/date';
 
@@ -7,8 +8,9 @@ interface DashboardSummary {
   balance: number;
   totalIncome: number;
   totalExpense: number;
-  byCategory: Array<{ categoryName: string; color: string; total: number; percentage: number }>;
+  byCategory: Array<{ type: TransactionType; categoryName: string; color: string; total: number; percentage: number }>;
   byChannel: Array<{
+    type: TransactionType;
     channelName: string;
     total: number;
     netTotal: number;
@@ -29,6 +31,87 @@ export interface SpendingByTime {
 @Injectable()
 export class DashboardService {
   constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+
+  async getReport(
+    userId: string,
+    startDate: string,
+    endDate: string,
+    scope?: FinancialScope,
+  ): Promise<FinancialReportResponse> {
+    const periodStart = startOfDayUtc(toUtcDate(startDate));
+    const periodEnd = endOfDayUtc(toUtcDate(endDate));
+    if (periodStart > periodEnd) {
+      throw new BadRequestException('A data inicial deve ser anterior à data final');
+    }
+
+    const dayMs = 24 * 60 * 60 * 1000;
+    const periodDays = Math.round((startOfDayUtc(periodEnd).getTime() - periodStart.getTime()) / dayMs) + 1;
+    const comparisonEnd = endOfDayUtc(new Date(periodStart.getTime() - dayMs));
+    const lastDayOfPeriodMonth = new Date(Date.UTC(periodStart.getUTCFullYear(), periodStart.getUTCMonth() + 1, 0)).getUTCDate();
+    const isFullMonth = periodStart.getUTCDate() === 1 && periodEnd.getUTCDate() === lastDayOfPeriodMonth;
+    const comparisonStart = isFullMonth
+      ? new Date(Date.UTC(comparisonEnd.getUTCFullYear(), comparisonEnd.getUTCMonth(), 1))
+      : startOfDayUtc(new Date(comparisonEnd.getTime() - (periodDays - 1) * dayMs));
+    const scopeWhere = scope ? { scope } : {};
+
+    const [currentGroups, previousGroups, categoryGroups, spendingTimeRaw] = await Promise.all([
+      this.prisma.transaction.groupBy({
+        by: ['type'],
+        where: { userId, date: { gte: periodStart, lte: periodEnd }, ...scopeWhere },
+        _sum: { netAmount: true },
+      }),
+      this.prisma.transaction.groupBy({
+        by: ['type'],
+        where: { userId, date: { gte: comparisonStart, lte: comparisonEnd }, ...scopeWhere },
+        _sum: { netAmount: true },
+      }),
+      this.prisma.transaction.groupBy({
+        by: ['type', 'categoryId'],
+        where: { userId, date: { gte: periodStart, lte: periodEnd }, ...scopeWhere },
+        _sum: { netAmount: true },
+      }),
+      this.prisma.$queryRaw<SpendingTimeRow[]>(Prisma.sql`
+        SELECT
+          CASE
+            WHEN EXTRACT(HOUR FROM t."date" AT TIME ZONE 'America/Sao_Paulo') < 6 THEN 'DAWN'
+            WHEN EXTRACT(HOUR FROM t."date" AT TIME ZONE 'America/Sao_Paulo') < 12 THEN 'MORNING'
+            WHEN EXTRACT(HOUR FROM t."date" AT TIME ZONE 'America/Sao_Paulo') < 18 THEN 'AFTERNOON'
+            ELSE 'EVENING'
+          END AS period,
+          c."name" AS "categoryName",
+          SUM(t."netAmount")::float AS total,
+          COUNT(t."id")::int AS "transactionCount"
+        FROM "Transaction" t
+        INNER JOIN "Category" c ON c."id" = t."categoryId"
+        WHERE t."userId" = ${userId}::uuid
+          AND t."type" = 'EXPENSE'::"TransactionType"
+          AND t."source" NOT IN ('CSV'::"TransactionSource", 'RECURRENT'::"TransactionSource")
+          AND t."date" >= ${periodStart}
+          AND t."date" <= ${periodEnd}
+          ${scope ? Prisma.sql`AND t."scope" = ${scope}::"FinancialScope"` : Prisma.empty}
+        GROUP BY period, c."name"
+      `),
+    ]);
+
+    const categoryIds = categoryGroups.map((group) => group.categoryId);
+    const categoryRecords = await this.prisma.category.findMany({
+      where: { userId, id: { in: categoryIds } },
+      select: { id: true, name: true, color: true },
+    });
+    const categoryMap = new Map(categoryRecords.map((category) => [category.id, category]));
+
+    return {
+      period: { startDate: dateKey(periodStart), endDate: dateKey(periodEnd) },
+      comparisonPeriod: { startDate: dateKey(comparisonStart), endDate: dateKey(comparisonEnd) },
+      current: reportTotals(currentGroups),
+      previous: reportTotals(previousGroups),
+      categories: {
+        INCOME: reportCategories(categoryGroups, categoryMap, TransactionType.INCOME),
+        EXPENSE: reportCategories(categoryGroups, categoryMap, TransactionType.EXPENSE),
+      },
+      spendingByTime: buildSpendingByTime(spendingTimeRaw),
+    };
+  }
 
   async getSummary(
     userId: string,
@@ -63,14 +146,14 @@ export class DashboardService {
 
       // Agrupamento por categoria
       this.prisma.transaction.groupBy({
-        by: ['categoryId'],
+        by: ['type', 'categoryId'],
         where: { userId, ...dateWhere, ...scopeWhere },
         _sum: { amount: true },
       }),
 
       // Agrupamento por canal
       this.prisma.transaction.groupBy({
-        by: ['channelId'],
+        by: ['type', 'channelId'],
         where: { userId, ...dateWhere, ...scopeWhere },
         _sum: { amount: true, netAmount: true },
         _count: { id: true },
@@ -130,7 +213,7 @@ export class DashboardService {
 
     const [categories, channels] = await Promise.all([
       this.prisma.category.findMany({
-        where: { id: { in: categoryIds } },
+        where: { userId, id: { in: categoryIds } },
         select: { id: true, name: true, color: true },
       }),
       this.prisma.salesChannel.findMany({
@@ -141,25 +224,31 @@ export class DashboardService {
 
     // ── byCategory ───────────────────────────────────────────────────────────
     const categoryMap = new Map(categories.map((c) => [c.id, c]));
-    const totalAllCategories = categoryGroups.reduce(
-      (sum, g) => sum + Number(g._sum.amount ?? 0),
-      0,
-    );
+    const categoryTotalsByType = new Map<TransactionType, number>();
+    categoryGroups.forEach((group) => {
+      categoryTotalsByType.set(
+        group.type,
+        (categoryTotalsByType.get(group.type) ?? 0) + Number(group._sum.amount ?? 0),
+      );
+    });
     const byCategory = categoryGroups.map((g) => {
       const cat = categoryMap.get(g.categoryId);
       const total = Number(g._sum.amount ?? 0);
+      const totalForType = categoryTotalsByType.get(g.type) ?? 0;
       return {
+        type: g.type,
         categoryName: cat?.name ?? 'Desconhecido',
         color: cat?.color ?? '#6366f1',
         total,
         percentage:
-          totalAllCategories > 0 ? Number(((total / totalAllCategories) * 100).toFixed(2)) : 0,
+          totalForType > 0 ? Number(((total / totalForType) * 100).toFixed(2)) : 0,
       };
     });
 
     // ── byChannel ────────────────────────────────────────────────────────────
     const channelNameMap = new Map(channels.map((c) => [c.id, c.name]));
     const byChannel = channelGroups.map((g) => ({
+      type: g.type,
       channelName: g.channelId ? (channelNameMap.get(g.channelId) ?? 'Desconhecido') : 'Sem canal',
       total: Number(g._sum.amount ?? 0),
       netTotal: Number(g._sum.netAmount ?? 0),
@@ -176,6 +265,47 @@ export class DashboardService {
 
     return { balance, totalIncome, totalExpense, byCategory, byChannel, cashFlow, spendingByTime };
   }
+}
+
+type ReportTotalGroup = {
+  type: TransactionType;
+  _sum: { netAmount: Prisma.Decimal | number | null };
+};
+type ReportCategoryGroup = ReportTotalGroup & { categoryId: string };
+type ReportCategoryRecord = { id: string; name: string; color: string };
+
+function reportTotals(groups: ReportTotalGroup[]): { income: number; expense: number; balance: number } {
+  const income = Number(groups.find((group) => group.type === TransactionType.INCOME)?._sum.netAmount ?? 0);
+  const expense = Number(groups.find((group) => group.type === TransactionType.EXPENSE)?._sum.netAmount ?? 0);
+  return { income, expense, balance: income - expense };
+}
+
+function reportCategories(
+  groups: ReportCategoryGroup[],
+  categoryMap: Map<string, ReportCategoryRecord>,
+  type: TransactionType,
+): Array<{ name: string; color: string; total: number; percentage: number }> {
+  const selected = groups
+    .filter((group) => group.type === type)
+    .map((group) => {
+      const category = categoryMap.get(group.categoryId);
+      return {
+        name: category?.name ?? 'Desconhecido',
+        color: category?.color ?? '#6366f1',
+        total: Number(group._sum.netAmount ?? 0),
+        percentage: 0,
+      };
+    })
+    .sort((left, right) => right.total - left.total);
+  const total = selected.reduce((sum, category) => sum + category.total, 0);
+  return selected.map((category) => ({
+    ...category,
+    percentage: total > 0 ? Number(((category.total / total) * 100).toFixed(2)) : 0,
+  }));
+}
+
+function dateKey(date: Date): string {
+  return date.toISOString().slice(0, 10);
 }
 
 export function buildSpendingByTime(rows: SpendingTimeRow[]): SpendingByTime {

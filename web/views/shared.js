@@ -72,10 +72,10 @@ export function changeText(current, previous, kind = 'neutral') {
   return `${prefix}${Math.abs(change)}% ${direction} do mês anterior`;
 }
 
-export function comparisonText(current, previous, label) {
-  if (previous <= 0 && current > 0) return `${label} sem base em ${previousMonth}`;
+export function comparisonText(current, previous, label, previousLabel = previousMonth) {
+  if (previous <= 0 && current > 0) return `${label} sem base em ${previousLabel}`;
   const change = percentChange(current, previous);
-  return `${change >= 0 ? '+' : ''}${change}% vs ${previousMonth}`;
+  return `${change >= 0 ? '+' : ''}${change}% vs ${previousLabel}`;
 }
 
 export function icon(name) {

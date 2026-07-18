@@ -84,8 +84,12 @@ export function api() {
     resetPassword: (payload) => request('/auth/reset-password', { method: 'POST', body: JSON.stringify(payload) }),
     me: () => request('/auth/me'),
     exportAccount: () => request('/auth/me/export'),
-    deleteAccount: (payload) => request('/auth/me', { method: 'DELETE', body: JSON.stringify(payload) }),
+    deleteUserAccount: (payload) => request('/auth/me', { method: 'DELETE', body: JSON.stringify(payload) }),
     dashboard: () => request(`/dashboard?scope=${state.scope}`),
+    report: (offset = state.reportPeriodOffset) => {
+      const { startDate, endDate } = monthPeriod(offset);
+      return request(`/dashboard/reports?startDate=${startDate}&endDate=${endDate}&scope=${state.scope}`);
+    },
     transactions: () => request(`/transactions?limit=100&scope=${state.scope}`),
     categories: () => request('/categories'),
     channels: () => request('/channels'),
@@ -115,7 +119,7 @@ export function api() {
       request('/channels', { method: 'POST', body: JSON.stringify(payload) }),
     createAccount: (payload) =>
       request('/accounts', { method: 'POST', body: JSON.stringify(payload) }),
-    deleteAccount: (id) => request(`/accounts/${id}`, { method: 'DELETE' }),
+    deleteFinancialAccount: (id) => request(`/accounts/${id}`, { method: 'DELETE' }),
     createCard: (payload) =>
       request('/accounts/cards', { method: 'POST', body: JSON.stringify(payload) }),
     assistantMessage: (payload) =>
@@ -135,6 +139,7 @@ export async function loadData() {
 
   const resources = [
     ['dashboard', client.dashboard()],
+    ['report', client.report()],
     ['transactions', client.transactions()],
     ['categories', client.categories()],
     ['channels', client.channels()],
@@ -154,6 +159,7 @@ export async function loadData() {
   });
 
   if ('dashboard' in loaded) state.dashboard = loaded.dashboard;
+  if ('report' in loaded) state.report = loaded.report;
   if ('transactions' in loaded) state.transactions = loaded.transactions || [];
   if ('categories' in loaded) state.categories = loaded.categories || [];
   if ('channels' in loaded) state.channels = loaded.channels || [];
@@ -171,4 +177,15 @@ export async function loadData() {
   }
   localStorage.removeItem('econoapp.budgets');
   return { warnings: state.loadWarnings };
+}
+
+function monthPeriod(offset = 0) {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth() + offset, 1);
+  const end = new Date(now.getFullYear(), now.getMonth() + offset + 1, 0);
+  return { startDate: localDateKey(start), endDate: localDateKey(end) };
+}
+
+function localDateKey(date) {
+  return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')].join('-');
 }

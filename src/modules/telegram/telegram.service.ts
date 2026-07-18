@@ -540,7 +540,8 @@ export class TelegramService {
   }
 
   private buildResumoText(summary: DashboardSummaryData, periodLabel: string): string {
-    const topCategories = [...summary.byCategory]
+    const topCategories = summary.byCategory
+      .filter((item) => item.type === 'EXPENSE')
       .sort((a, b) => b.total - a.total)
       .slice(0, 3)
       .map((item, index) => `${index + 1}. ${item.categoryName}: ${this.formatMoney(item.total)}`);
@@ -580,8 +581,9 @@ export class TelegramService {
 
   private async renderChart(type: 'category' | 'channel', summary: DashboardSummaryData): Promise<Buffer> {
     if (type === 'channel') {
-      const labels = summary.byChannel.map((item) => item.channelName);
-      const values = summary.byChannel.map((item) => item.total);
+      const incomeChannels = summary.byChannel.filter((item) => item.type === 'INCOME');
+      const labels = incomeChannels.map((item) => item.channelName);
+      const values = incomeChannels.map((item) => item.total);
       return this.chartCanvas.renderToBuffer({
         type: 'bar',
         data: {
@@ -597,9 +599,10 @@ export class TelegramService {
       });
     }
 
-    const labels = summary.byCategory.map((item) => item.categoryName);
-    const values = summary.byCategory.map((item) => item.total);
-    const colors = summary.byCategory.map((item) => item.color || '#6366f1');
+    const expenseCategories = summary.byCategory.filter((item) => item.type === 'EXPENSE');
+    const labels = expenseCategories.map((item) => item.categoryName);
+    const values = expenseCategories.map((item) => item.total);
+    const colors = expenseCategories.map((item) => item.color || '#6366f1');
 
     const total = values.reduce((a, b) => a + b, 0);
 

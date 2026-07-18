@@ -89,12 +89,14 @@ export interface DashboardSummaryResponse {
   totalIncome: number;
   totalExpense: number;
   byCategory: Array<{
+    type: 'INCOME' | 'EXPENSE';
     categoryName: string;
     color: string;
     total: number;
     percentage: number;
   }>;
   byChannel: Array<{
+    type: 'INCOME' | 'EXPENSE';
     channelName: string;
     total: number;
     netTotal: number;
@@ -114,4 +116,16 @@ export interface DashboardSummaryResponse {
       percentage: number; topCategory: string | null; topCategoryTotal: number;
     }>;
   };
+}
+
+export interface FinancialReportResponse {
+  period: { startDate: string; endDate: string };
+  comparisonPeriod: { startDate: string; endDate: string };
+  current: { income: number; expense: number; balance: number };
+  previous: { income: number; expense: number; balance: number };
+  categories: {
+    INCOME: Array<{ name: string; color: string; total: number; percentage: number }>;
+    EXPENSE: Array<{ name: string; color: string; total: number; percentage: number }>;
+  };
+  spendingByTime: DashboardSummaryResponse['spendingByTime'];
 }

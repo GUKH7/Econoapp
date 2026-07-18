@@ -887,6 +887,27 @@ function bindViewEvents() {
     });
   });
 
+  document.querySelectorAll('[data-report-period]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const offset = Number(button.dataset.reportPeriod);
+      if (!Number.isInteger(offset) || offset === state.reportPeriodOffset || state.reportLoading) return;
+      state.reportLoading = true;
+      document.querySelectorAll('[data-report-period]').forEach((item) => { item.disabled = true; });
+      try {
+        const response = await api().report(offset);
+        const direction = offset > state.reportPeriodOffset ? 'forward' : 'back';
+        state.report = response.data;
+        state.reportPeriodOffset = offset;
+        state.reportLoading = false;
+        renderWithTransition(() => {}, direction);
+      } catch (error) {
+        state.reportLoading = false;
+        showToast(error.message || 'Não foi possível carregar o relatório deste período.', 'error');
+        renderApp();
+      }
+    });
+  });
+
   document.querySelectorAll('[data-assistant-action]').forEach((button) => {
     button.addEventListener('click', () => {
       handleAssistantAction(button.dataset.assistantAction);
@@ -932,7 +953,7 @@ async function handlePrivacyAccountDelete() {
   if (confirmation !== 'EXCLUIR') return;
   const password = window.prompt('Digite sua senha atual. Contas criadas pelo Google podem deixar em branco:') || undefined;
   try {
-    await api().deleteAccount({ confirmation: 'EXCLUIR', password });
+    await api().deleteUserAccount({ confirmation: 'EXCLUIR', password });
     clearSession();
     renderAuth();
     showToast('Sua conta foi excluída.');
@@ -1552,7 +1573,7 @@ async function handleAccountDelete(button) {
 
   button.disabled = true;
   try {
-    await api().deleteAccount(id);
+    await api().deleteFinancialAccount(id);
     await loadData();
     renderApp();
     showToast(`${kind === 'carteira' ? 'Carteira' : 'Conta'} excluída.`);
