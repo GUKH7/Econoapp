@@ -41,6 +41,8 @@ export const state = {
   recurringLoading: false,
   recurringSummary: null,
   recurringEditingId: '',
+  businessSummary: null,
+  businessEntries: [],
   reportType: 'EXPENSE',
   report: null,
   reportPeriodOffset: 0,

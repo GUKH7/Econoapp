@@ -42,12 +42,25 @@ enum ScheduledNotificationType {
   BILL_DUE
   INSTALLMENT_DUE
   CREDIT_CARD_DUE
+  BUSINESS_RECEIVABLE_DUE
+  BUSINESS_PAYABLE_DUE
 }
 
 enum AccountAccessStatus {
   PENDING
   ACTIVE
   SUSPENDED
+}
+
+enum BusinessEntryType {
+  RECEIVABLE
+  PAYABLE
+}
+
+enum BusinessEntryStatus {
+  PENDING
+  SETTLED
+  CANCELLED
 }
 
 model User {
@@ -77,6 +90,7 @@ model User {
   notificationDeliveries ScheduledNotificationDelivery[]
   payments               Payment[]                       @relation("UserPayments")
   paymentsRecorded       Payment[]                       @relation("PaymentRecorder")
+  businessEntries        BusinessEntry[]
 }
 
 model Payment {
@@ -135,6 +149,35 @@ model SalesChannel {
   @@index([userId])
 }
 
+model BusinessEntry {
+  id                  String               @id @default(uuid()) @db.Uuid
+  userId              String               @db.Uuid
+  type                BusinessEntryType
+  status              BusinessEntryStatus  @default(PENDING)
+  title               String
+  counterparty        String
+  amount              Decimal              @db.Decimal(15, 4)
+  dueDate             DateTime             @db.Timestamptz(6)
+  settledAt           DateTime?            @db.Timestamptz(6)
+  categoryId          String               @db.Uuid
+  accountId           String?              @db.Uuid
+  recurrenceFrequency RecurrenceFrequency?
+  recurrenceEndDate   DateTime?            @db.Timestamptz(6)
+  seriesId            String?              @db.Uuid
+  transactionId       String?              @unique @db.Uuid
+  notes               String?
+  createdAt           DateTime             @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime             @updatedAt @db.Timestamptz(6)
+
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category    Category          @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  account     FinancialAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  transaction Transaction?      @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+
+  @@index([userId, type, status, dueDate])
+  @@index([userId, seriesId, dueDate])
+}
+
 model CategoryBudget {
   id          String         @id @default(uuid()) @db.Uuid
   userId      String         @db.Uuid
@@ -164,6 +207,7 @@ model Category {
   transactions          Transaction[]
   budgets               CategoryBudget[]
   recurringTransactions RecurringTransaction[]
+  businessEntries       BusinessEntry[]
 
   @@index([userId])
 }
@@ -198,6 +242,7 @@ model FinancialAccount {
   user                  User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
   transactions          Transaction[]
   recurringTransactions RecurringTransaction[]
+  businessEntries       BusinessEntry[]
 
   @@index([userId, scope])
 }
@@ -237,6 +282,7 @@ model Transaction {
   userId          String            @db.Uuid
   importHash      String?
   createdAt       DateTime          @default(now()) @db.Timestamptz(6)
+  businessEntry   BusinessEntry?
 
   user          User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
   category      Category              @relation(fields: [categoryId], references: [id], onDelete: Restrict)

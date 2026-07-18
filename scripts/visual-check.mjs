@@ -101,6 +101,23 @@ const apiFixtures = {
   '/api/v1/auth/forgot-password': { data: { accepted: true } },
   '/api/v1/auth/me/export': { data: { profile: { id: 'user-visual' }, transactions } },
   '/api/v1/dashboard': { data: {} },
+  '/api/v1/dashboard/reports': {
+    data: {
+      period: { startDate: currentMonthDate(1).slice(0, 10), endDate: currentMonthDate(28).slice(0, 10) },
+      comparisonPeriod: { startDate: '2026-06-01', endDate: '2026-06-30' },
+      current: { income: 4500, expense: 1599.4, balance: 2900.6 },
+      previous: { income: 4200, expense: 1450, balance: 2750 },
+      categories: {
+        INCOME: [{ name: 'Salario', color: '#22C55E', total: 4500, percentage: 100 }],
+        EXPENSE: [
+          { name: 'Moradia', color: '#3B82F6', total: 1200, percentage: 75 },
+          { name: 'Alimentacao', color: '#22C55E', total: 312.9, percentage: 20 },
+          { name: 'Transporte', color: '#F59E0B', total: 86.5, percentage: 5 },
+        ],
+      },
+      spendingByTime: { sampleSize: 0, hasEnoughData: false, peakPeriod: null, periods: [] },
+    },
+  },
   '/api/v1/transactions': { data: transactions },
   '/api/v1/categories': { data: categories },
   '/api/v1/channels': { data: [{ id: 'channel-store', name: 'Loja online', feePercent: 4.5 }] },
@@ -146,6 +163,32 @@ const apiFixtures = {
     },
   },
   '/api/v1/transactions/recurring': { data: [] },
+  '/api/v1/business/summary': {
+    data: {
+      availableBalance: 8400,
+      monthIncome: 12600,
+      monthExpense: 7350,
+      receivable: 5900,
+      payable: 2800,
+      overdueReceivable: 1200,
+      overduePayable: 0,
+      estimatedResult: 8350,
+      projections: [
+        { days: 7, income: 2400, expense: 1100, balance: 9700 },
+        { days: 30, income: 5900, expense: 2800, balance: 11500 },
+        { days: 90, income: 5900, expense: 2800, balance: 11500 },
+      ],
+      alerts: [
+        { id: 'entry-overdue', title: 'Projeto Aurora', counterparty: 'Cliente Aurora', amount: 1200, type: 'RECEIVABLE', status: 'PENDING', effectiveStatus: 'OVERDUE', dueDate: currentMonthDate(2), category: categories[3] },
+      ],
+    },
+  },
+  '/api/v1/business/entries': {
+    data: [
+      { id: 'entry-overdue', title: 'Projeto Aurora', counterparty: 'Cliente Aurora', amount: 1200, type: 'RECEIVABLE', status: 'PENDING', effectiveStatus: 'OVERDUE', dueDate: currentMonthDate(2), category: categories[3] },
+      { id: 'entry-rent', title: 'Aluguel da loja', counterparty: 'Imobiliária Central', amount: 1800, type: 'PAYABLE', status: 'PENDING', effectiveStatus: 'PENDING', dueDate: currentMonthDate(26), category: categories[1] },
+    ],
+  },
   '/api/v1/assistant/activity': {
     data: {
       messages: [
@@ -358,6 +401,19 @@ async function runViewport(browser, baseUrl, name, viewport) {
   await screenshotBottomViewport(page, `${name}-dashboard`);
   await page.evaluate(() => window.scrollTo(0, 0));
 
+  await page.locator('[data-scope] [data-value="BUSINESS"]').click();
+  await assertText(page, 'Caixa do negócio');
+  await assertText(page, 'Projeção do caixa');
+  await assertText(page, 'Resultado estimado');
+  await screenshot(page, `${name}-business-dashboard`);
+  await page.locator('[data-manage-section="business"]').first().click();
+  await assertText(page, 'Contas a pagar e receber');
+  await assertVisible(page, '[data-business-entry-form]', 'formulário empresarial');
+  await screenshot(page, `${name}-business-agenda`);
+  await page.locator('[data-manage-back]').click();
+  await page.locator('[data-tab="dashboard"]').click();
+  await page.locator('[data-scope] [data-value="PERSONAL"]').click();
+
   await page.locator('nav.tabs [data-tab="transactions"]').click();
   await assertVisible(page, '[data-transaction-search]', 'busca de lancamentos');
   if (await page.locator('.transaction-tools').count()) {
@@ -471,7 +527,7 @@ async function main() {
 await Promise.race([
   main(),
   new Promise((_, reject) => {
-    setTimeout(() => reject(new Error('Timeout global da verificacao visual.')), 120000);
+    setTimeout(() => reject(new Error('Timeout global da verificacao visual.')), 180000);
   }),
 ]).catch((error) => {
   console.error(error.message);

@@ -1,4 +1,6 @@
 import {
+  BusinessEntryStatus,
+  BusinessEntryType,
   FinancialScope,
   ScheduledNotificationType,
   TransactionType,
@@ -16,6 +18,9 @@ describe('WhatsappScheduledNotificationService', () => {
     creditCard: {
       findMany: vi.fn(),
     },
+    businessEntry: {
+      findMany: vi.fn(),
+    },
     scheduledNotificationDelivery: {
       findUnique: vi.fn(),
       create: vi.fn(),
@@ -31,6 +36,7 @@ describe('WhatsappScheduledNotificationService', () => {
     prismaMock.transaction.findMany.mockResolvedValue([]);
     prismaMock.transaction.aggregate.mockResolvedValue({ _sum: { amount: null } });
     prismaMock.creditCard.findMany.mockResolvedValue([]);
+    prismaMock.businessEntry.findMany.mockResolvedValue([]);
     prismaMock.scheduledNotificationDelivery.findUnique.mockResolvedValue(null);
     prismaMock.scheduledNotificationDelivery.create.mockResolvedValue({ id: 'delivery-1' });
     whatsappMock.sendMessage.mockResolvedValue({ success: true });
@@ -65,6 +71,35 @@ describe('WhatsappScheduledNotificationService', () => {
       data: expect.objectContaining({
         type: ScheduledNotificationType.BILL_DUE,
         notificationKey: 'BILL_DUE:transaction-1:2026-06-16:3',
+      }),
+    });
+  });
+
+  it('avisa pelo WhatsApp sobre recebimento empresarial vencido', async () => {
+    prismaMock.businessEntry.findMany.mockResolvedValue([
+      {
+        id: 'business-entry-1',
+        userId: 'user-1',
+        type: BusinessEntryType.RECEIVABLE,
+        status: BusinessEntryStatus.PENDING,
+        title: 'Projeto Aurora',
+        counterparty: 'Cliente Aurora',
+        amount: 1200,
+        dueDate: new Date('2026-06-12T10:00:00.000Z'),
+        user: { phone: '11999990000' },
+      },
+    ]);
+
+    const result = await service.run(referenceDate);
+
+    expect(result).toEqual({ checked: 1, sent: 1, skipped: 0, failed: 0 });
+    expect(whatsappMock.sendMessage).toHaveBeenCalledWith({
+      phone: '5511999990000',
+      message: expect.stringContaining('receber de Cliente Aurora'),
+    });
+    expect(prismaMock.scheduledNotificationDelivery.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        type: ScheduledNotificationType.BUSINESS_RECEIVABLE_DUE,
       }),
     });
   });

@@ -77,6 +77,7 @@ export function moreView() {
         <div class="menu-list">
           <button class="menu-item" type="button" data-tab-jump="launch"><span class="tab-icon">+/-</span><span>Lançamentos</span><span>›</span></button>
           <button class="menu-item" type="button" data-manage-section="accounts"><span class="tab-icon">${icon('wallet')}</span><span>Contas e cartões</span><span>›</span></button>
+          <button class="menu-item" type="button" data-manage-section="business"><span class="tab-icon">${icon('shop')}</span><span>Contas a pagar e receber</span><span>›</span></button>
           <button class="menu-item" type="button" data-manage-section="categories"><span class="tab-icon">${icon('tag')}</span><span>Categorias e canais</span><span>›</span></button>
           <button class="menu-item" type="button" data-tab-jump="budget"><span class="tab-icon">${icon('target')}</span><span>Limites e metas</span><span>›</span></button>
           <button class="menu-item" type="button" data-tab-jump="assistant"><span class="tab-icon">${icon('chat')}</span><span>Din / Assistente</span><span>›</span></button>
@@ -113,6 +114,7 @@ export function manageView() {
   const cashWallets = scopedWallets.filter((wallet) => wallet.type !== 'BANK');
   const totalBalance = scopedWallets.reduce((sum, wallet) => sum + Number(wallet.balance || 0), 0);
   const sections = [
+    { id: 'business', label: 'Agenda', meta: `${state.businessEntries.length} contas`, icon: icon('shop') },
     { id: 'accounts', label: 'Contas', meta: `${scopedWallets.length + scopedCards.length} itens`, icon: icon('wallet') },
     { id: 'categories', label: 'Categorias', meta: `${state.categories.length} itens`, icon: icon('tag') },
     { id: 'channels', label: 'Canais', meta: `${state.channels.length} meios`, icon: icon('shop') },
@@ -201,6 +203,39 @@ export function manageView() {
     </article>
   `;
 
+  const businessCategories = state.categories
+    .map((category) => `<option value="${category.id}">${escapeHtml(category.name)}</option>`)
+    .join('');
+  const businessAccounts = state.wallets
+    .filter((account) => account.scope === 'BUSINESS')
+    .map((account) => `<option value="${account.id}">${escapeHtml(account.name)}</option>`)
+    .join('');
+  const businessRows = state.businessEntries.map((entry) => businessEntryRow(entry)).join('');
+  const businessPanel = `
+    <article class="card manage-panel business-agenda-panel">
+      <div class="panel-title"><div><span class="eyebrow">Planejamento</span><h2>Contas a pagar e receber</h2></div></div>
+      <form class="form business-entry-form" data-business-entry-form>
+        <div class="form-grid two-columns">
+          <label class="field">Tipo<select name="type" required><option value="RECEIVABLE">Conta a receber</option><option value="PAYABLE">Conta a pagar</option></select></label>
+          <label class="field">Vencimento<input name="dueDate" type="date" required /></label>
+        </div>
+        <label class="field">Descrição<input name="title" required placeholder="Ex: Mensalidade, aluguel, fornecedor" /></label>
+        <label class="field">Cliente ou fornecedor<input name="counterparty" required placeholder="Nome da pessoa ou empresa" /></label>
+        <div class="form-grid two-columns">
+          <label class="field">Valor<input name="amount" inputmode="decimal" placeholder="0,00" required /></label>
+          <label class="field">Categoria<select name="categoryId" required><option value="">Selecione</option>${businessCategories}</select></label>
+        </div>
+        <label class="field">Conta para liquidação<select name="accountId"><option value="">Definir depois</option>${businessAccounts}</select></label>
+        <div class="form-grid two-columns">
+          <label class="field">Recorrência<select name="recurrenceFrequency"><option value="">Não repetir</option><option value="WEEKLY">Semanal</option><option value="MONTHLY">Mensal</option><option value="YEARLY">Anual</option></select></label>
+          <label class="field">Repetir até<input name="recurrenceEndDate" type="date" /></label>
+        </div>
+        <button class="button" type="submit">Adicionar à agenda</button>
+      </form>
+      <div class="business-entry-list surface-list">${businessRows || '<p class="empty">Nenhuma conta planejada. Cadastre o primeiro recebimento ou pagamento.</p>'}</div>
+    </article>
+  `;
+
   const whatsapp = state.whatsappStatus;
   const qrCode = whatsapp?.status === 'aguardando_qr' && whatsapp.qrcode ? whatsapp.qrcode : '';
   const whatsappPanel = `
@@ -230,6 +265,7 @@ export function manageView() {
   `;
 
   const panels = {
+    business: businessPanel,
     accounts: accountsPanel,
     cards: accountsPanel,
     categories: categoriesPanel,
@@ -245,6 +281,23 @@ export function manageView() {
       ${manageModalHtml()}
     </section>
   `;
+}
+
+function businessEntryRow(entry) {
+  const status = entry.effectiveStatus || entry.status;
+  const statusLabels = { PENDING: 'Prevista', OVERDUE: 'Vencida', SETTLED: entry.type === 'RECEIVABLE' ? 'Recebida' : 'Paga', CANCELLED: 'Cancelada' };
+  const tone = status === 'OVERDUE' ? 'danger' : status === 'SETTLED' ? 'success' : status === 'CANCELLED' ? 'muted' : 'warning';
+  const pending = entry.status === 'PENDING';
+  return `<div class="business-entry-row">
+    <span class="row-icon ${entry.type === 'RECEIVABLE' ? 'income-bg' : 'expense-bg'}">${entry.type === 'RECEIVABLE' ? '↓' : '↑'}</span>
+    <div class="row-main"><div class="row-title">${escapeHtml(entry.title)}</div><div class="row-meta">${escapeHtml(entry.counterparty)} · ${businessDate(entry.dueDate)} · ${escapeHtml(entry.category?.name || '')}</div><span class="badge ${tone}">${statusLabels[status] || status}</span></div>
+    <strong class="${entry.type === 'RECEIVABLE' ? 'income' : 'expense'}">${money.format(Number(entry.amount || 0))}</strong>
+    ${pending ? `<div class="business-entry-actions"><button class="button compact-action" type="button" data-business-settle="${entry.id}">${entry.type === 'RECEIVABLE' ? 'Receber' : 'Pagar'}</button><button class="danger-link" type="button" data-business-cancel="${entry.id}">Cancelar</button></div>` : ''}
+  </div>`;
+}
+
+function businessDate(value) {
+  return new Intl.DateTimeFormat('pt-BR', { timeZone: 'UTC' }).format(new Date(value));
 }
 
 function accountTab(id, label, activeTab) {

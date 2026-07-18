@@ -21,6 +21,7 @@ import { WhatsappModule } from '@/modules/whatsapp/whatsapp.module';
 import { BudgetModule } from '@/modules/budgets/budget.module';
 import { AssistantModule } from '@/modules/assistant/assistant.module';
 import { AdminModule } from '@/modules/admin/admin.module';
+import { BusinessModule } from '@/modules/business/business.module';
 import { randomUUID } from 'node:crypto';
 
 @Module({
@@ -71,6 +72,7 @@ import { randomUUID } from 'node:crypto';
     BudgetModule,
     AssistantModule,
     AdminModule,
+    BusinessModule,
 
     TelegramModule,
     WhatsappModule,

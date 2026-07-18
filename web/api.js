@@ -106,6 +106,13 @@ export function api() {
     exportTransactionsCsv: () =>
       request(`/transactions/export/csv?scope=${state.scope}`, { method: 'GET', raw: true, timeoutMs: 120000 }),
     recurringTransactions: () => request(`/transactions/recurring?scope=${state.scope}`),
+    businessSummary: () => request('/business/summary'),
+    businessEntries: () => request('/business/entries'),
+    createBusinessEntry: (payload) =>
+      request('/business/entries', { method: 'POST', body: JSON.stringify(payload) }),
+    settleBusinessEntry: (id, payload = {}) =>
+      request(`/business/entries/${id}/settle`, { method: 'POST', body: JSON.stringify(payload) }),
+    cancelBusinessEntry: (id) => request(`/business/entries/${id}`, { method: 'DELETE' }),
     createRecurringTransaction: (payload) =>
       request('/transactions/recurring', { method: 'POST', body: JSON.stringify(payload) }),
     updateRecurringTransaction: (id, payload) =>
@@ -153,6 +160,9 @@ export async function loadData() {
     ['budgets', client.budgets()],
     ['recurring', client.recurringTransactions()],
     ['assistant', client.assistantActivity()],
+    ...(state.scope === 'BUSINESS'
+      ? [['businessSummary', client.businessSummary()], ['businessEntries', client.businessEntries()]]
+      : []),
   ];
   const results = await Promise.allSettled(resources.map(([, promise]) => promise));
   const loaded = {};
@@ -180,6 +190,8 @@ export async function loadData() {
     state.assistantActivity = loaded.assistant;
     state.assistantMessages = loaded.assistant?.messages || [];
   }
+  if ('businessSummary' in loaded) state.businessSummary = loaded.businessSummary;
+  if ('businessEntries' in loaded) state.businessEntries = loaded.businessEntries || [];
   localStorage.removeItem('econoapp.budgets');
   return { warnings: state.loadWarnings };
 }

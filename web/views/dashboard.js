@@ -324,46 +324,35 @@ function startOfToday(now = new Date()) {
 }
 
 function businessSummaryCard() {
-  const transactions = scopedTransactions();
-  const totals = scopedTotals();
-  const margin = totals.income > 0 ? Math.round((totals.balance / totals.income) * 100) : 0;
-  const channelRows = channelSummary(transactions);
-  const bestChannel = channelRows[0];
-  const channelTotal = channelRows.reduce((sum, item) => sum + item.total, 0);
+  const summary = state.businessSummary;
+  if (!summary) return `<article class="business-summary-card"><p class="empty">Carregando o caixa do negócio...</p></article>`;
+  const projections = summary.projections || [];
+  const alerts = summary.alerts || [];
 
   return `
     <article class="business-summary-card">
       <div class="business-summary-head">
         <div>
-          <span class="eyebrow">Resumo do negócio</span>
-          <h2>${money.format(totals.income)}</h2>
-          <p>Faturamento de ${currentMonth}</p>
+          <span class="eyebrow">Caixa do negócio</span>
+          <h2>${money.format(Number(summary.availableBalance || 0))}</h2>
+          <p>Saldo disponível nas contas da empresa</p>
         </div>
-        <span class="business-badge ${totals.balance >= 0 ? 'positive' : 'negative'}">
-          ${totals.balance >= 0 ? '+' : '-'}${Math.abs(margin)}%
-        </span>
+        <button class="button secondary compact-action" type="button" data-manage-section="business">Gerenciar</button>
       </div>
-      <div class="business-kpis">
-        <div><span>Entradas</span><strong class="income">${money.format(totals.income)}</strong></div>
-        <div><span>Saídas</span><strong class="expense">${money.format(totals.expense)}</strong></div>
-        <div><span>Lucro</span><strong>${money.format(totals.balance)}</strong></div>
+      <div class="business-kpis business-kpis-expanded">
+        <div><span>Entradas no mês</span><strong class="income">${money.format(Number(summary.monthIncome || 0))}</strong></div>
+        <div><span>Saídas no mês</span><strong class="expense">${money.format(Number(summary.monthExpense || 0))}</strong></div>
+        <div><span>A receber</span><strong class="income">${money.format(Number(summary.receivable || 0))}</strong></div>
+        <div><span>A pagar</span><strong class="expense">${money.format(Number(summary.payable || 0))}</strong></div>
+        <div><span>Resultado estimado</span><strong>${money.format(Number(summary.estimatedResult || 0))}</strong></div>
       </div>
-      <div class="business-channel-block">
-        <div class="panel-title compact">
-          <div>
-            <span class="eyebrow">Canais de venda</span>
-            <h3>${bestChannel ? `Destaque: ${escapeHtml(bestChannel.name)}` : 'Sem canais registrados'}</h3>
-          </div>
-          <button class="button secondary compact-action" type="button" data-manage-section="channels">Gerenciar</button>
-        </div>
-        <div class="business-channel-list">
-          ${
-            channelRows.length
-              ? channelRows.slice(0, 3).map((channel) => channelRow(channel, channelTotal)).join('')
-              : '<p class="empty">Cadastre canais para enxergar de onde vem o faturamento.</p>'
-          }
-        </div>
+      <div class="business-projections">
+        <span class="eyebrow">Projeção do caixa</span>
+        <div class="projection-grid">${projections.map((projection) => `
+          <div><span>${projection.days} dias</span><strong class="${projection.balance < 0 ? 'expense' : ''}">${money.format(Number(projection.balance || 0))}</strong><small>+${money.format(Number(projection.income || 0))} · -${money.format(Number(projection.expense || 0))}</small></div>
+        `).join('')}</div>
       </div>
+      ${alerts.length ? `<div class="business-alerts"><span class="eyebrow">Precisa de atenção</span>${alerts.slice(0, 3).map((entry) => `<button type="button" data-manage-section="business"><strong>${escapeHtml(entry.title)}</strong><small>${entry.effectiveStatus === 'OVERDUE' ? 'Vencida' : 'Vence em breve'} · ${money.format(Number(entry.amount))}</small></button>`).join('')}</div>` : ''}
     </article>
   `;
 }

@@ -518,11 +518,11 @@ function renderApp() {
                 <button class="${state.scope === 'PERSONAL' ? 'active' : ''}" type="button" data-value="PERSONAL">Pessoal</button>
                 <button class="${state.scope === 'BUSINESS' ? 'active' : ''}" type="button" data-value="BUSINESS">Negócio</button>
               </div>
-              <section class="grid dashboard-grid">
+              ${state.scope === 'PERSONAL' ? `<section class="grid dashboard-grid">
                 ${balanceCard(`Saldo total`, totals.balance)}
                 ${metricCard('Receitas', totals.income, 'income')}
                 ${metricCard('Gastos', totals.expense, 'expense')}
-              </section>`
+              </section>` : ''}`
             : ''
         }
 
@@ -683,6 +683,10 @@ function bindViewEvents() {
     button.addEventListener('click', () => {
       renderWithTransition(() => {
         const requestedSection = button.dataset.manageSection;
+        if (requestedSection === 'business') {
+          state.scope = 'BUSINESS';
+          saveScopes();
+        }
         state.tab = 'more';
         state.manageSection = requestedSection === 'cards' ? 'accounts' : requestedSection;
         if (requestedSection === 'cards') state.manageAccountTab = 'cards';
@@ -692,6 +696,9 @@ function bindViewEvents() {
       });
       if (button.dataset.manageSection === 'whatsapp' && !state.whatsappStatus) {
         refreshWhatsappStatus();
+      }
+      if (button.dataset.manageSection === 'business') {
+        loadData().then(() => renderApp()).catch((error) => showToast(error.message, 'error'));
       }
     });
   });
@@ -785,6 +792,13 @@ function bindViewEvents() {
   document.querySelector('[data-category-form]')?.addEventListener('submit', handleCategorySubmit);
   document.querySelector('[data-onboarding-account-form]')?.addEventListener('submit', handleOnboardingAccountSubmit);
   document.querySelector('[data-channel-form]')?.addEventListener('submit', handleChannelSubmit);
+  document.querySelector('[data-business-entry-form]')?.addEventListener('submit', handleBusinessEntrySubmit);
+  document.querySelectorAll('[data-business-settle]').forEach((button) => {
+    button.addEventListener('click', () => handleBusinessEntrySettle(button.dataset.businessSettle));
+  });
+  document.querySelectorAll('[data-business-cancel]').forEach((button) => {
+    button.addEventListener('click', () => handleBusinessEntryCancel(button.dataset.businessCancel));
+  });
   document.querySelector('[data-wallet-form]')?.addEventListener('submit', handleWalletSubmit);
   document.querySelector('[data-card-form]')?.addEventListener('submit', handleCardSubmit);
   document.querySelectorAll('[data-account-delete]').forEach((button) => {
@@ -1537,6 +1551,57 @@ async function handleChannelSubmit(event) {
     showToast('Canal de venda criado.');
   } catch (error) {
     setFormBusy(form, false);
+    showToast(error.message, 'error');
+  }
+}
+
+async function handleBusinessEntrySubmit(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const data = Object.fromEntries(new FormData(form));
+  setFormBusy(form, true, 'Adicionando...');
+  try {
+    const response = await api().createBusinessEntry({
+      type: data.type,
+      title: String(data.title || '').trim(),
+      counterparty: String(data.counterparty || '').trim(),
+      amount: parseAmount(data.amount),
+      dueDate: data.dueDate,
+      categoryId: data.categoryId,
+      ...(data.accountId ? { accountId: data.accountId } : {}),
+      ...(data.recurrenceFrequency ? { recurrenceFrequency: data.recurrenceFrequency } : {}),
+      ...(data.recurrenceEndDate ? { recurrenceEndDate: data.recurrenceEndDate } : {}),
+    });
+    await loadData();
+    renderApp();
+    const generated = Number(response.data?.generated || 1);
+    showToast(generated > 1 ? `${generated} contas recorrentes adicionadas.` : 'Conta adicionada à agenda.');
+  } catch (error) {
+    setFormBusy(form, false);
+    showToast(error.message, 'error');
+  }
+}
+
+async function handleBusinessEntrySettle(id) {
+  if (!id) return;
+  try {
+    await api().settleBusinessEntry(id);
+    await loadData();
+    renderApp();
+    showToast('Conta liquidada e movimentação registrada.');
+  } catch (error) {
+    showToast(error.message, 'error');
+  }
+}
+
+async function handleBusinessEntryCancel(id) {
+  if (!id || !window.confirm('Cancelar esta conta planejada?')) return;
+  try {
+    await api().cancelBusinessEntry(id);
+    await loadData();
+    renderApp();
+    showToast('Conta cancelada.');
+  } catch (error) {
     showToast(error.message, 'error');
   }
 }

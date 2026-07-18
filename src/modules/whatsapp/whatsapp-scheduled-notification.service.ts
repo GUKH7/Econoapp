@@ -1,5 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import {
+  BusinessEntryStatus,
+  BusinessEntryType,
   FinancialScope,
   ScheduledNotificationType,
   TransactionType,
@@ -25,7 +27,50 @@ export class WhatsappScheduledNotificationService {
     const result: ScheduledNotificationResult = { checked: 0, sent: 0, skipped: 0, failed: 0 };
     await this.processUpcomingExpenses(referenceDate, result);
     await this.processCreditCardDueDates(referenceDate, result);
+    await this.processBusinessEntries(referenceDate, result);
     return result;
+  }
+
+  private async processBusinessEntries(
+    referenceDate: Date,
+    result: ScheduledNotificationResult,
+  ): Promise<void> {
+    const start = this.startOfUtcDay(referenceDate);
+    const end = this.addUtcDays(start, 4);
+    const entries = await this.prisma.businessEntry.findMany({
+      where: { status: BusinessEntryStatus.PENDING, dueDate: { lt: end } },
+      include: { user: { select: { phone: true } } },
+      orderBy: { dueDate: 'asc' },
+    });
+
+    for (const entry of entries) {
+      const daysUntilDue = this.daysBetween(start, entry.dueDate);
+      if (daysUntilDue > 3) continue;
+      result.checked += 1;
+      const notificationDay = daysUntilDue < 0 ? 'overdue' : String(daysUntilDue);
+      const type = entry.type === BusinessEntryType.RECEIVABLE
+        ? ScheduledNotificationType.BUSINESS_RECEIVABLE_DUE
+        : ScheduledNotificationType.BUSINESS_PAYABLE_DUE;
+      const direction = entry.type === BusinessEntryType.RECEIVABLE ? 'receber de' : 'pagar a';
+      const timing = daysUntilDue < 0
+        ? `está vencida há ${Math.abs(daysUntilDue)} dia(s)`
+        : daysUntilDue === 0
+          ? 'vence hoje'
+          : `vence em ${daysUntilDue} dia(s)`;
+      await this.deliver({
+        userId: entry.userId,
+        phone: entry.user.phone,
+        type,
+        notificationKey: [type, entry.id, this.dateKey(entry.dueDate), notificationDay].join(':'),
+        dueDate: entry.dueDate,
+        message: [
+          `Lembrete do seu negócio: ${entry.title} ${timing}.`,
+          `${direction} ${entry.counterparty}: ${this.formatMoney(Number(entry.amount))}.`,
+          `Vencimento: ${this.formatDate(entry.dueDate)}.`,
+        ].join('\n'),
+        result,
+      });
+    }
   }
 
   private async processUpcomingExpenses(
