@@ -20,6 +20,7 @@ const envSchema = z.object({
   WHATSAPP_ADMIN_PHONES: z.string().default('5511934736234'),
   ADMIN_PANEL_LOGIN: z.string().default(''),
   ADMIN_PANEL_PASSWORD: z.string().default(''),
+  ADMIN_PANEL_USER_EMAIL: z.string().email().or(z.literal('')).default(''),
   WHATSAPP_WEBHOOK_TOKEN: z.string().default(''),
   WHATSAPP_BUDGET_ALERT_TOKEN: z.string().default(''),
   WHATSAPP_BUDGET_ALERT_INTERVAL_MINUTES: z.coerce.number().int().min(5).default(60),

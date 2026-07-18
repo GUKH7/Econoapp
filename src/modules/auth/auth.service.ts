@@ -130,7 +130,15 @@ export class AuthService {
     }
 
     const adminPhones = [...new Set(env.WHATSAPP_ADMIN_PHONES.split(',').flatMap(phoneCandidates))];
-    const user = await this.prisma.user.findFirst({ where: { phone: { in: adminPhones } } });
+    const adminEmail = env.ADMIN_PANEL_USER_EMAIL.trim().toLowerCase();
+    const user = await this.prisma.user.findFirst({
+      where: {
+        OR: [
+          ...(adminPhones.length ? [{ phone: { in: adminPhones } }] : []),
+          ...(adminEmail ? [{ email: adminEmail }] : []),
+        ],
+      },
+    });
     if (!user) throw new UnauthorizedException('Conta administrativa não configurada');
     return this.issueTokens(user.id, user.phone, user.email ?? undefined);
   }

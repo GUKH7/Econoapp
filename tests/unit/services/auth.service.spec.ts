@@ -33,6 +33,7 @@ vi.mock('@/config/env', () => ({
     WHATSAPP_ADMIN_PHONES: '11999999999',
     ADMIN_PANEL_LOGIN: 'aleta0129',
     ADMIN_PANEL_PASSWORD: '123',
+    ADMIN_PANEL_USER_EMAIL: 'admin@example.com',
     PORT: 3001,
     NODE_ENV: 'test',
   },
@@ -334,7 +335,12 @@ describe('AuthService', () => {
 
       expect(result).toEqual({ accessToken: 'mock-access-token', refreshToken: 'mock-refresh-token-uuid' });
       expect(mockPrisma.user.findFirst).toHaveBeenCalledWith({
-        where: { phone: { in: expect.arrayContaining(['11999999999', '5511999999999']) } },
+        where: {
+          OR: [
+            { phone: { in: expect.arrayContaining(['11999999999', '5511999999999']) } },
+            { email: 'admin@example.com' },
+          ],
+        },
       });
     });
 
