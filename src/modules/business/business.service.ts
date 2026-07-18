@@ -232,9 +232,11 @@ export class BusinessService {
   }
 
   private withEffectiveStatus<T extends { status: BusinessEntryStatus; dueDate: Date }>(entry: T) {
+    const now = new Date();
+    const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
     return {
       ...entry,
-      effectiveStatus: entry.status === BusinessEntryStatus.PENDING && entry.dueDate < new Date()
+      effectiveStatus: entry.status === BusinessEntryStatus.PENDING && entry.dueDate < today
         ? 'OVERDUE'
         : entry.status,
     };
