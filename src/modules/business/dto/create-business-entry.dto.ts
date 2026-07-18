@@ -18,6 +18,16 @@ export class CreateBusinessEntryDto {
   @IsUUID()
   contactId?: string;
 
+  @IsOptional()
+  @IsUUID()
+  offeringId?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0.0001)
+  quantity?: number;
+
   @Type(() => Number)
   @IsNumber()
   @Min(0.01)

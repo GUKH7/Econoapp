@@ -378,7 +378,7 @@ export class AuthService {
     });
     if (!user) throw new NotFoundException('Usuário não encontrado');
 
-    const [transactions, categories, channels, accounts, creditCards, budgets, recurringTransactions, businessEntries, businessSettings, businessContacts] =
+    const [transactions, categories, channels, accounts, creditCards, budgets, recurringTransactions, businessEntries, businessSettings, businessContacts, businessOfferings] =
       await Promise.all([
         this.prisma.transaction.findMany({ where: { userId }, orderBy: { date: 'desc' } }),
         this.prisma.category.findMany({ where: { userId } }),
@@ -390,6 +390,7 @@ export class AuthService {
         this.prisma.businessEntry.findMany({ where: { userId }, orderBy: { dueDate: 'desc' } }),
         this.prisma.businessSettings.findUnique({ where: { userId } }),
         this.prisma.businessContact.findMany({ where: { userId }, orderBy: { name: 'asc' } }),
+        this.prisma.businessOffering.findMany({ where: { userId }, orderBy: { name: 'asc' } }),
       ]);
 
     return {
@@ -405,6 +406,7 @@ export class AuthService {
       businessEntries,
       businessSettings,
       businessContacts,
+      businessOfferings,
     };
   }
 

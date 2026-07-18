@@ -6,8 +6,10 @@ import { JwtPayload } from '@/common/types';
 import { BusinessService } from './business.service';
 import { CreateBusinessEntryDto } from './dto/create-business-entry.dto';
 import { CreateBusinessContactDto } from './dto/create-business-contact.dto';
+import { CreateBusinessOfferingDto } from './dto/create-business-offering.dto';
 import { SettleBusinessEntryDto } from './dto/settle-business-entry.dto';
 import { UpdateBusinessContactDto } from './dto/update-business-contact.dto';
+import { UpdateBusinessOfferingDto } from './dto/update-business-offering.dto';
 import { UpdateBusinessEntryDto } from './dto/update-business-entry.dto';
 import { UpdateBusinessSettingsDto } from './dto/update-business-settings.dto';
 
@@ -52,6 +54,32 @@ export class BusinessController {
   @HttpCode(204)
   async deleteContact(@CurrentUser() user: JwtPayload, @Param('id', ParseUUIDPipe) id: string): Promise<void> {
     await this.service.deleteContact(user.sub, id);
+  }
+
+  @Get('offerings')
+  async listOfferings(@CurrentUser() user: JwtPayload) {
+    return { data: await this.service.listOfferings(user.sub) };
+  }
+
+  @Post('offerings')
+  async createOffering(@CurrentUser() user: JwtPayload, @Body() dto: CreateBusinessOfferingDto) {
+    return { data: await this.service.createOffering(user.sub, dto) };
+  }
+
+  @Patch('offerings/:id')
+  async updateOffering(@CurrentUser() user: JwtPayload, @Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateBusinessOfferingDto) {
+    return { data: await this.service.updateOffering(user.sub, id, dto) };
+  }
+
+  @Delete('offerings/:id')
+  @HttpCode(204)
+  async deleteOffering(@CurrentUser() user: JwtPayload, @Param('id', ParseUUIDPipe) id: string): Promise<void> {
+    await this.service.deleteOffering(user.sub, id);
+  }
+
+  @Get('product-report')
+  async productReport(@CurrentUser() user: JwtPayload, @Query('startDate') startDate?: string, @Query('endDate') endDate?: string) {
+    return { data: await this.service.productReport(user.sub, startDate, endDate) };
   }
 
   @Get('entries')

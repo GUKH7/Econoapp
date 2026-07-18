@@ -22,6 +22,16 @@ export class UpdateBusinessEntryDto {
   contactId?: string;
 
   @IsOptional()
+  @IsUUID()
+  offeringId?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0.0001)
+  quantity?: number;
+
+  @IsOptional()
   @Type(() => Number)
   @IsNumber()
   @Min(0.01)

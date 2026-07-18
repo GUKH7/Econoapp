@@ -794,8 +794,12 @@ function bindViewEvents() {
   document.querySelector('[data-channel-form]')?.addEventListener('submit', handleChannelSubmit);
   document.querySelector('[data-business-entry-form]')?.addEventListener('submit', handleBusinessEntrySubmit);
   document.querySelector('[data-business-contact-form]')?.addEventListener('submit', handleBusinessContactSubmit);
+  document.querySelector('[data-business-offering-form]')?.addEventListener('submit', handleBusinessOfferingSubmit);
   document.querySelectorAll('[data-business-contact-delete]').forEach((button) => {
     button.addEventListener('click', () => handleBusinessContactDelete(button));
+  });
+  document.querySelectorAll('[data-business-offering-delete]').forEach((button) => {
+    button.addEventListener('click', () => handleBusinessOfferingDelete(button));
   });
   document.querySelector('[data-business-contact-select]')?.addEventListener('change', (event) => {
     const option = event.currentTarget.selectedOptions[0];
@@ -1471,6 +1475,8 @@ async function handleTransactionSubmit(event) {
       scope: state.scope,
       categoryId,
       channelId: data.channelId || undefined,
+      offeringId: data.offeringId || undefined,
+      ...(data.offeringId ? { quantity: parseAmount(data.quantity || '1') } : {}),
       accountId: paymentTarget.accountId || undefined,
       creditCardId: paymentTarget.creditCardId || undefined,
       date: data.date || undefined,
@@ -1579,6 +1585,7 @@ async function handleBusinessEntrySubmit(event) {
       title: String(data.title || '').trim(),
       counterparty: String(data.counterparty || '').trim(),
       ...(data.contactId ? { contactId: data.contactId } : {}),
+      ...(data.offeringId ? { offeringId: data.offeringId, quantity: parseAmount(data.quantity || '1') } : {}),
       amount: parseAmount(data.amount),
       dueDate: data.dueDate,
       categoryId: data.categoryId,
@@ -1634,6 +1641,45 @@ async function handleBusinessContactDelete(button) {
     state.manageSection = 'contacts';
     renderApp();
     showToast('Contato excluído.');
+  } catch (error) {
+    button.disabled = false;
+    showToast(error.message, 'error');
+  }
+}
+
+async function handleBusinessOfferingSubmit(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const data = Object.fromEntries(new FormData(form));
+  setFormBusy(form, true, 'Adicionando...');
+  try {
+    await api().createBusinessOffering({
+      type: data.type,
+      name: String(data.name || '').trim(),
+      estimatedUnitCost: parseAmount(data.estimatedUnitCost || '0'),
+      ...(String(data.defaultPrice || '').trim() ? { defaultPrice: parseAmount(data.defaultPrice) } : {}),
+    });
+    await loadData();
+    state.manageSection = 'offerings';
+    renderApp();
+    showToast('Produto ou serviço adicionado.');
+  } catch (error) {
+    setFormBusy(form, false);
+    showToast(error.message, 'error');
+  }
+}
+
+async function handleBusinessOfferingDelete(button) {
+  const id = button.dataset.businessOfferingDelete;
+  const name = button.dataset.offeringName || 'este item';
+  if (!id || !window.confirm(`Desativar ${name}? As vendas antigas continuarão nos relatórios.`)) return;
+  button.disabled = true;
+  try {
+    await api().deleteBusinessOffering(id);
+    await loadData();
+    state.manageSection = 'offerings';
+    renderApp();
+    showToast('Item desativado.');
   } catch (error) {
     button.disabled = false;
     showToast(error.message, 'error');

@@ -116,6 +116,7 @@ export function manageView() {
   const sections = [
     { id: 'business', label: 'Agenda', meta: `${state.businessEntries.length} contas`, icon: icon('shop') },
     { id: 'contacts', label: 'Clientes', meta: `${state.businessContacts.length} contatos`, icon: icon('profile') },
+    { id: 'offerings', label: 'Produtos', meta: `${state.businessOfferings.filter((item) => item.isActive !== false).length} itens`, icon: icon('tag') },
     { id: 'accounts', label: 'Contas', meta: `${scopedWallets.length + scopedCards.length} itens`, icon: icon('wallet') },
     { id: 'categories', label: 'Categorias', meta: `${state.categories.length} itens`, icon: icon('tag') },
     { id: 'channels', label: 'Canais', meta: `${state.channels.length} meios`, icon: icon('shop') },
@@ -214,6 +215,10 @@ export function manageView() {
   const businessContactOptions = state.businessContacts
     .map((contact) => `<option value="${contact.id}" data-contact-name="${escapeHtml(contact.name)}">${escapeHtml(contact.name)} · ${contact.type === 'CLIENT' ? 'Cliente' : contact.type === 'SUPPLIER' ? 'Fornecedor' : 'Cliente e fornecedor'}</option>`)
     .join('');
+  const businessOfferingOptions = state.businessOfferings
+    .filter((offering) => offering.isActive !== false)
+    .map((offering) => `<option value="${offering.id}">${escapeHtml(offering.name)}</option>`)
+    .join('');
   const contactsPanel = `
     <article class="card manage-panel business-contacts-panel">
       <div class="panel-title"><div><span class="eyebrow">Relacionamentos</span><h2>Clientes e fornecedores</h2></div></div>
@@ -233,6 +238,24 @@ export function manageView() {
       <div class="business-contact-list surface-list">
         ${state.businessContacts.length ? state.businessContacts.map(businessContactCard).join('') : '<p class="empty">Nenhum cliente ou fornecedor cadastrado.</p>'}
       </div>
+    </article>`;
+  const productReport = state.productReport || { totals: {}, items: [] };
+  const offeringsPanel = `
+    <article class="card manage-panel business-offerings-panel">
+      <div class="panel-title"><div><span class="eyebrow">Rentabilidade</span><h2>Produtos e serviços</h2></div></div>
+      <p class="muted">Cadastre o custo estimado e vincule o item às vendas para acompanhar margem real.</p>
+      <form class="form" data-business-offering-form>
+        <div class="form-grid two-columns"><label class="field">Nome<input name="name" required placeholder="Ex: Camiseta ou Consultoria" /></label><label class="field">Tipo<select name="type"><option value="PRODUCT">Produto</option><option value="SERVICE">Serviço</option></select></label></div>
+        <div class="form-grid two-columns"><label class="field">Custo estimado<input name="estimatedUnitCost" inputmode="decimal" value="0,00" required /></label><label class="field">Preço padrão<input name="defaultPrice" inputmode="decimal" placeholder="Opcional" /></label></div>
+        <button class="button" type="submit">Adicionar ao catálogo</button>
+      </form>
+      <section class="product-report-summary">
+        <div><span>Receita líquida</span><strong>${money.format(Number(productReport.totals?.netRevenue || 0))}</strong></div><div><span>Custo estimado</span><strong>${money.format(Number(productReport.totals?.estimatedCost || 0))}</strong></div><div><span>Margem</span><strong>${money.format(Number(productReport.totals?.margin || 0))}</strong></div><div><span>Quantidade</span><strong>${Number(productReport.totals?.quantity || 0).toLocaleString('pt-BR')}</strong></div>
+      </section>
+      ${productReport.mostProfitable ? `<div class="product-insight positive"><span>Mais lucrativo</span><strong>${escapeHtml(productReport.mostProfitable.name)}</strong><small>${money.format(Number(productReport.mostProfitable.margin))} de margem</small></div>` : ''}
+      ${productReport.highVolumeLowMargin ? `<div class="product-insight warning"><span>Vende bem, margem baixa</span><strong>${escapeHtml(productReport.highVolumeLowMargin.name)}</strong><small>${Number(productReport.highVolumeLowMargin.marginPercent).toFixed(1)}% de margem</small></div>` : ''}
+      <div class="product-performance-list">${productReport.items?.length ? productReport.items.map(productPerformanceRow).join('') : '<p class="empty">Vincule produtos às vendas para gerar o relatório.</p>'}</div>
+      <div class="business-catalog-list surface-list">${state.businessOfferings.length ? state.businessOfferings.map(businessOfferingRow).join('') : '<p class="empty">Nenhum produto ou serviço cadastrado.</p>'}</div>
     </article>`;
   const businessRows = state.businessEntries.map((entry) => businessEntryRow(entry)).join('');
   const businessSummary = state.businessSummary || {};
@@ -261,6 +284,7 @@ export function manageView() {
         </div>
         <label class="field">Descrição<input name="title" required placeholder="Ex: Mensalidade, aluguel, fornecedor" /></label>
         <label class="field">Usar cadastro<select name="contactId" data-business-contact-select><option value="">Selecionar cliente ou fornecedor</option>${businessContactOptions}</select></label>
+        <div class="form-grid two-columns"><label class="field">Produto ou serviço<select name="offeringId"><option value="">Sem item vinculado</option>${businessOfferingOptions}</select></label><label class="field">Quantidade<input name="quantity" inputmode="decimal" value="1" /></label></div>
         <label class="field">Cliente ou fornecedor<input name="counterparty" required placeholder="Nome da pessoa ou empresa" /></label>
         <div class="form-grid two-columns">
           <label class="field">Valor<input name="amount" inputmode="decimal" placeholder="0,00" required /></label>
@@ -308,6 +332,7 @@ export function manageView() {
   const panels = {
     business: businessPanel,
     contacts: contactsPanel,
+    offerings: offeringsPanel,
     accounts: accountsPanel,
     cards: accountsPanel,
     categories: categoriesPanel,
@@ -323,6 +348,14 @@ export function manageView() {
       ${manageModalHtml()}
     </section>
   `;
+}
+
+function productPerformanceRow(item) {
+  return `<div class="product-performance-row"><div><strong>${escapeHtml(item.name)}</strong><small>${Number(item.quantity).toLocaleString('pt-BR')} vendidos · ${money.format(Number(item.netRevenue))} de receita</small></div><div><strong>${money.format(Number(item.margin))}</strong><small>${Number(item.marginPercent).toFixed(1)}% margem</small></div></div>`;
+}
+
+function businessOfferingRow(offering) {
+  return `<div class="row business-offering-row"><div class="row-main"><div class="row-title">${escapeHtml(offering.name)}</div><div class="row-meta">${offering.type === 'PRODUCT' ? 'Produto' : 'Serviço'} · custo ${money.format(Number(offering.estimatedUnitCost || 0))}${offering.defaultPrice ? ` · preço ${money.format(Number(offering.defaultPrice))}` : ''}</div></div>${offering.isActive !== false ? `<button class="danger-link" type="button" data-business-offering-delete="${offering.id}" data-offering-name="${escapeHtml(offering.name)}">Desativar</button>` : '<span class="badge muted">Inativo</span>'}</div>`;
 }
 
 function businessContactCard(contact) {

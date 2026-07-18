@@ -1,4 +1,4 @@
-const CACHE_NAME = 'din-static-v68';
+const CACHE_NAME = 'din-static-v69';
 const ASSETS = [
   './index.html',
   './styles.css',

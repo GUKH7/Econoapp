@@ -774,6 +774,7 @@ export class WhatsappService {
     if (this.isContactDebtQuestion(lower)) return this.answerContactDebt(userId, lower);
     if (this.isSuppliersDueQuestion(lower)) return this.answerSuppliersDueThisWeek(userId);
     if (this.isTopCustomerQuestion(lower)) return this.answerTopCustomers(userId, start, end, period.label);
+    if (this.isProductProfitQuestion(lower)) return this.answerProductProfit(userId, start, end, lower);
 
     if (this.isCompleteSummaryQuestion(lower)) {
       return this.answerCompleteSummary(userId, period);
@@ -928,6 +929,32 @@ export class WhatsappService {
       `🏆 *Clientes que mais compraram ${this.periodOf(periodLabel)}:*`,
       ...ranking.map(([name, total], index) => `${index + 1}. ${name}: ${this.formatMoney(total)}`),
     ].join('\n');
+  }
+
+  private async answerProductProfit(userId: string, start: Date, end: Date, message: string): Promise<string> {
+    const transactions = await this.prisma.transaction.findMany({
+      where: { userId, type: 'INCOME', scope: 'BUSINESS', offeringId: { not: null }, date: { gte: start, lt: end } },
+      select: { netAmount: true, quantity: true, unitCost: true, offering: { select: { id: true, name: true, estimatedUnitCost: true } } },
+    });
+    const metrics = new Map<string, { name: string; quantity: number; revenue: number; cost: number }>();
+    transactions.forEach((transaction) => {
+      if (!transaction.offering) return;
+      const current = metrics.get(transaction.offering.id) ?? { name: transaction.offering.name, quantity: 0, revenue: 0, cost: 0 };
+      current.quantity += Number(transaction.quantity);
+      current.revenue += Number(transaction.netAmount);
+      current.cost += Number(transaction.unitCost ?? transaction.offering.estimatedUnitCost) * Number(transaction.quantity);
+      metrics.set(transaction.offering.id, current);
+    });
+    const items = [...metrics.values()].map((item) => ({ ...item, margin: item.revenue - item.cost, marginPercent: item.revenue ? (item.revenue - item.cost) / item.revenue * 100 : 0 }));
+    if (!items.length) return 'Ainda não há vendas vinculadas a produtos ou serviços neste período.';
+    if (/\b(pouca margem|margem baixa|vende bem)\b/.test(message)) {
+      const averageQuantity = items.reduce((sum, item) => sum + item.quantity, 0) / items.length;
+      const item = [...items].filter((candidate) => candidate.quantity >= averageQuantity && candidate.marginPercent < 30).sort((a, b) => a.marginPercent - b.marginPercent)[0];
+      if (!item) return '✅ Não identifiquei produto de alto volume com margem abaixo de 30% neste período.';
+      return `⚠️ *${item.name}* vende bem (${item.quantity.toLocaleString('pt-BR')} unidades), mas tem a menor margem entre os itens de maior volume: *${item.marginPercent.toFixed(1)}%*.`;
+    }
+    const item = [...items].sort((a, b) => b.margin - a.margin)[0]!;
+    return `🏆 O item mais lucrativo no período é *${item.name}*, com margem estimada de *${this.formatMoney(item.margin)}* (${item.marginPercent.toFixed(1)}%).`;
   }
 
   private sumAmounts(entries: Array<{ amount: unknown }>): number {
@@ -3249,6 +3276,7 @@ export class WhatsappService {
       this.isContactDebtQuestion(lower) ||
       this.isSuppliersDueQuestion(lower) ||
       this.isTopCustomerQuestion(lower) ||
+      this.isProductProfitQuestion(lower) ||
       this.isCompleteSummaryQuestion(lower) ||
       this.isCategoryExpenseQuestion(lower) ||
       this.isIncomeOriginQuestion(lower) ||
@@ -3280,6 +3308,11 @@ export class WhatsappService {
   private isTopCustomerQuestion(message: string): boolean {
     const lower = this.normalizeText(message);
     return /\b(quem|clientes?)\b/.test(lower) && /\b(mais comprou|mais compraram|maior cliente|melhores clientes)\b/.test(lower);
+  }
+
+  private isProductProfitQuestion(message: string): boolean {
+    const lower = this.normalizeText(message);
+    return /\b(produto|produtos|servico|servicos|item|itens)\b/.test(lower) && /\b(lucrativo|lucro|margem|vende bem)\b/.test(lower);
   }
 
   private isCompleteSummaryQuestion(message: string): boolean {

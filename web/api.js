@@ -114,6 +114,11 @@ export function api() {
     updateBusinessContact: (id, payload) =>
       request(`/business/contacts/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
     deleteBusinessContact: (id) => request(`/business/contacts/${id}`, { method: 'DELETE' }),
+    businessOfferings: () => request('/business/offerings'),
+    productReport: () => request('/business/product-report'),
+    createBusinessOffering: (payload) => request('/business/offerings', { method: 'POST', body: JSON.stringify(payload) }),
+    updateBusinessOffering: (id, payload) => request(`/business/offerings/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+    deleteBusinessOffering: (id) => request(`/business/offerings/${id}`, { method: 'DELETE' }),
     createBusinessEntry: (payload) =>
       request('/business/entries', { method: 'POST', body: JSON.stringify(payload) }),
     settleBusinessEntry: (id, payload = {}) =>
@@ -171,7 +176,7 @@ export async function loadData() {
     ['recurring', client.recurringTransactions()],
     ['assistant', client.assistantActivity()],
     ...(state.scope === 'BUSINESS'
-      ? [['businessSummary', client.businessSummary()], ['businessEntries', client.businessEntries()], ['businessContacts', client.businessContacts()]]
+      ? [['businessSummary', client.businessSummary()], ['businessEntries', client.businessEntries()], ['businessContacts', client.businessContacts()], ['businessOfferings', client.businessOfferings()], ['productReport', client.productReport()]]
       : []),
   ];
   const results = await Promise.allSettled(resources.map(([, promise]) => promise));
@@ -203,6 +208,8 @@ export async function loadData() {
   if ('businessSummary' in loaded) state.businessSummary = loaded.businessSummary;
   if ('businessEntries' in loaded) state.businessEntries = loaded.businessEntries || [];
   if ('businessContacts' in loaded) state.businessContacts = loaded.businessContacts || [];
+  if ('businessOfferings' in loaded) state.businessOfferings = loaded.businessOfferings || [];
+  if ('productReport' in loaded) state.productReport = loaded.productReport;
   localStorage.removeItem('econoapp.budgets');
   return { warnings: state.loadWarnings };
 }

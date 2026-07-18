@@ -216,6 +216,23 @@ const apiFixtures = {
       { id: 'contact-supplier', type: 'SUPPLIER', name: 'Imobiliária Central', phone: '11888888888', email: null, notes: null, totalSold: 0, totalPurchased: 3600, pendingAmount: 1800, lastMovementAt: currentMonthDate(6) },
     ],
   },
+  '/api/v1/business/offerings': {
+    data: [
+      { id: 'offering-shirt', type: 'PRODUCT', name: 'Camiseta Din', estimatedUnitCost: 35, defaultPrice: 89, isActive: true },
+      { id: 'offering-consulting', type: 'SERVICE', name: 'Consultoria financeira', estimatedUnitCost: 80, defaultPrice: 350, isActive: true },
+    ],
+  },
+  '/api/v1/business/product-report': {
+    data: {
+      totals: { quantity: 34, netRevenue: 4860, estimatedCost: 2610, margin: 2250 },
+      mostProfitable: { id: 'offering-consulting', name: 'Consultoria financeira', quantity: 6, netRevenue: 2100, estimatedCost: 480, margin: 1620, marginPercent: 77.1 },
+      highVolumeLowMargin: { id: 'offering-shirt', name: 'Camiseta Din', quantity: 28, netRevenue: 2760, estimatedCost: 2130, margin: 630, marginPercent: 22.8 },
+      items: [
+        { id: 'offering-consulting', name: 'Consultoria financeira', type: 'SERVICE', quantity: 6, netRevenue: 2100, estimatedCost: 480, margin: 1620, marginPercent: 77.1 },
+        { id: 'offering-shirt', name: 'Camiseta Din', type: 'PRODUCT', quantity: 28, netRevenue: 2760, estimatedCost: 2130, margin: 630, marginPercent: 22.8 },
+      ],
+    },
+  },
   '/api/v1/assistant/activity': {
     data: {
       messages: [
@@ -443,6 +460,11 @@ async function runViewport(browser, baseUrl, name, viewport) {
   await assertVisible(page, '[data-business-contact-form]', 'formulário de clientes e fornecedores');
   await assertText(page, 'Cliente Aurora');
   await screenshot(page, `${name}-business-contacts`);
+  await page.locator('[data-manage-section="offerings"]').click();
+  await assertText(page, 'Produtos e serviços');
+  await assertVisible(page, '[data-business-offering-form]', 'formulário de produtos e serviços');
+  await assertText(page, 'Mais lucrativo');
+  await screenshot(page, `${name}-business-offerings`);
   await page.locator('[data-manage-back]').click();
   await page.locator('[data-tab="dashboard"]').click();
   await page.locator('[data-scope] [data-value="PERSONAL"]').click();

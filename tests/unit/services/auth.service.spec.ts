@@ -141,6 +141,7 @@ function makePrismaMock() {
     businessEntry: { findMany: vi.fn() },
     businessSettings: { findUnique: vi.fn() },
     businessContact: { findMany: vi.fn() },
+    businessOffering: { findMany: vi.fn() },
     $transaction: vi.fn().mockResolvedValue([]),
   };
 }

@@ -44,6 +44,8 @@ export const state = {
   businessSummary: null,
   businessEntries: [],
   businessContacts: [],
+  businessOfferings: [],
+  productReport: null,
   reportType: 'EXPENSE',
   report: null,
   reportPeriodOffset: 0,

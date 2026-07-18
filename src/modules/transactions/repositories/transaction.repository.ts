@@ -13,6 +13,9 @@ interface CreateTransactionInput {
   scope?: FinancialScope;
   categoryId: string;
   channelId?: string;
+  offeringId?: string;
+  quantity?: number;
+  unitCost?: number;
   accountId?: string;
   creditCardId?: string;
   date?: Date;
@@ -32,6 +35,9 @@ export class TransactionRepository {
           ...input,
           scope: input.scope ?? 'PERSONAL',
           channelId: input.channelId ?? null,
+          offeringId: input.offeringId ?? null,
+          quantity: input.quantity ?? 1,
+          unitCost: input.unitCost ?? null,
           accountId: input.accountId ?? null,
           creditCardId: input.creditCardId ?? null,
           date: input.date ?? new Date(),

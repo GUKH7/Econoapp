@@ -13,9 +13,11 @@ import { PrismaService } from '@/config/database';
 import { TransactionService } from '@/modules/transactions/transaction.service';
 import { CreateBusinessEntryDto } from './dto/create-business-entry.dto';
 import { CreateBusinessContactDto } from './dto/create-business-contact.dto';
+import { CreateBusinessOfferingDto } from './dto/create-business-offering.dto';
 import { SettleBusinessEntryDto } from './dto/settle-business-entry.dto';
 import { UpdateBusinessContactDto } from './dto/update-business-contact.dto';
 import { UpdateBusinessEntryDto } from './dto/update-business-entry.dto';
+import { UpdateBusinessOfferingDto } from './dto/update-business-offering.dto';
 import { UpdateBusinessSettingsDto } from './dto/update-business-settings.dto';
 
 @Injectable()
@@ -26,7 +28,8 @@ export class BusinessService {
   ) {}
 
   async create(userId: string, input: CreateBusinessEntryDto) {
-    const references = await this.validateReferences(userId, input.categoryId, input.accountId, input.contactId);
+    const references = await this.validateReferences(userId, input.categoryId, input.accountId, input.contactId, input.offeringId);
+    if (input.offeringId && input.type !== BusinessEntryType.RECEIVABLE) throw new BadRequestException('Produto ou serviço só pode ser vinculado a uma conta a receber');
     const firstDueDate = new Date(input.dueDate);
     const seriesId = input.recurrenceFrequency ? randomUUID() : null;
     const dueDates = this.recurrenceDates(firstDueDate, input.recurrenceFrequency, input.recurrenceEndDate);
@@ -35,6 +38,8 @@ export class BusinessService {
         data: {
           userId,
           contactId: input.contactId ?? null,
+          offeringId: input.offeringId ?? null,
+          quantity: input.quantity ?? 1,
           type: input.type,
           title: input.title.trim(),
           counterparty: references.contact?.name ?? input.counterparty.trim(),
@@ -67,7 +72,8 @@ export class BusinessService {
     if (entry.status !== BusinessEntryStatus.PENDING) {
       throw new BadRequestException('Somente contas pendentes podem ser editadas');
     }
-    const references = await this.validateReferences(userId, input.categoryId ?? entry.categoryId, input.accountId, input.contactId);
+    const references = await this.validateReferences(userId, input.categoryId ?? entry.categoryId, input.accountId, input.contactId, input.offeringId);
+    if ((input.offeringId ?? entry.offeringId) && (input.type ?? entry.type) !== BusinessEntryType.RECEIVABLE) throw new BadRequestException('Produto ou serviço só pode ser vinculado a uma conta a receber');
     const updated = await this.prisma.businessEntry.update({
       where: { id },
       data: {
@@ -98,6 +104,7 @@ export class BusinessService {
       scope: FinancialScope.BUSINESS,
       categoryId: entry.categoryId,
       ...(accountId ? { accountId } : {}),
+      ...(entry.offeringId ? { offeringId: entry.offeringId, quantity: Number(entry.quantity) } : {}),
       date: settledAt.toISOString(),
     });
     const updated = await this.prisma.businessEntry.update({
@@ -305,14 +312,69 @@ export class BusinessService {
     await this.prisma.businessContact.delete({ where: { id } });
   }
 
+  async listOfferings(userId: string) {
+    return this.prisma.businessOffering.findMany({ where: { userId }, orderBy: [{ isActive: 'desc' }, { name: 'asc' }] });
+  }
+
+  async createOffering(userId: string, input: CreateBusinessOfferingDto) {
+    return this.prisma.businessOffering.create({
+      data: { userId, type: input.type, name: input.name.trim(), estimatedUnitCost: input.estimatedUnitCost, defaultPrice: input.defaultPrice ?? null },
+    });
+  }
+
+  async updateOffering(userId: string, id: string, input: UpdateBusinessOfferingDto) {
+    await this.findOwnedOffering(userId, id);
+    return this.prisma.businessOffering.update({ where: { id }, data: { ...input, ...(input.name ? { name: input.name.trim() } : {}) } });
+  }
+
+  async deleteOffering(userId: string, id: string): Promise<void> {
+    await this.findOwnedOffering(userId, id);
+    await this.prisma.businessOffering.update({ where: { id }, data: { isActive: false } });
+  }
+
+  async productReport(userId: string, startDate?: string, endDate?: string) {
+    const now = new Date();
+    const start = startDate ? new Date(`${startDate}T00:00:00.000Z`) : new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    const end = endDate ? this.addDays(new Date(`${endDate}T00:00:00.000Z`), 1) : new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) throw new BadRequestException('Período do relatório inválido');
+    const offerings = await this.prisma.businessOffering.findMany({
+      where: { userId },
+      include: { transactions: { where: { userId, type: TransactionType.INCOME, scope: FinancialScope.BUSINESS, date: { gte: start, lt: end } }, select: { amount: true, netAmount: true, quantity: true, unitCost: true } } },
+      orderBy: { name: 'asc' },
+    });
+    const items = offerings.map((offering) => {
+      const quantity = offering.transactions.reduce((sum, transaction) => sum + Number(transaction.quantity), 0);
+      const grossRevenue = offering.transactions.reduce((sum, transaction) => sum + Number(transaction.amount), 0);
+      const netRevenue = offering.transactions.reduce((sum, transaction) => sum + Number(transaction.netAmount), 0);
+      const estimatedCost = offering.transactions.reduce((sum, transaction) => sum + Number(transaction.unitCost ?? offering.estimatedUnitCost) * Number(transaction.quantity), 0);
+      const margin = netRevenue - estimatedCost;
+      return { id: offering.id, name: offering.name, type: offering.type, quantity, grossRevenue, netRevenue, estimatedCost, margin, marginPercent: netRevenue > 0 ? margin / netRevenue * 100 : 0 };
+    }).filter((item) => item.quantity > 0);
+    const mostProfitable = [...items].sort((a, b) => b.margin - a.margin)[0] ?? null;
+    const averageQuantity = items.length ? items.reduce((sum, item) => sum + item.quantity, 0) / items.length : 0;
+    const highVolumeLowMargin = items.length > 1 ? [...items].filter((item) => item.quantity >= averageQuantity && item.marginPercent < 30).sort((a, b) => a.marginPercent - b.marginPercent)[0] ?? null : null;
+    return {
+      period: { startDate: start.toISOString(), endDate: end.toISOString() },
+      totals: {
+        quantity: items.reduce((sum, item) => sum + item.quantity, 0),
+        netRevenue: items.reduce((sum, item) => sum + item.netRevenue, 0),
+        estimatedCost: items.reduce((sum, item) => sum + item.estimatedCost, 0),
+        margin: items.reduce((sum, item) => sum + item.margin, 0),
+      },
+      mostProfitable,
+      highVolumeLowMargin,
+      items: [...items].sort((a, b) => b.margin - a.margin),
+    };
+  }
+
   private async findOwned(userId: string, id: string) {
     const entry = await this.prisma.businessEntry.findFirst({ where: { id, userId } });
     if (!entry) throw new NotFoundException('Conta empresarial não encontrada');
     return entry;
   }
 
-  private async validateReferences(userId: string, categoryId: string, accountId?: string, contactId?: string) {
-    const [category, account, contact] = await Promise.all([
+  private async validateReferences(userId: string, categoryId: string, accountId?: string, contactId?: string, offeringId?: string) {
+    const [category, account, contact, offering] = await Promise.all([
       this.prisma.category.findFirst({ where: { id: categoryId, userId }, select: { id: true } }),
       accountId
         ? this.prisma.financialAccount.findFirst({ where: { id: accountId, userId, scope: FinancialScope.BUSINESS }, select: { id: true } })
@@ -320,17 +382,27 @@ export class BusinessService {
       contactId
         ? this.prisma.businessContact.findFirst({ where: { id: contactId, userId }, select: { id: true, name: true } })
         : Promise.resolve(null),
+      offeringId
+        ? this.prisma.businessOffering.findFirst({ where: { id: offeringId, userId, isActive: true }, select: { id: true, name: true } })
+        : Promise.resolve(null),
     ]);
     if (!category) throw new NotFoundException('Categoria não encontrada');
     if (accountId && !account) throw new NotFoundException('Conta empresarial não encontrada');
     if (contactId && !contact) throw new NotFoundException('Cliente ou fornecedor não encontrado');
-    return { contact };
+    if (offeringId && !offering) throw new NotFoundException('Produto ou serviço não encontrado');
+    return { contact, offering };
   }
 
   private async findOwnedContact(userId: string, id: string) {
     const contact = await this.prisma.businessContact.findFirst({ where: { id, userId } });
     if (!contact) throw new NotFoundException('Cliente ou fornecedor não encontrado');
     return contact;
+  }
+
+  private async findOwnedOffering(userId: string, id: string) {
+    const offering = await this.prisma.businessOffering.findFirst({ where: { id, userId } });
+    if (!offering) throw new NotFoundException('Produto ou serviço não encontrado');
+    return offering;
   }
 
   private validateContactDetails(phone?: string | null, email?: string | null) {
@@ -390,6 +462,7 @@ export class BusinessService {
       category: { select: { id: true, name: true, color: true } },
       account: { select: { id: true, name: true } },
       contact: { select: { id: true, name: true, type: true } },
+      offering: { select: { id: true, name: true, type: true } },
     } as const;
   }
 

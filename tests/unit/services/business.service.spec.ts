@@ -28,6 +28,12 @@ function serviceFixture() {
       update: vi.fn(),
       delete: vi.fn(),
     },
+    businessOffering: {
+      findMany: vi.fn().mockResolvedValue([]),
+      findFirst: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+    },
     businessEntry: {
       create: vi.fn().mockImplementation(({ data }) => Promise.resolve({
         id: `entry-${String(data.dueDate)}`,
@@ -134,5 +140,19 @@ describe('BusinessService', () => {
       where: expect.objectContaining({ userId: 'user-1', contactId: null }),
       data: { contactId: 'contact-1' },
     }));
+  });
+
+  it('calcula receita, custo, margem e destaques por produto', async () => {
+    const { prisma, service } = serviceFixture();
+    prisma.businessOffering.findMany.mockResolvedValue([
+      { id: 'p1', name: 'Produto A', type: 'PRODUCT', estimatedUnitCost: 20, transactions: [{ amount: 200, netAmount: 180, quantity: 2, unitCost: 20 }] },
+      { id: 'p2', name: 'Produto B', type: 'PRODUCT', estimatedUnitCost: 23, transactions: [{ amount: 300, netAmount: 270, quantity: 10, unitCost: 23 }] },
+    ]);
+
+    const report = await service.productReport('user-1');
+
+    expect(report.totals).toMatchObject({ quantity: 12, netRevenue: 450, estimatedCost: 270, margin: 180 });
+    expect(report.mostProfitable?.name).toBe('Produto A');
+    expect(report.highVolumeLowMargin?.name).toBe('Produto B');
   });
 });

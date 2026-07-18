@@ -31,6 +31,13 @@ export class TransactionService {
     }
 
     const channel = await this.validateReferences(userId, input);
+    const offering = input.offeringId
+      ? await this.prisma.businessOffering.findFirst({ where: { id: input.offeringId, userId, isActive: true } })
+      : null;
+    if (input.offeringId && !offering) throw new BadRequestException('Produto ou serviço não encontrado');
+    if (input.offeringId && (input.type !== TransactionType.INCOME || input.scope !== FinancialScope.BUSINESS)) {
+      throw new BadRequestException('Produtos e serviços só podem ser vinculados a receitas do negócio');
+    }
 
     const netAmount =
       input.type === TransactionType.INCOME && channel
@@ -46,6 +53,7 @@ export class TransactionService {
       scope: input.scope ?? 'PERSONAL',
       categoryId: input.categoryId,
       ...(input.channelId ? { channelId: input.channelId } : {}),
+      ...(offering ? { offeringId: offering.id, quantity: input.quantity ?? 1, unitCost: Number(offering.estimatedUnitCost) } : {}),
       ...(input.accountId ? { accountId: input.accountId } : {}),
       ...(input.creditCardId ? { creditCardId: input.creditCardId } : {}),
       ...(input.date ? { date: new Date(input.date) } : {}),
@@ -237,6 +245,7 @@ export class TransactionService {
     const newType = input.type !== undefined ? input.type : current.type;
     const newCreditCardId =
       input.creditCardId !== undefined ? input.creditCardId : current.creditCardId;
+    const newOfferingId = input.offeringId !== undefined ? input.offeringId : current.offeringId;
 
     if (newType === TransactionType.INCOME && newCreditCardId) {
       throw new BadRequestException('Receitas devem ser recebidas em uma conta ou carteira');
@@ -248,6 +257,13 @@ export class TransactionService {
       accountId: input.accountId !== undefined ? input.accountId : current.accountId,
       creditCardId: newCreditCardId,
     });
+    const offering = newOfferingId
+      ? await this.prisma.businessOffering.findFirst({ where: { id: newOfferingId, userId, isActive: true } })
+      : null;
+    if (newOfferingId && !offering) throw new BadRequestException('Produto ou serviço não encontrado');
+    if (newOfferingId && (newType !== TransactionType.INCOME || (input.scope ?? current.scope) !== FinancialScope.BUSINESS)) {
+      throw new BadRequestException('Produtos e serviços só podem ser vinculados a receitas do negócio');
+    }
 
     let newNetAmount: number = Number(current.netAmount);
     if (input.amount !== undefined || input.channelId !== undefined || input.type !== undefined) {
@@ -266,6 +282,8 @@ export class TransactionService {
       ...(input.scope !== undefined ? { scope: input.scope } : {}),
       ...(input.categoryId !== undefined ? { categoryId: input.categoryId } : {}),
       ...(input.channelId !== undefined ? { channelId: input.channelId } : {}),
+      ...(input.offeringId !== undefined ? { offeringId: input.offeringId, unitCost: offering ? Number(offering.estimatedUnitCost) : null } : {}),
+      ...(input.quantity !== undefined ? { quantity: input.quantity } : {}),
       ...(input.accountId !== undefined ? { accountId: input.accountId } : {}),
       ...(input.creditCardId !== undefined ? { creditCardId: input.creditCardId } : {}),
       ...(input.date !== undefined ? { date: new Date(input.date) } : {}),

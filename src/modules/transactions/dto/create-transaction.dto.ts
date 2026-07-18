@@ -31,6 +31,16 @@ export class CreateTransactionDto {
 
   @IsOptional()
   @IsUUID()
+  offeringId?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0.0001)
+  quantity?: number;
+
+  @IsOptional()
+  @IsUUID()
   accountId?: string;
 
   @IsOptional()

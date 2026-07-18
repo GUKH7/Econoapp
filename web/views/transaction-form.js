@@ -201,6 +201,10 @@ function transactionFormHtml(type, context) {
                     ${state.channels.map((channel) => `<option value="${channel.id}">${escapeHtml(channel.name)}</option>`).join('')}
                   </select>
                 </label>
+                <div class="form-grid two-columns ${state.scope === 'BUSINESS' && isIncome ? '' : 'hidden'}">
+                  <label class="field">Produto ou serviço<select name="offeringId"><option value="">Venda sem item</option>${state.businessOfferings.filter((item) => item.isActive !== false).map((item) => `<option value="${item.id}">${escapeHtml(item.name)}</option>`).join('')}</select></label>
+                  <label class="field">Quantidade<input name="quantity" inputmode="decimal" value="1" /></label>
+                </div>
                 <label class="field form-row">
                   <span class="row-icon neutral-bg">${icon('calendar')}</span>
                   <span>Data</span>

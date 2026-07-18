@@ -3085,4 +3085,26 @@ describe('WhatsappService', () => {
     expect(reply).toContain('1. João: R$ 1.100,00');
     expect(reply).toContain('2. Maria: R$ 900,00');
   });
+
+  it('informa o produto mais lucrativo', async () => {
+    prismaMock.transaction.findMany.mockResolvedValue([
+      { netAmount: 500, quantity: 5, unitCost: 30, offering: { id: 'p1', name: 'Camiseta', estimatedUnitCost: 30 } },
+      { netAmount: 900, quantity: 2, unitCost: 100, offering: { id: 'p2', name: 'Consultoria', estimatedUnitCost: 100 } },
+    ]);
+    const answerQuestion = Reflect.get(service, 'answerQuestion') as (userId: string, message: string) => Promise<string>;
+    const reply = (await answerQuestion.call(service, 'user-1', 'qual produto e mais lucrativo')).replace(/\u00a0/g, ' ');
+    expect(reply).toContain('Consultoria');
+    expect(reply).toContain('R$ 700,00');
+  });
+
+  it('alerta sobre produto de alto volume e margem menor', async () => {
+    prismaMock.transaction.findMany.mockResolvedValue([
+      { netAmount: 500, quantity: 10, unitCost: 36, offering: { id: 'p1', name: 'Camiseta', estimatedUnitCost: 36 } },
+      { netAmount: 900, quantity: 2, unitCost: 100, offering: { id: 'p2', name: 'Consultoria', estimatedUnitCost: 100 } },
+    ]);
+    const answerQuestion = Reflect.get(service, 'answerQuestion') as (userId: string, message: string) => Promise<string>;
+    const reply = await answerQuestion.call(service, 'user-1', 'qual produto vende bem mas tem pouca margem');
+    expect(reply).toContain('Camiseta');
+    expect(reply).toContain('28.0%');
+  });
 });

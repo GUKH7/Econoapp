@@ -2332,3 +2332,18 @@ textarea:focus {
   .business-contact-metrics { grid-template-columns: 1fr 1fr; }
   .business-contact-metrics span:last-child { grid-column: 1 / -1; }
 }
+
+.product-report-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 22px 0 14px; }
+.product-report-summary > div { display: grid; gap: 5px; border: 1px solid var(--line); border-radius: 16px; padding: 14px; }
+.product-report-summary span, .product-performance-row small, .product-insight small { color: var(--muted); font-size: .75rem; }
+.product-insight { display: grid; gap: 3px; border-radius: 16px; padding: 14px; margin-top: 10px; }
+.product-insight.positive { background: var(--green-soft); }
+.product-insight.warning { background: #fff7ed; color: #9a3412; }
+.product-performance-list { display: grid; gap: 8px; margin-top: 18px; }
+.product-performance-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; border-bottom: 1px solid var(--line); padding: 12px 0; }
+.product-performance-row > div { display: grid; gap: 3px; }
+.product-performance-row > div:last-child { text-align: right; }
+
+@media (max-width: 620px) {
+  .product-report-summary { grid-template-columns: 1fr 1fr; }
+}

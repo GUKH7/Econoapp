@@ -74,6 +74,11 @@ enum BusinessContactType {
   BOTH
 }
 
+enum BusinessOfferingType {
+  PRODUCT
+  SERVICE
+}
+
 model User {
   id                     String                          @id @default(uuid()) @db.Uuid
   name                   String
@@ -103,7 +108,26 @@ model User {
   paymentsRecorded       Payment[]                       @relation("PaymentRecorder")
   businessEntries        BusinessEntry[]
   businessContacts       BusinessContact[]
+  businessOfferings      BusinessOffering[]
   businessSettings       BusinessSettings?
+}
+
+model BusinessOffering {
+  id                String               @id @default(uuid()) @db.Uuid
+  userId            String               @db.Uuid
+  type              BusinessOfferingType
+  name              String
+  estimatedUnitCost Decimal              @default(0) @db.Decimal(15, 4)
+  defaultPrice      Decimal?             @db.Decimal(15, 4)
+  isActive          Boolean              @default(true)
+  createdAt         DateTime             @default(now()) @db.Timestamptz(6)
+  updatedAt         DateTime             @updatedAt @db.Timestamptz(6)
+
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions    Transaction[]
+  businessEntries BusinessEntry[]
+
+  @@index([userId, type, name])
 }
 
 model BusinessContact {
@@ -183,6 +207,8 @@ model BusinessEntry {
   id                  String               @id @default(uuid()) @db.Uuid
   userId              String               @db.Uuid
   contactId           String?              @db.Uuid
+  offeringId          String?              @db.Uuid
+  quantity            Decimal              @default(1) @db.Decimal(15, 4)
   type                BusinessEntryType
   status              BusinessEntryStatus  @default(PENDING)
   title               String
@@ -202,12 +228,14 @@ model BusinessEntry {
 
   user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   contact     BusinessContact?  @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  offering    BusinessOffering? @relation(fields: [offeringId], references: [id], onDelete: SetNull)
   category    Category          @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   account     FinancialAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
   transaction Transaction?      @relation(fields: [transactionId], references: [id], onDelete: SetNull)
 
   @@index([userId, type, status, dueDate])
   @@index([userId, contactId])
+  @@index([userId, offeringId])
   @@index([userId, seriesId, dueDate])
 }
 
@@ -319,6 +347,9 @@ model Transaction {
   scope           FinancialScope    @default(PERSONAL)
   categoryId      String            @db.Uuid
   channelId       String?           @db.Uuid
+  offeringId      String?           @db.Uuid
+  quantity        Decimal           @default(1) @db.Decimal(15, 4)
+  unitCost        Decimal?          @db.Decimal(15, 4)
   accountId       String?           @db.Uuid
   creditCardId    String?           @db.Uuid
   recurringRuleId String?           @db.Uuid
@@ -331,6 +362,7 @@ model Transaction {
   user          User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
   category      Category              @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   channel       SalesChannel?         @relation(fields: [channelId], references: [id], onDelete: SetNull)
+  offering      BusinessOffering?     @relation(fields: [offeringId], references: [id], onDelete: SetNull)
   account       FinancialAccount?     @relation(fields: [accountId], references: [id], onDelete: SetNull)
   creditCard    CreditCard?           @relation(fields: [creditCardId], references: [id], onDelete: SetNull)
   recurringRule RecurringTransaction? @relation(fields: [recurringRuleId], references: [id], onDelete: SetNull)
@@ -341,6 +373,7 @@ model Transaction {
   @@index([userId, scope])
   @@index([categoryId])
   @@index([channelId])
+  @@index([offeringId])
   @@index([accountId])
   @@index([creditCardId])
   @@index([recurringRuleId])
