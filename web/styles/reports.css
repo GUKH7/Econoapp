@@ -277,3 +277,30 @@
 .time-report-row small, .time-report-note { color: var(--muted); }
 .time-report-value { text-align: right; }
 .time-report-note { display: block; margin-top: 12px; line-height: 1.4; }
+.business-report-actions { display: flex; justify-content: flex-end; gap: 10px; }
+.business-report-actions .button { width: auto; }
+.business-report-hero { background: linear-gradient(135deg, #07172a, #0b4a46); color: white; }
+.business-report-hero .eyebrow, .business-report-hero p { color: #b7f7e9; }
+.business-report-hero h2 { color: white; font-size: clamp(28px, 7vw, 44px); margin: 8px 0; }
+.business-report-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.business-report-section h2 { margin: 6px 0 16px; }
+.business-report-rows, .business-ranking, .business-report-table { display: grid; gap: 0; }
+.business-report-rows > div, .business-ranking > div, .business-report-table > div { display: grid; grid-template-columns: minmax(0, 1fr) repeat(3, auto); align-items: center; gap: 12px; border-bottom: 1px solid var(--line); padding: 10px 0; }
+.business-report-rows > div { grid-template-columns: 1fr auto; }
+.business-report-rows > div.total { border-top: 2px solid var(--ink); border-bottom: 0; margin-top: 5px; font-size: 1.05rem; }
+.business-ranking > div { grid-template-columns: 1fr auto; }
+.business-ranking span, .business-report-table span { display: grid; gap: 3px; }
+.business-ranking small, .business-report-table small { color: var(--muted); }
+.report-change { color: var(--muted); font-size: .82rem; margin-top: 14px; }
+.expense-composition-bars { display: grid; gap: 14px; }
+.expense-composition-bars span { display: flex; justify-content: space-between; gap: 10px; font-size: .85rem; }
+.expense-composition-bars i { display: block; height: 10px; background: #edf2ef; border-radius: 999px; overflow: hidden; margin-top: 6px; }
+.expense-composition-bars b { display: block; height: 100%; border-radius: inherit; }
+
+@media (max-width: 700px) {
+  .business-report-grid { grid-template-columns: 1fr; }
+  .business-report-actions { justify-content: stretch; }
+  .business-report-actions .button { width: 100%; }
+  .business-report-table > div { grid-template-columns: 1fr auto; }
+  .business-report-table > div strong { grid-column: 2; }
+}

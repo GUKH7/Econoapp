@@ -9,6 +9,7 @@ import {
   TransactionType,
 } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
+import PDFDocument from 'pdfkit';
 import { PrismaService } from '@/config/database';
 import { TransactionService } from '@/modules/transactions/transaction.service';
 import { CreateBusinessEntryDto } from './dto/create-business-entry.dto';
@@ -367,6 +368,124 @@ export class BusinessService {
     };
   }
 
+  async accountingReport(userId: string, startDate?: string, endDate?: string) {
+    const now = new Date();
+    const start = startDate ? new Date(`${startDate}T00:00:00.000Z`) : new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    const end = endDate ? this.addDays(new Date(`${endDate}T00:00:00.000Z`), 1) : new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) throw new BadRequestException('Período do relatório inválido');
+    const previousStart = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() - 1, 1));
+    const previousEnd = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1));
+    const [transactions, previousTransactions, pending, settings, clientEntries, productReport, accounts] = await Promise.all([
+      this.prisma.transaction.findMany({
+        where: { userId, scope: FinancialScope.BUSINESS, date: { gte: start, lt: end } },
+        include: { category: { select: { name: true, businessCostType: true } }, channel: { select: { id: true, name: true } }, offering: { select: { id: true, name: true } } },
+        orderBy: { date: 'asc' },
+      }),
+      this.prisma.transaction.findMany({ where: { userId, scope: FinancialScope.BUSINESS, date: { gte: previousStart, lt: previousEnd } }, select: { type: true, amount: true, netAmount: true } }),
+      this.prisma.businessEntry.findMany({ where: { userId, status: BusinessEntryStatus.PENDING, dueDate: { gte: now, lt: end } }, select: { type: true, amount: true, dueDate: true, counterparty: true } }),
+      this.prisma.businessSettings.findUnique({ where: { userId } }),
+      this.prisma.businessEntry.findMany({ where: { userId, type: BusinessEntryType.RECEIVABLE, status: BusinessEntryStatus.SETTLED, settledAt: { gte: start, lt: end } }, select: { amount: true, counterparty: true, contact: { select: { id: true, name: true } } } }),
+      this.productReport(userId, this.dateKey(start), this.dateKey(this.addDays(end, -1))),
+      this.prisma.financialAccount.aggregate({ where: { userId, scope: FinancialScope.BUSINESS, isActive: true }, _sum: { balance: true } }),
+    ]);
+    const incomes = transactions.filter((item) => item.type === TransactionType.INCOME);
+    const expenses = transactions.filter((item) => item.type === TransactionType.EXPENSE);
+    const grossRevenue = this.sumField(incomes, 'amount');
+    const netRevenue = this.sumField(incomes, 'netAmount');
+    const channelFees = grossRevenue - netRevenue;
+    const expenseByType = (type: BusinessCostType | null) => expenses.filter((item) => (item.category.businessCostType ?? null) === type).reduce((sum, item) => sum + Number(item.netAmount), 0);
+    const variableExpenses = expenseByType(BusinessCostType.VARIABLE);
+    const fixedExpenses = expenseByType(BusinessCostType.FIXED);
+    const unclassifiedExpenses = expenseByType(null);
+    const taxRate = Number(settings?.taxRate ?? 0);
+    const taxProvision = grossRevenue * taxRate / 100;
+    const result = netRevenue - variableExpenses - fixedExpenses - unclassifiedExpenses - taxProvision;
+    const previousIncome = previousTransactions.filter((item) => item.type === TransactionType.INCOME).reduce((sum, item) => sum + Number(item.netAmount), 0);
+    const previousExpense = previousTransactions.filter((item) => item.type === TransactionType.EXPENSE).reduce((sum, item) => sum + Number(item.netAmount), 0);
+    const currentExpense = variableExpenses + fixedExpenses + unclassifiedExpenses;
+    const pendingReceivable = this.sum(pending.filter((item) => item.type === BusinessEntryType.RECEIVABLE));
+    const pendingPayable = this.sum(pending.filter((item) => item.type === BusinessEntryType.PAYABLE));
+    const forecastTax = pendingReceivable * taxRate / 100;
+    const cashFlowMap = new Map<string, { date: string; income: number; expense: number }>();
+    transactions.forEach((item) => {
+      const key = this.dateKey(item.date);
+      const row = cashFlowMap.get(key) ?? { date: key, income: 0, expense: 0 };
+      if (item.type === TransactionType.INCOME) row.income += Number(item.netAmount);
+      else row.expense += Number(item.netAmount);
+      cashFlowMap.set(key, row);
+    });
+    const aggregateNamed = <T>(items: T[], nameOf: (item: T) => string, valueOf: (item: T) => number) => {
+      const map = new Map<string, number>();
+      items.forEach((item) => { const name = nameOf(item); map.set(name, (map.get(name) ?? 0) + valueOf(item)); });
+      return [...map.entries()].map(([name, revenue]) => ({ name, revenue })).sort((a, b) => b.revenue - a.revenue);
+    };
+    const revenueByClient = aggregateNamed(clientEntries, (item) => item.contact?.name ?? item.counterparty, (item) => Number(item.amount));
+    const revenueByChannel = aggregateNamed(incomes, (item) => item.channel?.name ?? 'Sem canal', (item) => Number(item.netAmount));
+    const timing = this.salesTiming(incomes.map((item) => ({ date: item.date, revenue: Number(item.netAmount) })));
+    return {
+      period: { startDate: this.dateKey(start), endDate: this.dateKey(this.addDays(end, -1)) },
+      cashFlow: { availableBalance: Number(accounts._sum.balance ?? 0), rows: [...cashFlowMap.values()].map((row) => ({ ...row, net: row.income - row.expense })) },
+      incomeStatement: { grossRevenue, channelFees, netRevenue, variableExpenses, fixedExpenses, unclassifiedExpenses, taxRate, taxProvision, result },
+      revenueByClient,
+      revenueByProduct: productReport.items,
+      revenueByChannel,
+      expenseComposition: { fixed: fixedExpenses, variable: variableExpenses, unclassified: unclassifiedExpenses },
+      monthlyComparison: { current: { income: netRevenue, expense: currentExpense, result }, previous: { income: previousIncome, expense: previousExpense, result: previousIncome - previousExpense }, incomeChange: this.changePercent(previousIncome, netRevenue), expenseChange: this.changePercent(previousExpense, currentExpense) },
+      forecast: { realizedResult: result, pendingReceivable, pendingPayable, additionalTaxProvision: forecastTax, estimatedClosingResult: result + pendingReceivable - pendingPayable - forecastTax },
+      salesTiming: timing,
+    };
+  }
+
+  async accountingReportCsv(userId: string, startDate?: string, endDate?: string): Promise<string> {
+    const report = await this.accountingReport(userId, startDate, endDate);
+    const lines: string[][] = [['RELATORIO EMPRESARIAL DIN'], ['Periodo', `${report.period.startDate} a ${report.period.endDate}`], [], ['DRE SIMPLIFICADO'], ['Item', 'Valor'],
+      ['Faturamento bruto', String(report.incomeStatement.grossRevenue)], ['Taxas dos canais', String(report.incomeStatement.channelFees)], ['Faturamento liquido', String(report.incomeStatement.netRevenue)], ['Custos variaveis', String(report.incomeStatement.variableExpenses)], ['Despesas fixas', String(report.incomeStatement.fixedExpenses)], ['Provisao de impostos', String(report.incomeStatement.taxProvision)], ['Resultado', String(report.incomeStatement.result)],
+      [], ['RECEITAS POR CLIENTE'], ['Cliente', 'Receita'], ...report.revenueByClient.map((item) => [item.name, String(item.revenue)]),
+      [], ['RECEITAS POR PRODUTO/SERVICO'], ['Item', 'Quantidade', 'Receita liquida', 'Custo estimado', 'Margem'], ...report.revenueByProduct.map((item) => [item.name, String(item.quantity), String(item.netRevenue), String(item.estimatedCost), String(item.margin)]),
+      [], ['RECEITAS POR CANAL'], ['Canal', 'Receita'], ...report.revenueByChannel.map((item) => [item.name, String(item.revenue)]),
+      [], ['FLUXO DE CAIXA'], ['Data', 'Entradas', 'Saidas', 'Liquido'], ...report.cashFlow.rows.map((item) => [item.date, String(item.income), String(item.expense), String(item.net)]),
+      [], ['PREVISAO DE FECHAMENTO'], ['Resultado realizado', String(report.forecast.realizedResult)], ['A receber', String(report.forecast.pendingReceivable)], ['A pagar', String(report.forecast.pendingPayable)], ['Resultado estimado', String(report.forecast.estimatedClosingResult)],
+    ];
+    return `\uFEFF${lines.map((row) => row.map((cell) => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(';')).join('\n')}`;
+  }
+
+  async accountingReportPdf(userId: string, startDate?: string, endDate?: string): Promise<Buffer> {
+    const report = await this.accountingReport(userId, startDate, endDate);
+    const doc = new PDFDocument({ size: 'A4', margin: 42, bufferPages: true, info: { Title: 'Relatório empresarial Din' } });
+    const chunks: Buffer[] = [];
+    doc.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+    const done = new Promise<Buffer>((resolve, reject) => { doc.on('end', () => resolve(Buffer.concat(chunks))); doc.on('error', reject); });
+    const money = (value: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+    const ensure = (height = 70) => { if (doc.y + height > doc.page.height - 55) doc.addPage(); };
+    const heading = (title: string) => {
+      ensure(55);
+      doc.moveDown(.7).font('Helvetica-Bold').fontSize(14).fillColor('#009b83').text(title, 42, doc.y, { width: doc.page.width - 84 });
+      doc.moveDown(.35);
+    };
+    const row = (label: string, value: string) => { ensure(24); const y = doc.y; doc.font('Helvetica').fontSize(9).fillColor('#475569').text(label, 42, y, { width: 360 }); doc.font('Helvetica-Bold').fillColor('#0f172a').text(value, 402, y, { width: 150, align: 'right' }); doc.moveDown(.75); };
+    doc.font('Helvetica-Bold').fontSize(22).fillColor('#07172a').text('Din - Relatório empresarial');
+    doc.font('Helvetica').fontSize(10).fillColor('#64748b').text(`Período: ${report.period.startDate} a ${report.period.endDate}`);
+    heading('Demonstrativo simplificado de resultado');
+    row('Faturamento bruto', money(report.incomeStatement.grossRevenue)); row('(-) Taxas dos canais', money(report.incomeStatement.channelFees)); row('Faturamento líquido', money(report.incomeStatement.netRevenue)); row('(-) Custos variáveis', money(report.incomeStatement.variableExpenses)); row('(-) Despesas fixas', money(report.incomeStatement.fixedExpenses)); row('(-) Provisão para impostos', money(report.incomeStatement.taxProvision)); row('Resultado do período', money(report.incomeStatement.result));
+    heading('Previsão para o fechamento'); row('Resultado realizado', money(report.forecast.realizedResult)); row('(+) Valores a receber', money(report.forecast.pendingReceivable)); row('(-) Valores a pagar', money(report.forecast.pendingPayable)); row('Resultado estimado', money(report.forecast.estimatedClosingResult));
+    const table = (title: string, items: Array<{ name: string; revenue: number }>) => { heading(title); if (!items.length) row('Sem dados no período', '-'); else items.slice(0, 20).forEach((item) => row(item.name, money(item.revenue))); };
+    table('Receitas por cliente', report.revenueByClient); table('Receitas por canal', report.revenueByChannel);
+    heading('Receitas e margem por produto/serviço'); report.revenueByProduct.slice(0, 20).forEach((item) => row(`${item.name} - ${Number(item.quantity).toLocaleString('pt-BR')} un.`, `${money(item.netRevenue)} | margem ${money(item.margin)}`));
+    heading('Fluxo de caixa diário'); report.cashFlow.rows.slice(0, 31).forEach((item) => row(item.date, `+ ${money(item.income)} | - ${money(item.expense)} | ${money(item.net)}`));
+    heading('Padrões de venda'); row('Dia com mais vendas', report.salesTiming.bestDay?.label ?? '-'); row('Horário com mais vendas', report.salesTiming.bestHour?.label ?? '-');
+    const range = doc.bufferedPageRange();
+    for (let i = range.start; i < range.start + range.count; i += 1) {
+      doc.switchToPage(i);
+      doc.font('Helvetica').fontSize(8).fillColor('#94a3b8').text(`Din - página ${i + 1} de ${range.count}`, 42, doc.page.height - 60, {
+        width: doc.page.width - 84,
+        align: 'center',
+        lineBreak: false,
+      });
+    }
+    doc.end();
+    return done;
+  }
+
   private async findOwned(userId: string, id: string) {
     const entry = await this.prisma.businessEntry.findFirst({ where: { id, userId } });
     if (!entry) throw new NotFoundException('Conta empresarial não encontrada');
@@ -479,6 +598,37 @@ export class BusinessService {
 
   private sum(entries: Array<{ amount: unknown }>): number {
     return entries.reduce((total, entry) => total + Number(entry.amount), 0);
+  }
+
+  private sumField<T extends Record<K, unknown>, K extends keyof T>(items: T[], field: K): number {
+    return items.reduce((sum, item) => sum + Number(item[field]), 0);
+  }
+
+  private dateKey(date: Date): string {
+    return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`;
+  }
+
+  private changePercent(previous: number, current: number): number | null {
+    return previous === 0 ? (current === 0 ? 0 : null) : (current - previous) / previous * 100;
+  }
+
+  private salesTiming(sales: Array<{ date: Date; revenue: number }>) {
+    const days = new Map<string, { label: string; revenue: number; sales: number }>();
+    const hours = new Map<string, { label: string; revenue: number; sales: number }>();
+    const formatter = new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', weekday: 'long', hour: '2-digit', hourCycle: 'h23' });
+    sales.forEach((sale) => {
+      const parts = formatter.formatToParts(sale.date);
+      const day = parts.find((part) => part.type === 'weekday')?.value ?? '-';
+      const hour = parts.find((part) => part.type === 'hour')?.value ?? '00';
+      const dayRow = days.get(day) ?? { label: day, revenue: 0, sales: 0 };
+      dayRow.revenue += sale.revenue; dayRow.sales += 1; days.set(day, dayRow);
+      const hourKey = `${hour}:00`;
+      const hourRow = hours.get(hourKey) ?? { label: hourKey, revenue: 0, sales: 0 };
+      hourRow.revenue += sale.revenue; hourRow.sales += 1; hours.set(hourKey, hourRow);
+    });
+    const byDay = [...days.values()].sort((a, b) => b.revenue - a.revenue);
+    const byHour = [...hours.values()].sort((a, b) => b.revenue - a.revenue);
+    return { byDay, byHour, bestDay: byDay[0] ?? null, bestHour: byHour[0] ?? null };
   }
 
   private addDays(date: Date, days: number): Date {

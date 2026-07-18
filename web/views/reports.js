@@ -11,6 +11,7 @@ import {
 } from './shared.js';
 
 export function reportsView() {
+  if (state.scope === 'BUSINESS') return businessReportsView();
   const reportType = state.reportType || 'EXPENSE';
   const report = state.report;
   if (!report) {
@@ -141,6 +142,64 @@ export function reportsView() {
       </article>
     </div>
   `;
+}
+
+function businessReportsView() {
+  const report = state.businessReport;
+  if (!report) return `<article class="card report-panel"><span class="eyebrow">Relatórios empresariais</span><h2>${state.reportLoading ? 'Consolidando dados...' : 'Relatório indisponível'}</h2><p>Tente atualizar este período.</p></article>`;
+  const selectedOffset = state.reportPeriodOffset || 0;
+  const selectedMonth = monthLabel(report.period.startDate);
+  const dre = report.incomeStatement;
+  const forecast = report.forecast;
+  const comparison = report.monthlyComparison;
+  const compositionTotal = Number(report.expenseComposition.fixed || 0) + Number(report.expenseComposition.variable || 0) + Number(report.expenseComposition.unclassified || 0);
+  return `
+    <div class="period-switch">
+      <button type="button" data-report-period="${selectedOffset - 1}">${monthLabelForOffset(selectedOffset - 1)}</button>
+      <button class="active" type="button" data-report-period="${selectedOffset}">${selectedMonth}</button>
+      <button type="button" data-report-period="${selectedOffset + 1}">${monthLabelForOffset(selectedOffset + 1)}</button>
+    </div>
+    <div class="business-report-actions"><button class="button secondary" type="button" data-business-report-export="pdf">Exportar PDF</button><button class="button secondary" type="button" data-business-report-export="csv">Exportar CSV</button></div>
+    <article class="card business-report-hero"><span class="eyebrow">Previsão do mês</span><h2>${money.format(Number(forecast.estimatedClosingResult || 0))}</h2><p>Resultado realizado ${money.format(Number(forecast.realizedResult || 0))} · a receber ${money.format(Number(forecast.pendingReceivable || 0))} · a pagar ${money.format(Number(forecast.pendingPayable || 0))}</p></article>
+    <div class="business-report-grid">
+      <article class="card business-report-section"><span class="eyebrow">DRE simplificado</span><h2>Resultado do período</h2>${reportRows([
+        ['Faturamento bruto', dre.grossRevenue], ['Taxas dos canais', -dre.channelFees], ['Faturamento líquido', dre.netRevenue], ['Custos variáveis', -dre.variableExpenses], ['Despesas fixas', -dre.fixedExpenses], ['Provisão de impostos', -dre.taxProvision], ['Resultado', dre.result],
+      ])}</article>
+      <article class="card business-report-section"><span class="eyebrow">Comparativo mensal</span><h2>Atual versus anterior</h2>${reportRows([['Receitas atuais', comparison.current.income], ['Receitas anteriores', comparison.previous.income], ['Despesas atuais', -comparison.current.expense], ['Despesas anteriores', -comparison.previous.expense], ['Resultado atual', comparison.current.result], ['Resultado anterior', comparison.previous.result]])}<p class="report-change">Receitas: ${changeLabel(comparison.incomeChange)} · Despesas: ${changeLabel(comparison.expenseChange)}</p></article>
+    </div>
+    <article class="card business-report-section"><span class="eyebrow">Fluxo de caixa</span><h2>Entradas e saídas por dia</h2><div class="business-report-table">${report.cashFlow.rows.length ? report.cashFlow.rows.map((row) => `<div><span>${escapeHtml(row.date)}</span><small class="income">+ ${money.format(Number(row.income))}</small><small class="expense">- ${money.format(Number(row.expense))}</small><strong>${money.format(Number(row.net))}</strong></div>`).join('') : '<p class="empty">Sem movimentações no período.</p>'}</div></article>
+    <div class="business-report-grid">
+      ${rankingCard('Receitas por cliente', report.revenueByClient)}
+      ${rankingCard('Receitas por canal', report.revenueByChannel)}
+    </div>
+    <article class="card business-report-section"><span class="eyebrow">Produtos e serviços</span><h2>Receita e margem</h2><div class="business-report-table">${report.revenueByProduct.length ? report.revenueByProduct.map((item) => `<div><span>${escapeHtml(item.name)}<small>${Number(item.quantity).toLocaleString('pt-BR')} vendidos</small></span><small>${money.format(Number(item.netRevenue))}</small><small>Custo ${money.format(Number(item.estimatedCost))}</small><strong>${money.format(Number(item.margin))}</strong></div>`).join('') : '<p class="empty">Nenhuma venda vinculada a produtos.</p>'}</div></article>
+    <article class="card business-report-section"><span class="eyebrow">Despesas</span><h2>Fixas versus variáveis</h2><div class="expense-composition-bars">${compositionBar('Fixas', report.expenseComposition.fixed, compositionTotal, '#0f766e')}${compositionBar('Variáveis', report.expenseComposition.variable, compositionTotal, '#f59e0b')}${compositionBar('Sem classificação', report.expenseComposition.unclassified, compositionTotal, '#ef4444')}</div></article>
+    <div class="business-report-grid">
+      ${timingCard('Dias com mais vendas', report.salesTiming.byDay)}
+      ${timingCard('Horários com mais vendas', report.salesTiming.byHour)}
+    </div>`;
+}
+
+function reportRows(rows) {
+  return `<div class="business-report-rows">${rows.map(([label, value], index) => `<div class="${index === rows.length - 1 ? 'total' : ''}"><span>${escapeHtml(label)}</span><strong>${money.format(Number(value || 0))}</strong></div>`).join('')}</div>`;
+}
+
+function rankingCard(title, items) {
+  return `<article class="card business-report-section"><span class="eyebrow">Receitas</span><h2>${title}</h2><div class="business-ranking">${items.length ? items.slice(0, 8).map((item, index) => `<div><span>${index + 1}. ${escapeHtml(item.name)}</span><strong>${money.format(Number(item.revenue))}</strong></div>`).join('') : '<p class="empty">Sem dados no período.</p>'}</div></article>`;
+}
+
+function timingCard(title, items) {
+  return `<article class="card business-report-section"><span class="eyebrow">Padrões de venda</span><h2>${title}</h2><div class="business-ranking">${items.length ? items.slice(0, 8).map((item) => `<div><span>${escapeHtml(item.label)}<small>${item.sales} vendas</small></span><strong>${money.format(Number(item.revenue))}</strong></div>`).join('') : '<p class="empty">Sem vendas com horário no período.</p>'}</div></article>`;
+}
+
+function compositionBar(label, value, total, color) {
+  const percentage = total > 0 ? Math.round(Number(value || 0) / total * 100) : 0;
+  return `<div><span>${label}<strong>${money.format(Number(value || 0))} · ${percentage}%</strong></span><i><b style="width:${percentage}%;background:${color}"></b></i></div>`;
+}
+
+function changeLabel(value) {
+  if (value === null) return 'sem base anterior';
+  return `${Number(value) >= 0 ? '+' : ''}${Number(value).toFixed(1)}%`;
 }
 
 function spendingTimeReport(report) {

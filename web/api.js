@@ -116,6 +116,14 @@ export function api() {
     deleteBusinessContact: (id) => request(`/business/contacts/${id}`, { method: 'DELETE' }),
     businessOfferings: () => request('/business/offerings'),
     productReport: () => request('/business/product-report'),
+    businessReport: (offset = state.reportPeriodOffset) => {
+      const { startDate, endDate } = monthPeriod(offset);
+      return request(`/business/reports?startDate=${startDate}&endDate=${endDate}`);
+    },
+    exportBusinessReport: (format, offset = state.reportPeriodOffset) => {
+      const { startDate, endDate } = monthPeriod(offset);
+      return request(`/business/reports/export/${format}?startDate=${startDate}&endDate=${endDate}`, { method: 'GET', raw: true, timeoutMs: 120000 });
+    },
     createBusinessOffering: (payload) => request('/business/offerings', { method: 'POST', body: JSON.stringify(payload) }),
     updateBusinessOffering: (id, payload) => request(`/business/offerings/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
     deleteBusinessOffering: (id) => request(`/business/offerings/${id}`, { method: 'DELETE' }),
@@ -176,7 +184,7 @@ export async function loadData() {
     ['recurring', client.recurringTransactions()],
     ['assistant', client.assistantActivity()],
     ...(state.scope === 'BUSINESS'
-      ? [['businessSummary', client.businessSummary()], ['businessEntries', client.businessEntries()], ['businessContacts', client.businessContacts()], ['businessOfferings', client.businessOfferings()], ['productReport', client.productReport()]]
+      ? [['businessSummary', client.businessSummary()], ['businessEntries', client.businessEntries()], ['businessContacts', client.businessContacts()], ['businessOfferings', client.businessOfferings()], ['productReport', client.productReport()], ['businessReport', client.businessReport()]]
       : []),
   ];
   const results = await Promise.allSettled(resources.map(([, promise]) => promise));
@@ -210,6 +218,7 @@ export async function loadData() {
   if ('businessContacts' in loaded) state.businessContacts = loaded.businessContacts || [];
   if ('businessOfferings' in loaded) state.businessOfferings = loaded.businessOfferings || [];
   if ('productReport' in loaded) state.productReport = loaded.productReport;
+  if ('businessReport' in loaded) state.businessReport = loaded.businessReport;
   localStorage.removeItem('econoapp.budgets');
   return { warnings: state.loadWarnings };
 }

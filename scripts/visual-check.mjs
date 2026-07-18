@@ -233,6 +233,20 @@ const apiFixtures = {
       ],
     },
   },
+  '/api/v1/business/reports': {
+    data: {
+      period: { startDate: currentMonthDate(1).slice(0, 10), endDate: currentMonthDate(31).slice(0, 10) },
+      cashFlow: { availableBalance: 8400, rows: [{ date: currentMonthDate(5).slice(0, 10), income: 2600, expense: 450, net: 2150 }, { date: currentMonthDate(12).slice(0, 10), income: 1800, expense: 920, net: 880 }] },
+      incomeStatement: { grossRevenue: 13200, channelFees: 600, netRevenue: 12600, variableExpenses: 2700, fixedExpenses: 4650, unclassifiedExpenses: 0, taxRate: 6, taxProvision: 792, result: 4458 },
+      revenueByClient: [{ name: 'Cliente Aurora', revenue: 5400 }, { name: 'Loja Horizonte', revenue: 3200 }],
+      revenueByProduct: [{ name: 'Consultoria financeira', quantity: 6, netRevenue: 2100, estimatedCost: 480, margin: 1620 }, { name: 'Camiseta Din', quantity: 28, netRevenue: 2760, estimatedCost: 2130, margin: 630 }],
+      revenueByChannel: [{ name: 'Loja online', revenue: 7200 }, { name: 'Venda direta', revenue: 5400 }],
+      expenseComposition: { fixed: 4650, variable: 2700, unclassified: 0 },
+      monthlyComparison: { current: { income: 12600, expense: 7350, result: 4458 }, previous: { income: 10800, expense: 6900, result: 3900 }, incomeChange: 16.7, expenseChange: 6.5 },
+      forecast: { realizedResult: 4458, pendingReceivable: 5900, pendingPayable: 2800, additionalTaxProvision: 354, estimatedClosingResult: 7204 },
+      salesTiming: { byDay: [{ label: 'sexta-feira', revenue: 4800, sales: 9 }, { label: 'segunda-feira', revenue: 3100, sales: 6 }], byHour: [{ label: '14:00', revenue: 3900, sales: 7 }, { label: '19:00', revenue: 2600, sales: 5 }], bestDay: { label: 'sexta-feira' }, bestHour: { label: '14:00' } },
+    },
+  },
   '/api/v1/assistant/activity': {
     data: {
       messages: [
@@ -466,6 +480,11 @@ async function runViewport(browser, baseUrl, name, viewport) {
   await assertText(page, 'Mais lucrativo');
   await screenshot(page, `${name}-business-offerings`);
   await page.locator('[data-manage-back]').click();
+  await page.locator('[data-tab="reports"]').click();
+  await assertText(page, 'DRE simplificado');
+  await assertText(page, 'Previsão do mês');
+  await assertVisible(page, '[data-business-report-export="pdf"]', 'exportação PDF empresarial');
+  await screenshot(page, `${name}-business-reports`);
   await page.locator('[data-tab="dashboard"]').click();
   await page.locator('[data-scope] [data-value="PERSONAL"]').click();
 

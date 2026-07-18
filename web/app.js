@@ -949,9 +949,10 @@ function bindViewEvents() {
       state.reportLoading = true;
       document.querySelectorAll('[data-report-period]').forEach((item) => { item.disabled = true; });
       try {
-        const response = await api().report(offset);
+        const response = state.scope === 'BUSINESS' ? await api().businessReport(offset) : await api().report(offset);
         const direction = offset > state.reportPeriodOffset ? 'forward' : 'back';
-        state.report = response.data;
+        if (state.scope === 'BUSINESS') state.businessReport = response.data;
+        else state.report = response.data;
         state.reportPeriodOffset = offset;
         state.reportLoading = false;
         renderWithTransition(() => {}, direction);
@@ -961,6 +962,10 @@ function bindViewEvents() {
         renderApp();
       }
     });
+  });
+
+  document.querySelectorAll('[data-business-report-export]').forEach((button) => {
+    button.addEventListener('click', () => handleBusinessReportExport(button.dataset.businessReportExport));
   });
 
   document.querySelectorAll('[data-assistant-action]').forEach((button) => {
@@ -1570,6 +1575,25 @@ async function handleChannelSubmit(event) {
     showToast('Canal de venda criado.');
   } catch (error) {
     setFormBusy(form, false);
+    showToast(error.message, 'error');
+  }
+}
+
+async function handleBusinessReportExport(format) {
+  if (format !== 'pdf' && format !== 'csv') return;
+  try {
+    const response = await api().exportBusinessReport(format);
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `din-relatorio-empresarial-${new Date().toISOString().slice(0, 10)}.${format}`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    showToast(`Relatório ${format.toUpperCase()} gerado.`);
+  } catch (error) {
     showToast(error.message, 'error');
   }
 }

@@ -1,4 +1,5 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Query, Res, StreamableFile } from '@nestjs/common';
+import type { Response } from 'express';
 import { BusinessEntryStatus, BusinessEntryType } from '@prisma/client';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
@@ -80,6 +81,25 @@ export class BusinessController {
   @Get('product-report')
   async productReport(@CurrentUser() user: JwtPayload, @Query('startDate') startDate?: string, @Query('endDate') endDate?: string) {
     return { data: await this.service.productReport(user.sub, startDate, endDate) };
+  }
+
+  @Get('reports')
+  async reports(@CurrentUser() user: JwtPayload, @Query('startDate') startDate?: string, @Query('endDate') endDate?: string) {
+    return { data: await this.service.accountingReport(user.sub, startDate, endDate) };
+  }
+
+  @Get('reports/export/csv')
+  async reportsCsv(@CurrentUser() user: JwtPayload, @Res({ passthrough: true }) response: Response, @Query('startDate') startDate?: string, @Query('endDate') endDate?: string) {
+    response.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    response.setHeader('Content-Disposition', 'attachment; filename="din-relatorio-empresarial.csv"');
+    return this.service.accountingReportCsv(user.sub, startDate, endDate);
+  }
+
+  @Get('reports/export/pdf')
+  async reportsPdf(@CurrentUser() user: JwtPayload, @Res({ passthrough: true }) response: Response, @Query('startDate') startDate?: string, @Query('endDate') endDate?: string) {
+    response.setHeader('Content-Type', 'application/pdf');
+    response.setHeader('Content-Disposition', 'attachment; filename="din-relatorio-empresarial.pdf"');
+    return new StreamableFile(await this.service.accountingReportPdf(user.sub, startDate, endDate));
   }
 
   @Get('entries')
