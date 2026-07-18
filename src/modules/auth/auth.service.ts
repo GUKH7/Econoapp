@@ -235,7 +235,7 @@ export class AuthService {
       name: user.name,
       phone: user.phone,
       email: user.email,
-      isWhatsappAdmin: isWhatsappAdminPhone(user.phone),
+      isWhatsappAdmin: isAdminIdentity(user.phone, user.email),
       accessStatus: user.accessStatus,
       paidUntil: user.paidUntil?.toISOString() ?? null,
     };
@@ -463,6 +463,12 @@ export function isWhatsappAdminPhone(phone: string): boolean {
   const admins = new Set(env.WHATSAPP_ADMIN_PHONES.split(',').flatMap(phoneCandidates));
   if (!admins.size) return false;
   return phoneCandidates(phone).some((candidate) => admins.has(candidate));
+}
+
+export function isAdminIdentity(phone: string, email?: string | null): boolean {
+  if (isWhatsappAdminPhone(phone)) return true;
+  const configuredEmail = env.ADMIN_PANEL_USER_EMAIL.trim().toLowerCase();
+  return Boolean(configuredEmail && email?.trim().toLowerCase() === configuredEmail);
 }
 
 function phoneCandidates(phone: string): string[] {

@@ -6,7 +6,7 @@ import { IS_PUBLIC_KEY } from '@/common/decorators/public.decorator';
 import { ForbiddenException, UnauthorizedException } from '@/common/errors/app.exception';
 import { AuthenticatedRequest } from '@/common/types';
 import { PrismaService } from '@/config/database';
-import { isWhatsappAdminPhone } from '@/modules/auth/auth.service';
+import { isAdminIdentity } from '@/modules/auth/auth.service';
 
 @Injectable()
 export class AccountAccessGuard implements CanActivate {
@@ -25,10 +25,10 @@ export class AccountAccessGuard implements CanActivate {
 
     const user = await this.prisma.user.findUnique({
       where: { id: request.user.sub },
-      select: { phone: true, accessStatus: true, paidUntil: true },
+      select: { phone: true, email: true, accessStatus: true, paidUntil: true },
     });
     if (!user) throw new UnauthorizedException('Usuário não encontrado');
-    if (isWhatsappAdminPhone(user.phone)) return true;
+    if (isAdminIdentity(user.phone, user.email)) return true;
     if (this.reflector.getAllAndOverride<boolean>(ALLOW_INACTIVE_KEY, targets)) return true;
 
     if (user.accessStatus === AccountAccessStatus.PENDING) {

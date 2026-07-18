@@ -2,7 +2,7 @@ import { CanActivate, ExecutionContext, Inject, Injectable } from '@nestjs/commo
 import { ForbiddenException } from '@/common/errors/app.exception';
 import { AuthenticatedRequest } from '@/common/types';
 import { PrismaService } from '@/config/database';
-import { isWhatsappAdminPhone } from '@/modules/auth/auth.service';
+import { isAdminIdentity } from '@/modules/auth/auth.service';
 
 @Injectable()
 export class AdminGuard implements CanActivate {
@@ -12,8 +12,11 @@ export class AdminGuard implements CanActivate {
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
     const userId = request.user?.sub;
     if (!userId) throw new ForbiddenException('Acesso administrativo não autorizado.');
-    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { phone: true } });
-    if (!user || !isWhatsappAdminPhone(user.phone)) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { phone: true, email: true },
+    });
+    if (!user || !isAdminIdentity(user.phone, user.email)) {
       throw new ForbiddenException('Acesso administrativo não autorizado.');
     }
     return true;

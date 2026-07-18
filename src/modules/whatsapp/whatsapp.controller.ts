@@ -16,7 +16,7 @@ import { Public } from '@/common/decorators/public.decorator';
 import { AuthGuard } from '@/common/guards/auth.guard';
 import { JwtPayload } from '@/common/types';
 import { env } from '@/config/env';
-import { isWhatsappAdminPhone } from '@/modules/auth/auth.service';
+import { isAdminIdentity } from '@/modules/auth/auth.service';
 import { SendWhatsappMessageDto } from './dto/send-whatsapp-message.dto';
 import { WhatsappWebhookDto } from './dto/whatsapp-webhook.dto';
 import { WhatsappScheduledNotificationService } from './whatsapp-scheduled-notification.service';
@@ -99,7 +99,7 @@ export class WhatsappController {
   }
 
   private ensureWhatsappAdmin(user: JwtPayload): void {
-    if (!isWhatsappAdminPhone(user.phone)) {
+    if (!isAdminIdentity(user.phone, user.email)) {
       throw new ForbiddenException('A conexao WhatsApp do chatbot e restrita ao administrador.');
     }
   }
