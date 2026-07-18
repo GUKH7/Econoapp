@@ -1,4 +1,5 @@
-import { IsHexColor, IsOptional, IsString } from 'class-validator';
+import { BusinessCostType } from '@prisma/client';
+import { IsEnum, IsHexColor, IsOptional, IsString } from 'class-validator';
 
 export class CreateCategoryDto {
   @IsString()
@@ -7,4 +8,8 @@ export class CreateCategoryDto {
   @IsOptional()
   @IsHexColor()
   color?: string;
+
+  @IsOptional()
+  @IsEnum(BusinessCostType)
+  businessCostType?: BusinessCostType;
 }

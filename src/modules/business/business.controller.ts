@@ -7,6 +7,7 @@ import { BusinessService } from './business.service';
 import { CreateBusinessEntryDto } from './dto/create-business-entry.dto';
 import { SettleBusinessEntryDto } from './dto/settle-business-entry.dto';
 import { UpdateBusinessEntryDto } from './dto/update-business-entry.dto';
+import { UpdateBusinessSettingsDto } from './dto/update-business-settings.dto';
 
 @ApiTags('Negócio')
 @ApiBearerAuth('access-token')
@@ -18,6 +19,16 @@ export class BusinessController {
   @ApiOperation({ summary: 'Resumo previsto e realizado do negócio' })
   async summary(@CurrentUser() user: JwtPayload) {
     return { data: await this.service.summary(user.sub) };
+  }
+
+  @Get('settings')
+  async settings(@CurrentUser() user: JwtPayload) {
+    return { data: await this.service.settings(user.sub) };
+  }
+
+  @Patch('settings')
+  async updateSettings(@CurrentUser() user: JwtPayload, @Body() dto: UpdateBusinessSettingsDto) {
+    return { data: await this.service.updateSettings(user.sub, dto) };
   }
 
   @Get('entries')

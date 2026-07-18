@@ -3,6 +3,7 @@ import {
   FinancialScope,
   TransactionType,
   TransactionSource,
+  BusinessCostType,
 } from '@prisma/client';
 
 export interface CategoryResponse {
@@ -11,6 +12,7 @@ export interface CategoryResponse {
   color: string;
   userId: string;
   createdAt: Date;
+  businessCostType: BusinessCostType | null;
 }
 
 export interface ChannelResponse {

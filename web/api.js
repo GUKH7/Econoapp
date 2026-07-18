@@ -113,6 +113,8 @@ export function api() {
     settleBusinessEntry: (id, payload = {}) =>
       request(`/business/entries/${id}/settle`, { method: 'POST', body: JSON.stringify(payload) }),
     cancelBusinessEntry: (id) => request(`/business/entries/${id}`, { method: 'DELETE' }),
+    updateBusinessSettings: (payload) =>
+      request('/business/settings', { method: 'PATCH', body: JSON.stringify(payload) }),
     createRecurringTransaction: (payload) =>
       request('/transactions/recurring', { method: 'POST', body: JSON.stringify(payload) }),
     updateRecurringTransaction: (id, payload) =>
@@ -122,6 +124,8 @@ export function api() {
     deactivateRecurringTransaction: (id) => request(`/transactions/recurring/${id}`, { method: 'DELETE' }),
     createCategory: (payload) =>
       request('/categories', { method: 'POST', body: JSON.stringify(payload) }),
+    updateCategory: (id, payload) =>
+      request(`/categories/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
     createChannel: (payload) =>
       request('/channels', { method: 'POST', body: JSON.stringify(payload) }),
     createAccount: (payload) =>

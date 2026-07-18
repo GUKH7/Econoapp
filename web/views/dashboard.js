@@ -328,6 +328,7 @@ function businessSummaryCard() {
   if (!summary) return `<article class="business-summary-card"><p class="empty">Carregando o caixa do negócio...</p></article>`;
   const projections = summary.projections || [];
   const alerts = summary.alerts || [];
+  const statement = summary.statement || {};
 
   return `
     <article class="business-summary-card">
@@ -340,12 +341,24 @@ function businessSummaryCard() {
         <button class="button secondary compact-action" type="button" data-manage-section="business">Gerenciar</button>
       </div>
       <div class="business-kpis business-kpis-expanded">
-        <div><span>Entradas no mês</span><strong class="income">${money.format(Number(summary.monthIncome || 0))}</strong></div>
-        <div><span>Saídas no mês</span><strong class="expense">${money.format(Number(summary.monthExpense || 0))}</strong></div>
         <div><span>A receber</span><strong class="income">${money.format(Number(summary.receivable || 0))}</strong></div>
         <div><span>A pagar</span><strong class="expense">${money.format(Number(summary.payable || 0))}</strong></div>
-        <div><span>Resultado estimado</span><strong>${money.format(Number(summary.estimatedResult || 0))}</strong></div>
+        <div><span>${escapeHtml(summary.resultLabel || 'Resultado do mês')}</span><strong>${money.format(Number(summary.estimatedResult || 0))}</strong></div>
       </div>
+      <div class="business-statement">
+        <div><span>Faturamento bruto</span><strong>${money.format(Number(statement.grossRevenue || 0))}</strong></div>
+        <div><span>(−) Taxas dos canais</span><strong class="expense">${money.format(Number(statement.channelFees || 0))}</strong></div>
+        <div class="statement-subtotal"><span>Faturamento líquido</span><strong class="income">${money.format(Number(statement.netRevenue || 0))}</strong></div>
+        <div><span>(−) Custos variáveis</span><strong>${money.format(Number(statement.variableCosts || 0))}</strong></div>
+        <div><span>(−) Despesas fixas</span><strong>${money.format(Number(statement.fixedExpenses || 0))}</strong></div>
+        <div><span>(−) Provisão para impostos</span><strong>${money.format(Number(statement.taxProvision || 0))}</strong></div>
+        ${Number(statement.unclassifiedExpenses || 0) > 0 ? `<div class="statement-warning"><span>Despesas sem classificação</span><strong>${money.format(Number(statement.unclassifiedExpenses))}</strong></div>` : ''}
+        ${Number(statement.pendingReceivable || 0) > 0 ? `<div><span>(+) Valores previstos a receber</span><strong>${money.format(Number(statement.pendingReceivable))}</strong></div>` : ''}
+        ${Number(statement.pendingPayable || 0) > 0 ? `<div><span>(−) Valores previstos a pagar</span><strong>${money.format(Number(statement.pendingPayable))}</strong></div>` : ''}
+        ${Number(statement.pendingTaxProvision || 0) > 0 ? `<div><span>(−) Impostos sobre valores previstos</span><strong>${money.format(Number(statement.pendingTaxProvision))}</strong></div>` : ''}
+        <div class="statement-result"><span>${escapeHtml(summary.resultLabel || 'Resultado do mês')}</span><strong>${money.format(Number(statement.estimatedNetResult || 0))}</strong></div>
+      </div>
+      ${!summary.configurationComplete ? `<button class="business-config-warning" type="button" data-manage-section="business"><strong>Complete a configuração do resultado</strong><span>${!summary.configuration?.taxConfigured ? 'Informe a alíquota de impostos' : 'Classifique custos e despesas'} para liberar o lucro líquido estimado.</span></button>` : ''}
       <div class="business-projections">
         <span class="eyebrow">Projeção do caixa</span>
         <div class="projection-grid">${projections.map((projection) => `

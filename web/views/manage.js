@@ -211,8 +211,24 @@ export function manageView() {
     .map((account) => `<option value="${account.id}">${escapeHtml(account.name)}</option>`)
     .join('');
   const businessRows = state.businessEntries.map((entry) => businessEntryRow(entry)).join('');
+  const businessSummary = state.businessSummary || {};
+  const costCategories = businessSummary.expenseCategories || [];
+  const businessResultConfig = `
+    <section class="business-result-config">
+      <div class="panel-title"><div><span class="eyebrow">Resultado empresarial</span><h2>Impostos e tipos de gasto</h2></div></div>
+      <p class="muted">Essas informações permitem separar resultado do mês de lucro líquido estimado.</p>
+      <form class="form" data-business-tax-form>
+        <label class="field">Alíquota estimada de impostos (%)<input name="taxRate" inputmode="decimal" value="${Number(businessSummary.configuration?.taxRate || 0).toLocaleString('pt-BR')}" required /></label>
+        <button class="button secondary" type="submit">Salvar alíquota</button>
+      </form>
+      <div class="business-cost-categories">
+        ${costCategories.length ? costCategories.map((category) => `<label class="field business-cost-row"><span><strong>${escapeHtml(category.name)}</strong><small>${money.format(Number(category.total || 0))} no mês</small></span><select data-business-cost-category="${category.id}"><option value="" ${!category.businessCostType ? 'selected' : ''}>Não classificado</option><option value="VARIABLE" ${category.businessCostType === 'VARIABLE' ? 'selected' : ''}>Custo variável</option><option value="FIXED" ${category.businessCostType === 'FIXED' ? 'selected' : ''}>Despesa fixa</option></select></label>`).join('') : '<p class="empty">As categorias usadas em gastos empresariais aparecerão aqui.</p>'}
+      </div>
+    </section>`;
   const businessPanel = `
     <article class="card manage-panel business-agenda-panel">
+      ${businessResultConfig}
+      <div class="business-config-divider"></div>
       <div class="panel-title"><div><span class="eyebrow">Planejamento</span><h2>Contas a pagar e receber</h2></div></div>
       <form class="form business-entry-form" data-business-entry-form>
         <div class="form-grid two-columns">

@@ -793,6 +793,10 @@ function bindViewEvents() {
   document.querySelector('[data-onboarding-account-form]')?.addEventListener('submit', handleOnboardingAccountSubmit);
   document.querySelector('[data-channel-form]')?.addEventListener('submit', handleChannelSubmit);
   document.querySelector('[data-business-entry-form]')?.addEventListener('submit', handleBusinessEntrySubmit);
+  document.querySelector('[data-business-tax-form]')?.addEventListener('submit', handleBusinessTaxSubmit);
+  document.querySelectorAll('[data-business-cost-category]').forEach((select) => {
+    select.addEventListener('change', () => handleBusinessCostTypeChange(select));
+  });
   document.querySelectorAll('[data-business-settle]').forEach((button) => {
     button.addEventListener('click', () => handleBusinessEntrySettle(button.dataset.businessSettle));
   });
@@ -1578,6 +1582,37 @@ async function handleBusinessEntrySubmit(event) {
     showToast(generated > 1 ? `${generated} contas recorrentes adicionadas.` : 'Conta adicionada à agenda.');
   } catch (error) {
     setFormBusy(form, false);
+    showToast(error.message, 'error');
+  }
+}
+
+async function handleBusinessTaxSubmit(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const data = new FormData(form);
+  setFormBusy(form, true, 'Salvando...');
+  try {
+    await api().updateBusinessSettings({ taxRate: parseAmount(data.get('taxRate') || '0') });
+    await loadData();
+    renderApp();
+    showToast('Provisão de impostos atualizada.');
+  } catch (error) {
+    setFormBusy(form, false);
+    showToast(error.message, 'error');
+  }
+}
+
+async function handleBusinessCostTypeChange(select) {
+  const categoryId = select.dataset.businessCostCategory;
+  if (!categoryId) return;
+  select.disabled = true;
+  try {
+    await api().updateCategory(categoryId, { businessCostType: select.value || null });
+    await loadData();
+    renderApp();
+    showToast('Classificação empresarial atualizada.');
+  } catch (error) {
+    select.disabled = false;
     showToast(error.message, 'error');
   }
 }

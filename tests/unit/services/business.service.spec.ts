@@ -1,16 +1,26 @@
-import { BusinessEntryStatus, BusinessEntryType, RecurrenceFrequency, TransactionType } from '@prisma/client';
+import { BusinessCostType, BusinessEntryStatus, BusinessEntryType, RecurrenceFrequency } from '@prisma/client';
 import { describe, expect, it, vi } from 'vitest';
 import { BusinessService } from '@/modules/business/business.service';
 
 function serviceFixture() {
   const prisma = {
     $transaction: vi.fn(async (operations: Array<Promise<unknown>>) => Promise.all(operations)),
-    category: { findFirst: vi.fn().mockResolvedValue({ id: 'category-1' }) },
+    category: {
+      findFirst: vi.fn().mockResolvedValue({ id: 'category-1' }),
+      findMany: vi.fn().mockResolvedValue([{ id: 'category-1', name: 'Operação', businessCostType: BusinessCostType.FIXED }]),
+    },
     financialAccount: {
       findFirst: vi.fn().mockResolvedValue({ id: 'account-1' }),
       aggregate: vi.fn().mockResolvedValue({ _sum: { balance: 5000 } }),
     },
-    transaction: { groupBy: vi.fn().mockResolvedValue([]) },
+    transaction: {
+      aggregate: vi.fn().mockResolvedValue({ _sum: { amount: 0, netAmount: 0 } }),
+      groupBy: vi.fn().mockResolvedValue([]),
+    },
+    businessSettings: {
+      findUnique: vi.fn().mockResolvedValue(null),
+      upsert: vi.fn(),
+    },
     businessEntry: {
       create: vi.fn().mockImplementation(({ data }) => Promise.resolve({
         id: `entry-${String(data.dueDate)}`,
@@ -21,8 +31,8 @@ function serviceFixture() {
       })),
       findMany: vi.fn()
         .mockResolvedValueOnce([
-          { id: 'r1', type: BusinessEntryType.RECEIVABLE, amount: 1500, dueDate: new Date('2026-07-20T00:00:00.000Z') },
-          { id: 'p1', type: BusinessEntryType.PAYABLE, amount: 600, dueDate: new Date('2026-07-22T00:00:00.000Z') },
+          { id: 'r1', type: BusinessEntryType.RECEIVABLE, amount: 1500, dueDate: new Date('2026-07-20T00:00:00.000Z'), categoryId: 'category-1' },
+          { id: 'p1', type: BusinessEntryType.PAYABLE, amount: 600, dueDate: new Date('2026-07-22T00:00:00.000Z'), categoryId: 'category-1' },
         ])
         .mockResolvedValueOnce([]),
     },
@@ -53,20 +63,40 @@ describe('BusinessService', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-07-18T12:00:00.000Z'));
     const { prisma, service } = serviceFixture();
-    prisma.transaction.groupBy.mockResolvedValue([
-      { type: TransactionType.INCOME, _sum: { netAmount: 3000 } },
-      { type: TransactionType.EXPENSE, _sum: { netAmount: 1000 } },
-    ]);
+    prisma.transaction.aggregate.mockResolvedValue({ _sum: { amount: 3200, netAmount: 3000 } });
+    prisma.transaction.groupBy.mockResolvedValue([{ categoryId: 'category-1', _sum: { netAmount: 1000 } }]);
 
     const summary = await service.summary('user-1');
 
     expect(summary.availableBalance).toBe(5000);
     expect(summary.monthIncome).toBe(3000);
     expect(summary.monthExpense).toBe(1000);
+    expect(summary.statement.channelFees).toBe(200);
+    expect(summary.statement.fixedExpenses).toBe(1000);
     expect(summary.receivable).toBe(1500);
     expect(summary.payable).toBe(600);
     expect(summary.estimatedResult).toBe(2900);
+    expect(summary.resultLabel).toBe('Resultado do mês');
+    expect(summary.configurationComplete).toBe(false);
     expect(summary.projections.find((item) => item.days === 7)?.balance).toBe(5900);
+    vi.useRealTimers();
+  });
+
+  it('só chama de lucro líquido quando imposto e custos estão configurados', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-18T12:00:00.000Z'));
+    const { prisma, service } = serviceFixture();
+    prisma.transaction.aggregate.mockResolvedValue({ _sum: { amount: 3200, netAmount: 3000 } });
+    prisma.transaction.groupBy.mockResolvedValue([{ categoryId: 'category-1', _sum: { netAmount: 1000 } }]);
+    prisma.businessSettings.findUnique.mockResolvedValue({ taxRate: 6, taxConfigured: true });
+
+    const summary = await service.summary('user-1');
+
+    expect(summary.resultLabel).toBe('Lucro líquido estimado');
+    expect(summary.configurationComplete).toBe(true);
+    expect(summary.statement.taxProvision).toBe(192);
+    expect(summary.statement.pendingTaxProvision).toBe(90);
+    expect(summary.statement.estimatedNetResult).toBe(2618);
     vi.useRealTimers();
   });
 });

@@ -12,6 +12,7 @@ export class CategoryRepository {
       data: {
         name: input.name,
         color: input.color ?? '#6366f1',
+        businessCostType: input.businessCostType ?? null,
         userId,
       },
     });
@@ -31,6 +32,7 @@ export class CategoryRepository {
       data: {
         ...(input.name !== undefined ? { name: input.name } : {}),
         ...(input.color !== undefined ? { color: input.color } : {}),
+        ...(input.businessCostType !== undefined ? { businessCostType: input.businessCostType } : {}),
       },
     });
 

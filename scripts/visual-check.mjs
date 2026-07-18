@@ -172,7 +172,28 @@ const apiFixtures = {
       payable: 2800,
       overdueReceivable: 1200,
       overduePayable: 0,
-      estimatedResult: 8350,
+      estimatedResult: 7204,
+      resultLabel: 'Lucro líquido estimado',
+      configurationComplete: true,
+      configuration: { taxRate: 6, taxConfigured: true, unclassifiedAmount: 0 },
+      statement: {
+        grossRevenue: 13200,
+        channelFees: 600,
+        netRevenue: 12600,
+        variableCosts: 2700,
+        fixedExpenses: 4650,
+        unclassifiedExpenses: 0,
+        taxProvision: 792,
+        resultOfMonth: 4458,
+        pendingReceivable: 5900,
+        pendingPayable: 2800,
+        pendingTaxProvision: 354,
+        estimatedNetResult: 7204,
+      },
+      expenseCategories: [
+        { id: 'cat-home', name: 'Moradia', businessCostType: 'FIXED', total: 4650 },
+        { id: 'cat-food', name: 'Alimentacao', businessCostType: 'VARIABLE', total: 2700 },
+      ],
       projections: [
         { days: 7, income: 2400, expense: 1100, balance: 9700 },
         { days: 30, income: 5900, expense: 2800, balance: 11500 },
@@ -404,7 +425,8 @@ async function runViewport(browser, baseUrl, name, viewport) {
   await page.locator('[data-scope] [data-value="BUSINESS"]').click();
   await assertText(page, 'Caixa do negócio');
   await assertText(page, 'Projeção do caixa');
-  await assertText(page, 'Resultado estimado');
+  await assertText(page, 'Lucro líquido estimado');
+  await assertText(page, 'Faturamento bruto');
   await screenshot(page, `${name}-business-dashboard`);
   await page.locator('[data-manage-section="business"]').first().click();
   await assertText(page, 'Contas a pagar e receber');

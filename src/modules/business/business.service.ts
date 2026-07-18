@@ -2,6 +2,7 @@ import { BadRequestException, Inject, Injectable, NotFoundException } from '@nes
 import {
   BusinessEntryStatus,
   BusinessEntryType,
+  BusinessCostType,
   FinancialScope,
   RecurrenceFrequency,
   TransactionSource,
@@ -13,6 +14,7 @@ import { TransactionService } from '@/modules/transactions/transaction.service';
 import { CreateBusinessEntryDto } from './dto/create-business-entry.dto';
 import { SettleBusinessEntryDto } from './dto/settle-business-entry.dto';
 import { UpdateBusinessEntryDto } from './dto/update-business-entry.dto';
+import { UpdateBusinessSettingsDto } from './dto/update-business-settings.dto';
 
 @Injectable()
 export class BusinessService {
@@ -116,19 +118,24 @@ export class BusinessService {
     const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
     const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
     const monthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
-    const [accounts, monthGroups, pending, alerts] = await Promise.all([
+    const [accounts, income, expenseGroups, settings, pending, alerts] = await Promise.all([
       this.prisma.financialAccount.aggregate({
         where: { userId, scope: FinancialScope.BUSINESS, isActive: true },
         _sum: { balance: true },
       }),
+      this.prisma.transaction.aggregate({
+        where: { userId, scope: FinancialScope.BUSINESS, type: TransactionType.INCOME, date: { gte: monthStart, lt: monthEnd } },
+        _sum: { amount: true, netAmount: true },
+      }),
       this.prisma.transaction.groupBy({
-        by: ['type'],
-        where: { userId, scope: FinancialScope.BUSINESS, date: { gte: monthStart, lt: monthEnd } },
+        by: ['categoryId'],
+        where: { userId, scope: FinancialScope.BUSINESS, type: TransactionType.EXPENSE, date: { gte: monthStart, lt: monthEnd } },
         _sum: { netAmount: true },
       }),
+      this.prisma.businessSettings.findUnique({ where: { userId } }),
       this.prisma.businessEntry.findMany({
         where: { userId, status: BusinessEntryStatus.PENDING },
-        select: { id: true, type: true, amount: true, dueDate: true },
+        select: { id: true, type: true, amount: true, dueDate: true, categoryId: true },
         orderBy: { dueDate: 'asc' },
       }),
       this.prisma.businessEntry.findMany({
@@ -142,9 +149,29 @@ export class BusinessService {
         take: 8,
       }),
     ]);
+    const expenseCategoryIds = [...new Set([
+      ...expenseGroups.map((group) => group.categoryId),
+      ...pending.filter((entry) => entry.type === BusinessEntryType.PAYABLE).map((entry) => entry.categoryId),
+    ])];
+    const expenseCategories = await this.prisma.category.findMany({
+      where: { userId, id: { in: expenseCategoryIds } },
+      select: { id: true, name: true, businessCostType: true },
+    });
+    const categoryType = new Map(expenseCategories.map((category) => [category.id, category.businessCostType]));
     const availableBalance = Number(accounts._sum.balance ?? 0);
-    const monthIncome = Number(monthGroups.find((group) => group.type === TransactionType.INCOME)?._sum.netAmount ?? 0);
-    const monthExpense = Number(monthGroups.find((group) => group.type === TransactionType.EXPENSE)?._sum.netAmount ?? 0);
+    const grossRevenue = Number(income._sum.amount ?? 0);
+    const netRevenue = Number(income._sum.netAmount ?? 0);
+    const channelFees = Math.max(0, grossRevenue - netRevenue);
+    const expenseTotalFor = (costType: BusinessCostType | null) => expenseGroups
+      .filter((group) => (categoryType.get(group.categoryId) ?? null) === costType)
+      .reduce((total, group) => total + Number(group._sum.netAmount ?? 0), 0);
+    const variableCosts = expenseTotalFor(BusinessCostType.VARIABLE);
+    const fixedExpenses = expenseTotalFor(BusinessCostType.FIXED);
+    const unclassifiedExpenses = expenseTotalFor(null);
+    const monthExpense = variableCosts + fixedExpenses + unclassifiedExpenses;
+    const taxRate = Number(settings?.taxRate ?? 0);
+    const taxProvision = grossRevenue * taxRate / 100;
+    const resultOfMonth = netRevenue - variableCosts - fixedExpenses - unclassifiedExpenses - taxProvision;
     const receivable = this.sum(pending.filter((entry) => entry.type === BusinessEntryType.RECEIVABLE));
     const payable = this.sum(pending.filter((entry) => entry.type === BusinessEntryType.PAYABLE));
     const overdueReceivable = this.sum(pending.filter((entry) => entry.type === BusinessEntryType.RECEIVABLE && entry.dueDate < today));
@@ -157,21 +184,66 @@ export class BusinessService {
       return { days, income, expense, balance: availableBalance + income - expense };
     });
     const monthPending = pending.filter((entry) => entry.dueDate >= monthStart && entry.dueDate < monthEnd);
-    const estimatedResult = monthIncome - monthExpense
-      + this.sum(monthPending.filter((entry) => entry.type === BusinessEntryType.RECEIVABLE))
-      - this.sum(monthPending.filter((entry) => entry.type === BusinessEntryType.PAYABLE));
+    const pendingReceivable = this.sum(monthPending.filter((entry) => entry.type === BusinessEntryType.RECEIVABLE));
+    const pendingPayable = this.sum(monthPending.filter((entry) => entry.type === BusinessEntryType.PAYABLE));
+    const pendingTaxProvision = pendingReceivable * taxRate / 100;
+    const estimatedNetResult = resultOfMonth + pendingReceivable - pendingPayable - pendingTaxProvision;
+    const unclassifiedPending = this.sum(monthPending.filter((entry) =>
+      entry.type === BusinessEntryType.PAYABLE && !categoryType.get(entry.categoryId)));
+    const configurationComplete = Boolean(settings?.taxConfigured) && unclassifiedExpenses === 0 && unclassifiedPending === 0;
     return {
       availableBalance,
-      monthIncome,
+      monthIncome: netRevenue,
       monthExpense,
       receivable,
       payable,
       overdueReceivable,
       overduePayable,
-      estimatedResult,
+      estimatedResult: estimatedNetResult,
+      resultLabel: configurationComplete ? 'Lucro líquido estimado' : 'Resultado do mês',
+      configurationComplete,
+      configuration: {
+        taxRate,
+        taxConfigured: Boolean(settings?.taxConfigured),
+        unclassifiedAmount: unclassifiedExpenses + unclassifiedPending,
+      },
+      statement: {
+        grossRevenue,
+        channelFees,
+        netRevenue,
+        variableCosts,
+        fixedExpenses,
+        unclassifiedExpenses,
+        taxProvision,
+        resultOfMonth,
+        pendingReceivable,
+        pendingPayable,
+        pendingTaxProvision,
+        estimatedNetResult,
+      },
+      expenseCategories: expenseCategories.map((category) => ({
+        id: category.id,
+        name: category.name,
+        businessCostType: category.businessCostType,
+        total: Number(expenseGroups.find((group) => group.categoryId === category.id)?._sum.netAmount ?? 0),
+      })),
       projections,
       alerts: alerts.map((entry) => this.withEffectiveStatus(entry)),
     };
+  }
+
+  async settings(userId: string) {
+    const settings = await this.prisma.businessSettings.findUnique({ where: { userId } });
+    return { taxRate: Number(settings?.taxRate ?? 0), taxConfigured: Boolean(settings?.taxConfigured) };
+  }
+
+  async updateSettings(userId: string, input: UpdateBusinessSettingsDto) {
+    const settings = await this.prisma.businessSettings.upsert({
+      where: { userId },
+      create: { userId, taxRate: input.taxRate, taxConfigured: true },
+      update: { taxRate: input.taxRate, taxConfigured: true },
+    });
+    return { taxRate: Number(settings.taxRate), taxConfigured: settings.taxConfigured };
   }
 
   private async findOwned(userId: string, id: string) {

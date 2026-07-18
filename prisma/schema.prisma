@@ -63,6 +63,11 @@ enum BusinessEntryStatus {
   CANCELLED
 }
 
+enum BusinessCostType {
+  VARIABLE
+  FIXED
+}
+
 model User {
   id                     String                          @id @default(uuid()) @db.Uuid
   name                   String
@@ -91,6 +96,7 @@ model User {
   payments               Payment[]                       @relation("UserPayments")
   paymentsRecorded       Payment[]                       @relation("PaymentRecorder")
   businessEntries        BusinessEntry[]
+  businessSettings       BusinessSettings?
 }
 
 model Payment {
@@ -178,6 +184,16 @@ model BusinessEntry {
   @@index([userId, seriesId, dueDate])
 }
 
+model BusinessSettings {
+  userId        String   @id @db.Uuid
+  taxRate       Decimal  @default(0) @db.Decimal(7, 4)
+  taxConfigured Boolean  @default(false)
+  createdAt     DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime @updatedAt @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
 model CategoryBudget {
   id          String         @id @default(uuid()) @db.Uuid
   userId      String         @db.Uuid
@@ -201,6 +217,7 @@ model Category {
   id                    String                 @id @default(uuid()) @db.Uuid
   name                  String
   color                 String                 @default("#6366f1")
+  businessCostType      BusinessCostType?
   userId                String                 @db.Uuid
   createdAt             DateTime               @default(now()) @db.Timestamptz(6)
   user                  User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
