@@ -5,6 +5,7 @@ import { FinancialAccountType, FinancialScope, TransactionSource, TransactionTyp
 vi.mock('@/config/env', () => ({
   env: {
     WHATSAPP_BOT_API_URL: 'http://whatsapp-api.test/econoapp',
+    WHATSAPP_BOT_API_TOKEN: 'provider-token',
     WHATSAPP_BOT_SEND_MESSAGE_PATH: '/send-message',
     WHATSAPP_ADMIN_PHONES: '',
     WHATSAPP_WEBHOOK_TOKEN: '',
@@ -127,7 +128,12 @@ describe('WhatsappService', () => {
     await expect(service.getStatus()).resolves.toEqual({ status: 'conectado' });
     expect(fetchMock).toHaveBeenCalledWith(
       'http://whatsapp-api.test/econoapp/status',
-      expect.objectContaining({ headers: expect.objectContaining({ 'Content-Type': 'application/json' }) }),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer provider-token',
+        }),
+      }),
     );
   });
 

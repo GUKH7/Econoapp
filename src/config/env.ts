@@ -16,6 +16,7 @@ const envSchema = z.object({
   PASSWORD_RESET_URL: z.string().url().default('http://localhost:5173/?resetPassword=1'),
   CORS_ORIGIN: z.string().default(''),
   WHATSAPP_BOT_API_URL: z.string().url().default('http://64.181.189.107:3001/econoapp'),
+  WHATSAPP_BOT_API_TOKEN: z.string().default(''),
   WHATSAPP_BOT_SEND_MESSAGE_PATH: z.string().default('/send-message'),
   WHATSAPP_ADMIN_PHONES: z.string().default('5511934736234'),
   ADMIN_PANEL_LOGIN: z.string().default(''),

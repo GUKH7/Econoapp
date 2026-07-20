@@ -6,6 +6,7 @@ import { WhatsappStatus, WhatsappStatusResponse } from './whatsapp.types';
 @Injectable()
 export class WhatsappProviderClient {
   private readonly baseUrl = env.WHATSAPP_BOT_API_URL.replace(/\/+$/, '');
+  private readonly apiToken = env.WHATSAPP_BOT_API_TOKEN.trim();
   private readonly sendMessagePath = this.normalizePath(env.WHATSAPP_BOT_SEND_MESSAGE_PATH);
 
   async getStatus(): Promise<WhatsappStatusResponse> {
@@ -63,6 +64,7 @@ export class WhatsappProviderClient {
         ...init,
         headers: {
           'Content-Type': 'application/json',
+          ...(this.apiToken ? { Authorization: `Bearer ${this.apiToken}` } : {}),
           ...init.headers,
         },
         signal: controller.signal,

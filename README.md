@@ -64,6 +64,7 @@ JWT_REFRESH_EXPIRES_IN="7d"
 GEMINI_API_KEY="sua_chave_gemini"
 TELEGRAM_BOT_TOKEN="seu_token_telegram"
 WHATSAPP_BOT_API_URL="http://64.181.189.107:3001/econoapp"
+WHATSAPP_BOT_API_TOKEN="token_forte_da_api_do_bot"
 WHATSAPP_WEBHOOK_TOKEN="token_forte_para_webhook"
 WHATSAPP_BUDGET_ALERT_TOKEN="token_forte_para_alertas"
 PORT=3001
