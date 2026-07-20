@@ -8,4 +8,16 @@ export class AppThrottlerGuard extends ThrottlerGuard {
     if (context.getType() !== 'http') return true;
     return super.canActivate(context);
   }
+
+  protected getTracker(request: Record<string, unknown>): Promise<string> {
+    return Promise.resolve(clientIpFromRequest(request));
+  }
+}
+
+export function clientIpFromRequest(request: Record<string, unknown>): string {
+  const headers = request.headers as Record<string, string | string[] | undefined> | undefined;
+  const forwarded = headers?.['x-forwarded-for'];
+  const forwardedValue = Array.isArray(forwarded) ? forwarded[0] : forwarded;
+  const clientIp = forwardedValue?.split(',')[0]?.trim();
+  return clientIp || String(request.ip || 'unknown');
 }

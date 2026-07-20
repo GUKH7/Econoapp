@@ -52,7 +52,10 @@ async function request(path, options = {}, retrying = false) {
   }
   if (!response.ok) {
     const body = await response.json().catch(() => null);
-    const message = body?.message || body?.error || `Erro ${response.status}`;
+    const retryAfter = Math.max(1, Number(response.headers.get('Retry-After') || 60));
+    const message = response.status === 429
+      ? `Muitas tentativas seguidas. Aguarde ${retryAfter} segundos e tente novamente.`
+      : body?.message || body?.error || `Erro ${response.status}`;
     throw new Error(Array.isArray(message) ? message.join('\n') : message);
   }
   if (response.status === 204) return null;
