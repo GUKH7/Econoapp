@@ -1,6 +1,7 @@
-import { Body, Controller, Delete, Get, HttpCode, Inject, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, HttpException, HttpStatus, Inject, Patch, Post, Req, UseGuards } from '@nestjs/common';
 import { IsString } from 'class-validator';
-import { Throttle } from '@nestjs/throttler';
+import { SkipThrottle, Throttle } from '@nestjs/throttler';
+import type { Request } from 'express';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AuthGuard } from '@/common/guards/auth.guard';
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
@@ -18,6 +19,8 @@ import { ResetPasswordDto } from './dto/reset-password.dto';
 import { DeleteAccountDto } from './dto/delete-account.dto';
 import { AdminLoginDto } from './dto/admin-login.dto';
 import { AllowInactive } from '@/common/decorators/allow-inactive.decorator';
+import { clientIpFromRequest } from '@/common/guards/throttler.guard';
+import { AdminLoginAttemptsService } from './admin-login-attempts.service';
 
 class RefreshDto {
   @IsString()
@@ -27,7 +30,10 @@ class RefreshDto {
 @ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
-  constructor(@Inject(AuthService) private readonly authService: AuthService) {}
+  constructor(
+    @Inject(AuthService) private readonly authService: AuthService,
+    @Inject(AdminLoginAttemptsService) private readonly adminLoginAttempts: AdminLoginAttemptsService,
+  ) {}
 
   @ApiOperation({ summary: 'Criar nova conta de usuário' })
   @Public()
@@ -48,11 +54,25 @@ export class AuthController {
 
   @ApiOperation({ summary: 'Autenticar no painel administrativo' })
   @Public()
-  @Throttle({ default: { limit: env.NODE_ENV === 'development' ? 30 : 5, ttl: 60000 } })
+  @SkipThrottle({ default: true })
   @Post('admin-login')
-  async adminLogin(@Body() dto: AdminLoginDto): Promise<{ data: AuthTokensResponse }> {
-    const data = await this.authService.adminLogin(dto);
-    return { data };
+  async adminLogin(
+    @Body() dto: AdminLoginDto,
+    @Req() request: Request,
+  ): Promise<{ data: AuthTokensResponse }> {
+    const ip = clientIpFromRequest(request as unknown as Record<string, unknown>);
+    const attemptKey = this.adminLoginAttempts.key(ip, dto.login);
+    this.adminLoginAttempts.assertAllowed(attemptKey);
+    try {
+      const data = await this.authService.adminLogin(dto);
+      this.adminLoginAttempts.clear(attemptKey);
+      return { data };
+    } catch (error) {
+      if (error instanceof HttpException && error.getStatus() === HttpStatus.UNAUTHORIZED) {
+        this.adminLoginAttempts.recordFailure(attemptKey);
+      }
+      throw error;
+    }
   }
 
   @ApiOperation({ summary: 'Autenticar ou criar conta com Google' })
