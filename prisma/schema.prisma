@@ -477,3 +477,10 @@ model ScheduledNotificationDelivery {
   @@index([userId, dueDate])
   @@index([type, dueDate])
 }
+
+model SystemSetting {
+  key       String   @id
+  value     String
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+}

@@ -1,12 +1,27 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { AccountAccessStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '@/config/database';
+import { SYSTEM_SETTING_KEYS, SystemSettingsService } from '@/config/system-settings.service';
 import { AdminUserQueryDto } from './dto/admin-user-query.dto';
 import { RecordPaymentDto } from './dto/record-payment.dto';
 
 @Injectable()
 export class AdminService {
-  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    private readonly systemSettings: SystemSettingsService,
+  ) {}
+
+  async whatsappSettings() {
+    return {
+      providerTokenConfigured: await this.systemSettings.hasSecret(SYSTEM_SETTING_KEYS.whatsappProviderApiToken),
+    };
+  }
+
+  async updateWhatsappProviderToken(token: string) {
+    await this.systemSettings.setSecret(SYSTEM_SETTING_KEYS.whatsappProviderApiToken, token);
+    return { providerTokenConfigured: true };
+  }
 
   async overview() {
     const now = new Date();

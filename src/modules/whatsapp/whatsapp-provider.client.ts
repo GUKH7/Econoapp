@@ -1,5 +1,6 @@
-import { BadRequestException, Injectable, ServiceUnavailableException } from '@nestjs/common';
+import { BadRequestException, Injectable, Optional, ServiceUnavailableException } from '@nestjs/common';
 import { env } from '@/config/env';
+import { SYSTEM_SETTING_KEYS, SystemSettingsService } from '@/config/system-settings.service';
 import { SendWhatsappMessageDto } from './dto/send-whatsapp-message.dto';
 import { WhatsappStatus, WhatsappStatusResponse } from './whatsapp.types';
 
@@ -8,6 +9,8 @@ export class WhatsappProviderClient {
   private readonly baseUrl = env.WHATSAPP_BOT_API_URL.replace(/\/+$/, '');
   private readonly apiToken = env.WHATSAPP_BOT_API_TOKEN.trim();
   private readonly sendMessagePath = this.normalizePath(env.WHATSAPP_BOT_SEND_MESSAGE_PATH);
+
+  constructor(@Optional() private readonly systemSettings?: SystemSettingsService) {}
 
   async getStatus(): Promise<WhatsappStatusResponse> {
     const response = await this.request<unknown>('/status');
@@ -60,11 +63,12 @@ export class WhatsappProviderClient {
     const timeout = setTimeout(() => controller.abort(), 12000);
 
     try {
+      const apiToken = this.apiToken || (await this.systemSettings?.getSecret(SYSTEM_SETTING_KEYS.whatsappProviderApiToken)) || '';
       const response = await fetch(`${this.baseUrl}${this.normalizePath(path)}`, {
         ...init,
         headers: {
           'Content-Type': 'application/json',
-          ...(this.apiToken ? { Authorization: `Bearer ${this.apiToken}` } : {}),
+          ...(apiToken ? { Authorization: `Bearer ${apiToken}` } : {}),
           ...init.headers,
         },
         signal: controller.signal,

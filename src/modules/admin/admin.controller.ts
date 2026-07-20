@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Put, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
 import { JwtPayload } from '@/common/types';
@@ -7,6 +7,7 @@ import { AdminService } from './admin.service';
 import { AdminUserQueryDto } from './dto/admin-user-query.dto';
 import { RecordPaymentDto } from './dto/record-payment.dto';
 import { UpdateUserAccessDto } from './dto/update-user-access.dto';
+import { UpdateWhatsappProviderTokenDto } from './dto/update-whatsapp-provider-token.dto';
 
 @ApiTags('Admin')
 @ApiBearerAuth('access-token')
@@ -19,6 +20,18 @@ export class AdminController {
   @ApiOperation({ summary: 'Resumo administrativo de usuários e pagamentos' })
   async overview() {
     return { data: await this.adminService.overview() };
+  }
+
+  @Get('settings/whatsapp')
+  @ApiOperation({ summary: 'Consultar a configuração segura do provedor WhatsApp' })
+  async whatsappSettings() {
+    return { data: await this.adminService.whatsappSettings() };
+  }
+
+  @Put('settings/whatsapp/token')
+  @ApiOperation({ summary: 'Cadastrar a credencial segura do provedor WhatsApp' })
+  async updateWhatsappProviderToken(@Body() dto: UpdateWhatsappProviderTokenDto) {
+    return { data: await this.adminService.updateWhatsappProviderToken(dto.token) };
   }
 
   @Get('users')

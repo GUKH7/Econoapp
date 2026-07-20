@@ -2,12 +2,17 @@ import { AccountAccessStatus } from '@prisma/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AdminService } from '@/modules/admin/admin.service';
 import { PrismaService } from '@/config/database';
+import { SystemSettingsService } from '@/config/system-settings.service';
 
 describe('AdminService', () => {
   let service: AdminService;
   // O mock replica apenas os métodos do Prisma usados por este serviço.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let prisma: any;
+  let systemSettings: {
+    hasSecret: ReturnType<typeof vi.fn>;
+    setSecret: ReturnType<typeof vi.fn>;
+  };
 
   beforeEach(() => {
     prisma = {
@@ -25,7 +30,17 @@ describe('AdminService', () => {
         user: { update: vi.fn().mockResolvedValue({ id: 'user-1' }) },
       })),
     };
-    service = new AdminService(prisma as PrismaService);
+    systemSettings = { hasSecret: vi.fn(), setSecret: vi.fn() };
+    service = new AdminService(prisma as PrismaService, systemSettings as unknown as SystemSettingsService);
+  });
+
+  it('cadastra o token do provedor sem retorná-lo', async () => {
+    systemSettings.setSecret.mockResolvedValue(undefined);
+
+    await expect(service.updateWhatsappProviderToken('x'.repeat(64))).resolves.toEqual({
+      providerTokenConfigured: true,
+    });
+    expect(systemSettings.setSecret).toHaveBeenCalledWith('whatsapp.provider.api-token', 'x'.repeat(64));
   });
 
   it('resume usuários e pagamentos do mês', async () => {
