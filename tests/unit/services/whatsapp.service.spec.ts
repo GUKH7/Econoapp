@@ -18,7 +18,7 @@ describe('WhatsappService', () => {
   let service: WhatsappService;
   let fetchMock: ReturnType<typeof vi.fn>;
   let prismaMock: {
-    user: { findFirst: ReturnType<typeof vi.fn> };
+    user: { findFirst: ReturnType<typeof vi.fn>; findUnique: ReturnType<typeof vi.fn> };
     salesChannel: { findMany: ReturnType<typeof vi.fn>; findFirst: ReturnType<typeof vi.fn>; create: ReturnType<typeof vi.fn> };
     category: {
       findMany: ReturnType<typeof vi.fn>;
@@ -65,6 +65,7 @@ describe('WhatsappService', () => {
   let geminiMock: {
     extractFinancialData: ReturnType<typeof vi.fn>;
     transcribeAudioBase64: ReturnType<typeof vi.fn>;
+    extractReceiptFromImageBase64: ReturnType<typeof vi.fn>;
     classifyWhatsappMessage: ReturnType<typeof vi.fn>;
     generateWhatsappReply: ReturnType<typeof vi.fn>;
   };
@@ -78,7 +79,7 @@ describe('WhatsappService', () => {
     fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
     prismaMock = {
-      user: { findFirst: vi.fn() },
+      user: { findFirst: vi.fn(), findUnique: vi.fn() },
       salesChannel: { findMany: vi.fn(), findFirst: vi.fn(), create: vi.fn() },
       category: { findMany: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn(), create: vi.fn() },
       categoryPreference: { findFirst: vi.fn(), upsert: vi.fn() },
@@ -112,6 +113,7 @@ describe('WhatsappService', () => {
     geminiMock = {
       extractFinancialData: vi.fn(),
       transcribeAudioBase64: vi.fn(),
+      extractReceiptFromImageBase64: vi.fn(),
       classifyWhatsappMessage: vi.fn(),
       generateWhatsappReply: vi.fn(),
     };
@@ -165,6 +167,36 @@ describe('WhatsappService', () => {
       expect.objectContaining({
         method: 'POST',
         body: JSON.stringify({ phone: '5511999999999', message: 'Mensagem de teste' }),
+      }),
+    );
+  });
+
+  it('propaga a chave idempotente ao provedor em cabeçalho e corpo', async () => {
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: true,
+        json: vi.fn().mockResolvedValue({ status: 'conectado' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: vi.fn().mockResolvedValue({ success: true, messageId: 'provider-message-1' }),
+      });
+
+    await service.sendMessage({
+      phone: '5511999999999',
+      message: 'Mensagem de teste',
+      idempotencyKey: 'outbox-1',
+    });
+
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      'http://whatsapp-api.test/econoapp/send-message',
+      expect.objectContaining({
+        headers: expect.objectContaining({ 'X-Idempotency-Key': 'outbox-1' }),
+        body: JSON.stringify({
+          phone: '5511999999999',
+          message: 'Mensagem de teste',
+          idempotencyKey: 'outbox-1',
+        }),
       }),
     );
   });
@@ -349,6 +381,39 @@ describe('WhatsappService', () => {
         }),
       }),
     );
+  });
+
+  it('lê comprovante por imagem e preserva a origem RECEIPT no rascunho', async () => {
+    fetchMock.mockImplementation(async (url: string) => ({
+      ok: true,
+      json: vi.fn().mockResolvedValue(url.endsWith('/status') ? { status: 'conectado' } : { success: true }),
+    }));
+    prismaMock.user.findFirst.mockResolvedValue({ id: 'user-1', name: 'Usuario', phone: '11999999999' });
+    prismaMock.salesChannel.findMany.mockResolvedValue([]);
+    prismaMock.category.findMany.mockResolvedValue([{ name: 'Alimentacao' }]);
+    prismaMock.category.findFirst.mockResolvedValue({ id: 'category-1', name: 'Alimentacao' });
+    geminiMock.extractReceiptFromImageBase64.mockResolvedValue({
+      documentType: 'RECEIPT', merchant: 'Mercado Central', amount: 42.5,
+      date: '2026-07-21', categoryHint: 'Alimentacao', type: 'EXPENSE', confidence: 0.96,
+    });
+    geminiMock.extractFinancialData.mockResolvedValue({
+      amount: 42.5, type: 'EXPENSE', description: 'Mercado Central',
+      categoryHint: 'Alimentacao', channelHint: null, confidence: 0.96,
+    });
+    const imageBase64 = Buffer.from('receipt-image').toString('base64');
+
+    const result = await service.handleWebhook({
+      from: '5511999999999', messageType: 'image',
+      image: { base64: imageBase64, mimeType: 'image/jpeg' },
+    });
+
+    expect(geminiMock.extractReceiptFromImageBase64).toHaveBeenCalledWith(imageBase64, 'image/jpeg');
+    expect(result.reply).toContain('Despesa pronta para salvar');
+    const serializedCalls = JSON.stringify(prismaMock.whatsappConversation.upsert.mock.calls);
+    expect(serializedCalls).toContain('RECEIPT');
+    expect(prismaMock.dinActivityEvent.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ eventType: 'RECEIPT_EXTRACTED' }),
+    }));
   });
 
   it('baixa audio por URL antes de transcrever o webhook', async () => {
@@ -3112,5 +3177,119 @@ describe('WhatsappService', () => {
     const reply = await answerQuestion.call(service, 'user-1', 'qual produto vende bem mas tem pouca margem');
     expect(reply).toContain('Camiseta');
     expect(reply).toContain('28.0%');
+  });
+
+  it('prioriza criar categoria e executa a operação validada no código', async () => {
+    prismaMock.user.findFirst.mockResolvedValue({
+      id: 'user-1',
+      name: 'Gustavo',
+      phone: '5511999999999',
+      accessStatus: 'ACTIVE',
+    });
+    prismaMock.category.findMany.mockResolvedValue([]);
+    prismaMock.category.create.mockResolvedValue({ id: 'category-new', name: 'Academia' });
+
+    const result = await service.handleWebhook(
+      { from: '5511999999999', text: 'quero criar uma categoria chamada Academia' },
+      { deferDelivery: true },
+    );
+
+    expect(result.reply).toContain('Categoria Academia criada');
+    expect(prismaMock.category.create).toHaveBeenCalledWith({
+      data: { userId: 'user-1', name: 'Academia' },
+    });
+  });
+
+  it('não confunde consulta de gastos com listagem de categorias', async () => {
+    prismaMock.user.findFirst.mockResolvedValue({
+      id: 'user-1',
+      name: 'Gustavo',
+      phone: '5511999999999',
+      accessStatus: 'ACTIVE',
+    });
+    prismaMock.transaction.groupBy.mockResolvedValue([]);
+
+    const result = await service.handleWebhook(
+      { from: '5511999999999', text: 'mostra os gastos da categoria Saúde' },
+      { deferDelivery: true },
+    );
+
+    expect(result.reply).not.toContain('Suas categorias');
+    expect(prismaMock.category.create).not.toHaveBeenCalled();
+  });
+
+  it('pergunta antes de decidir entre criar categoria e consultar gastos', async () => {
+    prismaMock.user.findFirst.mockResolvedValue({
+      id: 'user-1',
+      name: 'Gustavo',
+      phone: '5511999999999',
+      accessStatus: 'ACTIVE',
+    });
+
+    const result = await service.handleWebhook(
+      { from: '5511999999999', text: 'categoria Viagem' },
+      { deferDelivery: true },
+    );
+
+    expect(result.reply).toBe(
+      'Você quer criar uma categoria chamada Viagem ou consultar os gastos dessa categoria?',
+    );
+    expect(prismaMock.whatsappConversation.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      update: expect.objectContaining({
+        pendingType: 'ACTION',
+        pendingData: { action: 'DISAMBIGUATE_CATEGORY', categoryName: 'Viagem' },
+      }),
+    }));
+  });
+
+  it('oferece ações rápidas para confirmar, ajustar ou cancelar', () => {
+    expect(service.interactionsForReply('🧾 Despesa pronta para salvar\nConfirme, ajuste ou cancele.'))
+      .toEqual([
+        { id: 'confirm', label: 'Confirmar', value: 'Confirmar' },
+        { id: 'adjust', label: 'Ajustar', value: 'Alterar lançamento' },
+        { id: 'cancel', label: 'Cancelar', value: 'Cancelar' },
+      ]);
+  });
+
+  it('desfaz o último lançamento criado pelo Din', async () => {
+    prismaMock.user.findFirst.mockResolvedValue({
+      id: 'user-1',
+      name: 'Gustavo',
+      phone: '5511999999999',
+      accessStatus: 'ACTIVE',
+    });
+    prismaMock.transaction.findFirst.mockResolvedValue({
+      id: 'transaction-1',
+      description: 'Café',
+      amount: 8,
+      type: 'EXPENSE',
+    });
+
+    const result = await service.handleWebhook(
+      { from: '5511999999999', text: 'desfazer último lançamento' },
+      { deferDelivery: true },
+    );
+
+    expect(result.reply.replace(/\u00a0/g, ' ')).toContain('Desfeito: Café, R$ 8,00');
+    expect(transactionServiceMock.delete).toHaveBeenCalledWith('user-1', 'transaction-1');
+  });
+
+  it('persiste rascunhos do app sem alterar o rascunho do WhatsApp', async () => {
+    prismaMock.user.findUnique.mockResolvedValue({
+      id: 'user-1',
+      name: 'Gustavo',
+      phone: '5511999999999',
+    });
+
+    await service.handleAppMessage('user-1', 'Gastei no mercado');
+
+    expect(prismaMock.whatsappConversation.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      update: expect.objectContaining({
+        appPendingType: 'TRANSACTION_DETAILS',
+        appPendingStep: 'WAITING_AMOUNT',
+      }),
+    }));
+    const writes = prismaMock.whatsappConversation.upsert.mock.calls.map(([input]) => input.update);
+    expect(writes.some((update) => update?.pendingType === 'TRANSACTION_DETAILS')).toBe(false);
   });
 });

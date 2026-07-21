@@ -157,10 +157,15 @@ export function api() {
     assistantMessage: (payload) =>
       request('/assistant/message', { method: 'POST', body: JSON.stringify(payload) }),
     assistantActivity: () => request('/assistant/activity'),
+    intelligencePreferences: () => request('/intelligence/preferences'),
+    updateIntelligencePreferences: (payload) => request('/intelligence/preferences', { method: 'PATCH', body: JSON.stringify(payload) }),
+    insights: (refresh = false) => request(`/intelligence/insights?refresh=${refresh}`),
+    actOnInsight: (id, payload) => request(`/intelligence/insights/${id}/action`, { method: 'POST', body: JSON.stringify(payload) }),
     whatsappStatus: () => request('/whatsapp/status'),
     whatsappRestart: () => request('/whatsapp/restart'),
     sendWhatsappMessage: (payload) =>
       request('/whatsapp/send-message', { method: 'POST', body: JSON.stringify(payload) }),
+    sendBusinessCollection: (entryId) => request(`/whatsapp/collections/${entryId}/send`, { method: 'POST' }),
   };
 }
 
@@ -185,6 +190,8 @@ export async function loadData() {
     ['budgets', client.budgets()],
     ['recurring', client.recurringTransactions()],
     ['assistant', client.assistantActivity()],
+    ['intelligencePreferences', client.intelligencePreferences()],
+    ['insights', client.insights(false)],
     ...(state.scope === 'BUSINESS'
       ? [['businessSummary', client.businessSummary()], ['businessSettings', client.businessSettings()], ['businessEntries', client.businessEntries()], ['businessContacts', client.businessContacts()], ['businessOfferings', client.businessOfferings()], ['productReport', client.productReport()], ['businessReport', client.businessReport()]]
       : []),
@@ -215,6 +222,8 @@ export async function loadData() {
     state.assistantActivity = loaded.assistant;
     state.assistantMessages = loaded.assistant?.messages || [];
   }
+  if ('intelligencePreferences' in loaded) state.intelligencePreferences = loaded.intelligencePreferences;
+  if ('insights' in loaded) state.insights = loaded.insights || [];
   if ('businessSummary' in loaded) state.businessSummary = loaded.businessSummary;
   if ('businessSettings' in loaded) {
     state.businessSettings = loaded.businessSettings;

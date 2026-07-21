@@ -20,6 +20,22 @@ enum TransactionSource {
   AUDIO
   CSV
   RECURRENT
+  RECEIPT
+}
+
+enum DinInsightType {
+  ANOMALOUS_EXPENSE
+  BALANCE_FORECAST
+  RECEIVABLE_REMINDER
+  PAYABLE_REMINDER
+}
+
+enum DinInsightStatus {
+  ACTIVE
+  REMINDED
+  ACTED
+  DISMISSED
+  EXPIRED
 }
 
 enum RecurrenceFrequency {
@@ -44,6 +60,24 @@ enum ScheduledNotificationType {
   CREDIT_CARD_DUE
   BUSINESS_RECEIVABLE_DUE
   BUSINESS_PAYABLE_DUE
+}
+
+enum WhatsappInboundStatus {
+  RECEIVED
+  PROCESSING
+  PROCESSED
+  FAILED
+  DEAD_LETTER
+}
+
+enum WhatsappOutboxStatus {
+  PENDING
+  SENDING
+  SENT
+  DELIVERED
+  READ
+  FAILED
+  DEAD_LETTER
 }
 
 enum AccountAccessStatus {
@@ -110,6 +144,51 @@ model User {
   businessContacts       BusinessContact[]
   businessOfferings      BusinessOffering[]
   businessSettings       BusinessSettings?
+  assistantPreference    AssistantPreference?
+  dinInsights            DinInsight[]
+}
+
+model AssistantPreference {
+  userId                 String   @id @db.Uuid
+  audioRepliesEnabled    Boolean  @default(false)
+  proactiveAlertsEnabled Boolean  @default(true)
+  anomalyAlertsEnabled   Boolean  @default(true)
+  forecastAlertsEnabled  Boolean  @default(true)
+  quietHoursStart        Int      @default(22)
+  quietHoursEnd          Int      @default(8)
+  timezone               String   @default("America/Sao_Paulo")
+  maxWeeklyAlerts        Int      @default(3)
+  createdAt              DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt              DateTime @updatedAt @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model DinInsight {
+  id              String           @id @default(uuid()) @db.Uuid
+  userId          String           @db.Uuid
+  type            DinInsightType
+  status          DinInsightStatus @default(ACTIVE)
+  fingerprint     String           @unique
+  title           String
+  summary         String
+  explanation     Json
+  metadata        Json
+  suggestedAction String?
+  actionPayload   Json?
+  remindAt        DateTime?        @db.Timestamptz(6)
+  lastNotifiedAt  DateTime?        @db.Timestamptz(6)
+  actedAt         DateTime?        @db.Timestamptz(6)
+  dismissedAt     DateTime?        @db.Timestamptz(6)
+  expiresAt       DateTime?        @db.Timestamptz(6)
+  createdAt       DateTime         @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime         @updatedAt @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status, createdAt])
+  @@index([status, remindAt])
+  @@index([userId, lastNotifiedAt])
 }
 
 model BusinessOffering {
@@ -362,6 +441,7 @@ model Transaction {
   date            DateTime          @default(now()) @db.Timestamptz(6)
   userId          String            @db.Uuid
   importHash      String?
+  sourceEventKey  String?           @unique
   createdAt       DateTime          @default(now()) @db.Timestamptz(6)
   businessEntry   BusinessEntry?
 
@@ -421,16 +501,23 @@ model RecurringTransaction {
 }
 
 model WhatsappConversation {
-  id             String   @id @default(uuid()) @db.Uuid
-  userId         String   @unique @db.Uuid
-  phone          String   @unique
-  recentMessages Json     @default("[]")
-  pendingText    String?
-  pendingType    String?
-  pendingStep    String?
-  pendingData    Json?
-  createdAt      DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt      DateTime @updatedAt @db.Timestamptz(6)
+  id                String   @id @default(uuid()) @db.Uuid
+  userId            String   @unique @db.Uuid
+  phone             String   @unique
+  recentMessages    Json     @default("[]")
+  pendingText       String?
+  pendingType       String?
+  pendingStep       String?
+  pendingData       Json?
+  stateVersion      Int      @default(0)
+  appRecentMessages Json     @default("[]")
+  appPendingText    String?
+  appPendingType    String?
+  appPendingStep    String?
+  appPendingData    Json?
+  appStateVersion   Int      @default(0)
+  createdAt         DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt         DateTime @updatedAt @db.Timestamptz(6)
 
   user           User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   activityEvents DinActivityEvent[]
@@ -439,29 +526,90 @@ model WhatsappConversation {
 }
 
 model DinActivityEvent {
-  id                 String   @id @default(uuid()) @db.Uuid
-  userId             String?  @db.Uuid
-  conversationId     String?  @db.Uuid
-  phone              String?
-  channel            String   @default("WHATSAPP")
-  eventType          String
-  status             String
-  sendStatus         String?
-  messageText        String?
-  audioTranscription String?
-  replyText          String?
-  errorMessage       String?
-  payload            Json?
-  attempts           Int      @default(0)
-  createdAt          DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt          DateTime @updatedAt @db.Timestamptz(6)
+  id                   String    @id @default(uuid()) @db.Uuid
+  userId               String?   @db.Uuid
+  conversationId       String?   @db.Uuid
+  phone                String?
+  channel              String    @default("WHATSAPP")
+  eventType            String
+  status               String
+  sendStatus           String?
+  messageText          String?
+  audioTranscription   String?
+  replyText            String?
+  errorMessage         String?
+  payload              Json?
+  attempts             Int       @default(0)
+  provider             String?
+  externalMessageId    String?
+  detectedIntent       String?
+  confidence           Float?
+  aiDurationMs         Int       @default(0)
+  processingDurationMs Int?
+  executedAction       String?
+  errorCode            String?
+  promptVersion        String?
+  modelVersion         String?
+  retentionUntil       DateTime? @db.Timestamptz(6)
+  redactedAt           DateTime? @db.Timestamptz(6)
+  createdAt            DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt            DateTime  @updatedAt @db.Timestamptz(6)
 
   user         User?                 @relation(fields: [userId], references: [id], onDelete: SetNull)
   conversation WhatsappConversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
 
+  @@unique([provider, externalMessageId])
   @@index([userId, createdAt])
   @@index([phone, createdAt])
   @@index([status, createdAt])
+  @@index([retentionUntil])
+}
+
+model WhatsappInboundMessage {
+  id                String                 @id @default(uuid()) @db.Uuid
+  provider          String
+  externalMessageId String
+  phone             String
+  payload           Json
+  status            WhatsappInboundStatus  @default(RECEIVED)
+  attempts          Int                    @default(0)
+  availableAt       DateTime               @default(now()) @db.Timestamptz(6)
+  lockedAt          DateTime?              @db.Timestamptz(6)
+  processedAt       DateTime?              @db.Timestamptz(6)
+  replyText         String?
+  lastError         String?
+  createdAt         DateTime               @default(now()) @db.Timestamptz(6)
+  updatedAt         DateTime               @updatedAt @db.Timestamptz(6)
+  outbox            WhatsappOutboxMessage?
+
+  @@unique([provider, externalMessageId])
+  @@index([status, availableAt, createdAt])
+  @@index([phone, createdAt])
+}
+
+model WhatsappOutboxMessage {
+  id                String               @id @default(uuid()) @db.Uuid
+  inboundMessageId  String?              @unique @db.Uuid
+  phone             String
+  message           String
+  interactions      Json?
+  status            WhatsappOutboxStatus @default(PENDING)
+  attempts          Int                  @default(0)
+  availableAt       DateTime             @default(now()) @db.Timestamptz(6)
+  lockedAt          DateTime?            @db.Timestamptz(6)
+  sentAt            DateTime?            @db.Timestamptz(6)
+  deliveredAt       DateTime?            @db.Timestamptz(6)
+  readAt            DateTime?            @db.Timestamptz(6)
+  deadLetteredAt    DateTime?            @db.Timestamptz(6)
+  providerMessageId String?              @unique
+  lastError         String?
+  createdAt         DateTime             @default(now()) @db.Timestamptz(6)
+  updatedAt         DateTime             @updatedAt @db.Timestamptz(6)
+
+  inboundMessage WhatsappInboundMessage? @relation(fields: [inboundMessageId], references: [id], onDelete: SetNull)
+
+  @@index([status, availableAt, createdAt])
+  @@index([phone, createdAt])
 }
 
 model ScheduledNotificationDelivery {

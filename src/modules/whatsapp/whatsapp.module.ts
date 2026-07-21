@@ -7,9 +7,16 @@ import { WhatsappController } from './whatsapp.controller';
 import { WhatsappProviderClient } from './whatsapp-provider.client';
 import { WhatsappScheduledNotificationService } from './whatsapp-scheduled-notification.service';
 import { WhatsappService } from './whatsapp.service';
+import { WhatsappQueueService } from './whatsapp-queue.service';
+import { WhatsappWebhookSecurityService } from './whatsapp-webhook-security.service';
+import { WhatsappActionClassifierService } from './whatsapp-action-classifier.service';
+import { WhatsappDataRetentionService } from './whatsapp-data-retention.service';
+import { ProductIntelligenceModule } from '@/modules/product-intelligence/product-intelligence.module';
+import { WhatsappSpeechService } from './whatsapp-speech.service';
+import { WhatsappCollectionService } from './whatsapp-collection.service';
 
 @Module({
-  imports: [TransactionModule],
+  imports: [TransactionModule, ProductIntelligenceModule],
   controllers: [WhatsappController],
   providers: [
     WhatsappService,
@@ -17,6 +24,12 @@ import { WhatsappService } from './whatsapp.service';
     WhatsappConversationStore,
     WhatsappScheduledNotificationService,
     WhatsappBudgetAlertScheduler,
+    WhatsappQueueService,
+    WhatsappWebhookSecurityService,
+    WhatsappActionClassifierService,
+    WhatsappDataRetentionService,
+    WhatsappSpeechService,
+    WhatsappCollectionService,
     GeminiService,
   ],
   exports: [WhatsappService],

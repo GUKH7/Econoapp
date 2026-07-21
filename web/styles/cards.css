@@ -2318,6 +2318,30 @@ textarea:focus {
   padding: 0;
 }
 
+.assistant-inline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.assistant-inline-actions button {
+  min-height: 40px;
+  padding: 8px 14px;
+  border: 1px solid rgba(0, 191, 166, 0.3);
+  border-radius: 999px;
+  background: #f2fffb;
+  color: #087f70;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.assistant-inline-actions button:focus-visible {
+  outline: 3px solid rgba(0, 209, 154, 0.3);
+  outline-offset: 2px;
+}
+
 .business-contact-form { margin-top: 18px; }
 .business-contact-list { display: grid; gap: 12px; margin-top: 20px; }
 .business-contact-card { border: 1px solid var(--line); border-radius: 18px; padding: 16px; background: var(--surface); }
@@ -2347,3 +2371,15 @@ textarea:focus {
 @media (max-width: 620px) {
   .product-report-summary { grid-template-columns: 1fr 1fr; }
 }
+
+.intelligence-card .toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.intelligence-card .toggle-row span { display: grid; gap: 3px; }
+.intelligence-card .toggle-row small { color: var(--muted); }
+.intelligence-card .toggle-row input { width: 22px; height: 22px; accent-color: var(--green); }
+.intelligence-list { margin-top: 18px; }
+.intelligence-item { padding: 16px 0; border-top: 1px solid var(--line); }
+.intelligence-item:first-child { border-top: 0; }
+.intelligence-item p { margin: 7px 0 10px; color: var(--muted); }
+.intelligence-item details { margin-bottom: 12px; }
+.intelligence-item summary { cursor: pointer; color: var(--green-dark); font-weight: 700; }
+.intelligence-item pre { white-space: pre-wrap; font: 12px/1.5 ui-monospace, monospace; background: var(--surface-muted, #f5f7fa); padding: 10px; border-radius: 12px; }

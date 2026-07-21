@@ -192,6 +192,13 @@ function assistantMessageHtml(message) {
       ${role === 'bot' ? `<span class="assistant-avatar">${icon('chat')}</span>` : ''}
       <div class="chat-bubble">
         ${role === 'bot' ? assistantBotMessageHtml(message.text) : `<p>${formatInlineMessage(message.text)}</p>`}
+        ${role === 'bot' && Array.isArray(message.actions) && message.actions.length
+          ? `<div class="assistant-inline-actions" aria-label="Ações rápidas">
+              ${message.actions
+                .map((action) => `<button type="button" data-assistant-message="${escapeHtml(action.value)}">${escapeHtml(action.label)}</button>`)
+                .join('')}
+            </div>`
+          : ''}
       </div>
     </article>
   `;

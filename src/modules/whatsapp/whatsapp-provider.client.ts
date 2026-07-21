@@ -25,6 +25,12 @@ export class WhatsappProviderClient {
   async sendMessage(dto: SendWhatsappMessageDto): Promise<unknown> {
     const phone = String(dto.phone || dto.number || dto.to || '').replace(/\D/g, '');
     const message = String(dto.message || dto.text || '').trim();
+    const idempotencyKey = String(dto.idempotencyKey || '').trim();
+    const interactions = Array.isArray(dto.interactions)
+      ? dto.interactions
+          .filter((item) => item && item.id && item.label && item.value)
+          .slice(0, 3)
+      : [];
 
     if (!phone) throw new BadRequestException('Informe o telefone com DDI, exemplo: 5511999999999.');
     if (!message) throw new BadRequestException('Informe a mensagem para envio.');
@@ -39,7 +45,18 @@ export class WhatsappProviderClient {
 
     return this.request(this.sendMessagePath, {
       method: 'POST',
-      body: JSON.stringify({ phone, message }),
+      body: JSON.stringify({
+        phone,
+        message,
+        ...(dto.audioBase64 ? {
+          audioBase64: dto.audioBase64,
+          audioMimeType: dto.audioMimeType ?? 'audio/ogg; codecs=opus',
+          asVoice: dto.asVoice ?? true,
+        } : {}),
+        ...(interactions.length ? { interactions } : {}),
+        ...(idempotencyKey ? { idempotencyKey } : {}),
+      }),
+      headers: idempotencyKey ? { 'X-Idempotency-Key': idempotencyKey } : {},
     });
   }
 

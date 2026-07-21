@@ -1,4 +1,4 @@
-import { FinancialAccountType, FinancialScope, TransactionType } from '@prisma/client';
+import { FinancialAccountType, FinancialScope, TransactionSource, TransactionType } from '@prisma/client';
 
 export type WhatsappStatus = 'aguardando_qr' | 'conectado' | 'iniciando' | 'reconectando';
 
@@ -27,6 +27,7 @@ export type WhatsappTransactionDraft = {
     amount: number;
     date: string;
   };
+  source?: TransactionSource;
 };
 
 export type WhatsappPaymentOption = {

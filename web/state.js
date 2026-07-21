@@ -71,6 +71,8 @@ export const state = {
   assistantActivity: null,
   assistantLoading: false,
   assistantError: '',
+  intelligencePreferences: null,
+  insights: [],
   loadWarnings: [],
 };
 

@@ -8,6 +8,7 @@ const envSchema = z.object({
   JWT_REFRESH_EXPIRES_IN: z.string().min(1),
   TELEGRAM_BOT_TOKEN: z.string().min(1),
   GEMINI_API_KEY: z.string().min(1),
+  GOOGLE_TTS_API_KEY: z.string().default(''),
   GOOGLE_CLIENT_ID: z.string().default(''),
   GMAIL_API_CLIENT_ID: z.string().default(''),
   GMAIL_API_CLIENT_SECRET: z.string().default(''),

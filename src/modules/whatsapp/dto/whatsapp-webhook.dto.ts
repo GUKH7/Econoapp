@@ -2,6 +2,15 @@ import { IsOptional } from 'class-validator';
 
 export class WhatsappWebhookDto {
   @IsOptional()
+  id?: unknown;
+
+  @IsOptional()
+  messageId?: unknown;
+
+  @IsOptional()
+  timestamp?: unknown;
+
+  @IsOptional()
   phone?: unknown;
 
   @IsOptional()
@@ -33,6 +42,9 @@ export class WhatsappWebhookDto {
 
   @IsOptional()
   voice?: unknown;
+
+  @IsOptional()
+  image?: unknown;
 
   @IsOptional()
   media?: unknown;

@@ -796,6 +796,10 @@ function bindViewEvents() {
   });
   document.querySelector('[data-export-account]')?.addEventListener('click', handlePrivacyExport);
   document.querySelector('[data-delete-account]')?.addEventListener('click', handlePrivacyAccountDelete);
+  document.querySelector('[data-intelligence-preferences]')?.addEventListener('submit', handleIntelligencePreferences);
+  document.querySelectorAll('[data-insight-action]').forEach((button) => {
+    button.addEventListener('click', () => handleInsightAction(button.dataset.insightId, button.dataset.insightAction));
+  });
   document.querySelector('[data-business-onboarding-edit]')?.addEventListener('click', () => {
     const settings = state.businessSettings || {};
     state.businessOnboardingReturnScope = 'BUSINESS';
@@ -962,6 +966,9 @@ function bindViewEvents() {
   });
   document.querySelectorAll('[data-business-settle]').forEach((button) => {
     button.addEventListener('click', () => handleBusinessEntrySettle(button.dataset.businessSettle));
+  });
+  document.querySelectorAll('[data-business-collect]').forEach((button) => {
+    button.addEventListener('click', () => handleBusinessCollection(button.dataset.businessCollect));
   });
   document.querySelectorAll('[data-business-cancel]').forEach((button) => {
     button.addEventListener('click', () => handleBusinessEntryCancel(button.dataset.businessCancel));
@@ -1241,7 +1248,8 @@ async function handleAssistantMessage(message) {
   try {
     const response = await api().assistantMessage({ message });
     const reply = response.data?.reply || 'Entendi. Como quer continuar?';
-    state.assistantMessages = [...state.assistantMessages, { role: 'assistant', text: reply }].slice(-12);
+    const actions = Array.isArray(response.data?.actions) ? response.data.actions.slice(0, 3) : [];
+    state.assistantMessages = [...state.assistantMessages, { role: 'assistant', text: reply, actions }].slice(-12);
     state.assistantLoading = false;
     state.assistantError = '';
     await loadData();
@@ -1721,6 +1729,40 @@ async function handleChannelSubmit(event) {
   }
 }
 
+async function handleIntelligencePreferences(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const data = new FormData(form);
+  setFormBusy(form, true, 'Salvando preferências...');
+  try {
+    const response = await api().updateIntelligencePreferences({
+      audioRepliesEnabled: data.get('audioRepliesEnabled') === 'on',
+      proactiveAlertsEnabled: data.get('proactiveAlertsEnabled') === 'on',
+      maxWeeklyAlerts: Number(data.get('maxWeeklyAlerts') || 3),
+    });
+    state.intelligencePreferences = response.data;
+    renderApp();
+    showToast('Preferências do Din atualizadas.');
+  } catch (error) {
+    setFormBusy(form, false);
+    showToast(error.message, 'error');
+  }
+}
+
+async function handleInsightAction(id, action) {
+  if (!id || !action) return;
+  try {
+    await api().actOnInsight(id, { action });
+    const response = await api().insights(false);
+    state.insights = response.data || [];
+    renderApp();
+    const labels = { CREATE_BUDGET: 'Orçamento criado.', REMIND_LATER: 'Vou lembrar depois.', IGNORE: 'Sugestão ignorada.' };
+    showToast(labels[action] || 'Sugestão atualizada.');
+  } catch (error) {
+    showToast(error.message, 'error');
+  }
+}
+
 async function handleBusinessReportExport(format) {
   if (format !== 'pdf' && format !== 'csv') return;
   try {
@@ -1890,6 +1932,16 @@ async function handleBusinessEntrySettle(id) {
     await loadData();
     renderApp();
     showToast('Conta liquidada e movimentação registrada.');
+  } catch (error) {
+    showToast(error.message, 'error');
+  }
+}
+
+async function handleBusinessCollection(id) {
+  if (!id || !window.confirm('Enviar agora uma cobrança educada para o WhatsApp cadastrado do cliente?')) return;
+  try {
+    await api().sendBusinessCollection(id);
+    showToast('Cobrança adicionada à fila de envio.');
   } catch (error) {
     showToast(error.message, 'error');
   }

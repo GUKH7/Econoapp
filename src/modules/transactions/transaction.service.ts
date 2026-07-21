@@ -24,8 +24,14 @@ export class TransactionService {
 
   async create(
     userId: string,
-    input: CreateTransactionDto & { importHash?: string; recurringRuleId?: string },
+    input: CreateTransactionDto & { importHash?: string; recurringRuleId?: string; sourceEventKey?: string },
   ): Promise<Transaction> {
+    if (input.sourceEventKey) {
+      const existing = await this.prisma.transaction.findUnique({
+        where: { sourceEventKey: input.sourceEventKey },
+      });
+      if (existing) return existing;
+    }
     if (input.type === TransactionType.INCOME && input.creditCardId) {
       throw new BadRequestException('Receitas devem ser recebidas em uma conta ou carteira');
     }
@@ -60,6 +66,7 @@ export class TransactionService {
       userId,
       ...(input.importHash ? { importHash: input.importHash } : {}),
       ...(input.recurringRuleId ? { recurringRuleId: input.recurringRuleId } : {}),
+      ...(input.sourceEventKey ? { sourceEventKey: input.sourceEventKey } : {}),
     });
 
     if (input.source !== TransactionSource.CSV && input.source !== TransactionSource.RECURRENT) {

@@ -92,6 +92,7 @@ export function moreView() {
         <div class="panel-title"><div><span class="eyebrow">Ferramentas</span><h2>Automação e dados</h2></div></div>
         ${transactionToolsView()}
       </article>
+      ${intelligenceCard()}
       <article class="card privacy-card">
         <div class="panel-title"><div><span class="eyebrow">Privacidade</span><h2>Seus dados e sua conta</h2></div></div>
         <p class="muted">Baixe uma cópia das informações armazenadas ou exclua permanentemente sua conta.</p>
@@ -352,6 +353,24 @@ export function manageView() {
   `;
 }
 
+function intelligenceCard() {
+  const preferences = state.intelligencePreferences || {};
+  const insights = state.insights || [];
+  return `<article class="card intelligence-card">
+    <div class="panel-title"><div><span class="eyebrow">Din inteligente</span><h2>Alertas e sugestões</h2></div></div>
+    <p class="muted">O Din explica os cálculos e limita alertas para não incomodar.</p>
+    <form class="form" data-intelligence-preferences>
+      <label class="toggle-row"><span><strong>Respostas por áudio</strong><small>Usar voz no WhatsApp quando disponível</small></span><input type="checkbox" name="audioRepliesEnabled" ${preferences.audioRepliesEnabled ? 'checked' : ''}></label>
+      <label class="toggle-row"><span><strong>Alertas proativos</strong><small>Gastos fora do padrão, previsões e vencimentos</small></span><input type="checkbox" name="proactiveAlertsEnabled" ${preferences.proactiveAlertsEnabled !== false ? 'checked' : ''}></label>
+      <label class="field">Máximo por semana<input name="maxWeeklyAlerts" type="number" min="0" max="14" value="${Number(preferences.maxWeeklyAlerts ?? 3)}"></label>
+      <button class="button secondary" type="submit">Salvar preferências</button>
+    </form>
+    <div class="surface-list intelligence-list">
+      ${insights.length ? insights.slice(0, 5).map((item) => `<article class="intelligence-item"><strong>${escapeHtml(item.title)}</strong><p>${escapeHtml(item.summary)}</p><details><summary>Como foi calculado</summary><pre>${escapeHtml(JSON.stringify(item.explanation, null, 2))}</pre></details><div class="actions-row">${item.suggestedAction === 'CREATE_BUDGET' ? `<button class="button compact-action" data-insight-action="CREATE_BUDGET" data-insight-id="${item.id}">Criar orçamento</button>` : ''}<button class="button secondary compact-action" data-insight-action="REMIND_LATER" data-insight-id="${item.id}">Lembrar depois</button><button class="danger-link" data-insight-action="IGNORE" data-insight-id="${item.id}">Ignorar</button></div></article>`).join('') : '<p class="empty">Nenhum alerta importante agora.</p>'}
+    </div>
+  </article>`;
+}
+
 function productPerformanceRow(item) {
   return `<div class="product-performance-row"><div><strong>${escapeHtml(item.name)}</strong><small>${Number(item.quantity).toLocaleString('pt-BR')} vendidos · ${money.format(Number(item.netRevenue))} de receita</small></div><div><strong>${money.format(Number(item.margin))}</strong><small>${Number(item.marginPercent).toFixed(1)}% margem</small></div></div>`;
 }
@@ -387,7 +406,7 @@ function businessEntryRow(entry) {
     <span class="row-icon ${entry.type === 'RECEIVABLE' ? 'income-bg' : 'expense-bg'}">${entry.type === 'RECEIVABLE' ? '↓' : '↑'}</span>
     <div class="row-main"><div class="row-title">${escapeHtml(entry.title)}</div><div class="row-meta">${escapeHtml(entry.counterparty)} · ${businessDate(entry.dueDate)} · ${escapeHtml(entry.category?.name || '')}</div><span class="badge ${tone}">${statusLabels[status] || status}</span></div>
     <strong class="${entry.type === 'RECEIVABLE' ? 'income' : 'expense'}">${money.format(Number(entry.amount || 0))}</strong>
-    ${pending ? `<div class="business-entry-actions"><button class="button compact-action" type="button" data-business-settle="${entry.id}">${entry.type === 'RECEIVABLE' ? 'Receber' : 'Pagar'}</button><button class="danger-link" type="button" data-business-cancel="${entry.id}">Cancelar</button></div>` : ''}
+    ${pending ? `<div class="business-entry-actions">${entry.type === 'RECEIVABLE' && entry.contact?.phone ? `<button class="button secondary compact-action" type="button" data-business-collect="${entry.id}">Cobrar</button>` : ''}<button class="button compact-action" type="button" data-business-settle="${entry.id}">${entry.type === 'RECEIVABLE' ? 'Receber' : 'Pagar'}</button><button class="danger-link" type="button" data-business-cancel="${entry.id}">Cancelar</button></div>` : ''}
   </div>`;
 }
 

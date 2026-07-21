@@ -1,4 +1,5 @@
 import process from 'node:process';
+import { createHmac } from 'node:crypto';
 
 const backendUrl = (process.env.E2E_BACKEND_URL || 'https://econoapp-backend.onrender.com').replace(
   /\/+$/,
@@ -143,8 +144,19 @@ async function completeWebhookConversation(initialMessage) {
   let currentMessage = initialMessage;
 
   for (let step = 0; step < 6; step += 1) {
-    const response = await sendWebhook(currentMessage);
-    const reply = String(response.body?.data?.reply || '');
+    const messageId = `${marker}-${step}`;
+    const sentAt = new Date();
+    const response = await sendWebhook(currentMessage, messageId);
+    if (response.status !== 202 || response.body?.data?.messageId !== messageId) {
+      throw new Error(`Webhook assíncrono não confirmou ${messageId}`);
+    }
+    if (step === 0) {
+      const duplicate = await sendWebhook(currentMessage, messageId);
+      if (duplicate.body?.data?.duplicate !== true) {
+        throw new Error('Webhook repetido não foi reconhecido como duplicado');
+      }
+    }
+    const reply = await waitForAssistantReply(sentAt, 60_000);
     replies.push(reply);
     const normalized = normalize(reply);
 
@@ -176,13 +188,47 @@ async function completeWebhookConversation(initialMessage) {
   throw new Error('O chatbot não concluiu o lançamento dentro de 6 etapas');
 }
 
-async function sendWebhook(text) {
+async function sendWebhook(text, messageId = `${marker}-${Date.now()}`) {
+  const body = JSON.stringify({
+    phone: userPhone,
+    message: text,
+    data: { messageId, timestamp: Date.now() },
+  });
+  const timestamp = String(Date.now());
+  const signature = `sha256=${createHmac('sha256', webhookToken)
+    .update(timestamp)
+    .update('.')
+    .update(body)
+    .digest('hex')}`;
   return request(`${apiUrl}/whatsapp/webhook`, {
     method: 'POST',
-    headers: { 'x-whatsapp-webhook-token': webhookToken },
-    body: { phone: userPhone, message: text },
+    headers: {
+      'x-whatsapp-timestamp': timestamp,
+      'x-whatsapp-signature': signature,
+    },
+    rawBody: body,
     timeoutMs: 90_000,
   });
+}
+
+async function waitForAssistantReply(since, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const response = await request(`${apiUrl}/assistant/activity`, {
+      headers: authHeaders(),
+      timeoutMs: 30_000,
+    });
+    const event = (response.body?.data?.events || []).find(
+      (item) =>
+        item.channel === 'WHATSAPP' &&
+        item.status === 'PROCESSED' &&
+        item.replyText &&
+        new Date(item.createdAt).getTime() >= since.getTime(),
+    );
+    if (event) return String(event.replyText);
+    await sleep(1_000);
+  }
+  throw new Error('A fila não produziu resposta do assistente dentro do prazo');
 }
 
 async function waitForTransaction(timeoutMs) {
@@ -237,10 +283,10 @@ async function request(url, options = {}) {
       method: options.method || 'GET',
       headers: {
         Accept: 'application/json',
-        ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+        ...(options.body || options.rawBody ? { 'Content-Type': 'application/json' } : {}),
         ...options.headers,
       },
-      body: options.body ? JSON.stringify(options.body) : undefined,
+      body: options.rawBody ?? (options.body ? JSON.stringify(options.body) : undefined),
       signal: controller.signal,
     });
     const text = await response.text();

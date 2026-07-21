@@ -2,6 +2,8 @@ import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nest
 import { env } from '@/config/env';
 import { WhatsappScheduledNotificationService } from './whatsapp-scheduled-notification.service';
 import { WhatsappService } from './whatsapp.service';
+import { ProductIntelligenceService } from '@/modules/product-intelligence/product-intelligence.service';
+import { WhatsappQueueService } from './whatsapp-queue.service';
 
 @Injectable()
 export class WhatsappBudgetAlertScheduler implements OnModuleInit, OnModuleDestroy {
@@ -13,6 +15,10 @@ export class WhatsappBudgetAlertScheduler implements OnModuleInit, OnModuleDestr
     @Inject(WhatsappService) private readonly whatsappService: WhatsappService,
     @Inject(WhatsappScheduledNotificationService)
     private readonly scheduledNotificationService: WhatsappScheduledNotificationService,
+    @Inject(ProductIntelligenceService)
+    private readonly productIntelligence: ProductIntelligenceService,
+    @Inject(WhatsappQueueService)
+    private readonly whatsappQueue: WhatsappQueueService,
   ) {}
 
   onModuleInit(): void {
@@ -46,6 +52,21 @@ export class WhatsappBudgetAlertScheduler implements OnModuleInit, OnModuleDestr
         this.logger.log(
           `Lembretes agendados: ${scheduledResult.sent} enviados, ${scheduledResult.failed} falharam, ${scheduledResult.skipped} ignorados.`,
         );
+      }
+
+      await this.productIntelligence.refreshActiveUsers();
+      const insights = await this.productIntelligence.deliverable();
+      for (const insight of insights) {
+        await this.whatsappQueue.enqueueOutbound({
+          phone: insight.phone,
+          message: insight.message,
+          interactions: [
+            { id: 'create-budget', label: 'Criar orçamento', value: `insight:${insight.insightId}:CREATE_BUDGET` },
+            { id: 'remind', label: 'Lembrar depois', value: `insight:${insight.insightId}:REMIND_LATER` },
+            { id: 'ignore', label: 'Ignorar', value: `insight:${insight.insightId}:IGNORE` },
+          ],
+        });
+        await this.productIntelligence.markNotified(insight.insightId);
       }
     } catch (error) {
       this.logger.error(

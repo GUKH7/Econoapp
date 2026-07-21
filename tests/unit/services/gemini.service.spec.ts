@@ -10,7 +10,11 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 
-import { geminiOutputSchema, whatsappIntentSchema } from '@/services/ai/gemini.service';
+import {
+  geminiOutputSchema,
+  whatsappActionSchema,
+  whatsappIntentSchema,
+} from '@/services/ai/gemini.service';
 import { isConfidenceAcceptable } from '@/domain/finance/transaction-rules';
 
 vi.mock('@/config/env', () => ({
@@ -233,6 +237,37 @@ describe('whatsappIntentSchema (Zod)', () => {
         confidence: 1,
       }).success,
     ).toBe(false);
+  });
+});
+
+describe('whatsappActionSchema (Zod)', () => {
+  it('aceita ação e entidades da taxonomia permitida', () => {
+    expect(whatsappActionSchema.safeParse({
+      action: 'CREATE_RECEIVABLE',
+      confidence: 0.94,
+      entities: {
+        counterparty: 'João',
+        description: 'Serviço de design',
+        amount: 250,
+        dueDate: '2026-07-30',
+      },
+    }).success).toBe(true);
+  });
+
+  it('rejeita ação fora da lista fechada', () => {
+    expect(whatsappActionSchema.safeParse({
+      action: 'EXECUTE_SQL',
+      confidence: 1,
+      entities: {},
+    }).success).toBe(false);
+  });
+
+  it('rejeita valor financeiro inválido extraído pela IA', () => {
+    expect(whatsappActionSchema.safeParse({
+      action: 'CREATE_PAYABLE',
+      confidence: 0.9,
+      entities: { amount: -100 },
+    }).success).toBe(false);
   });
 });
 

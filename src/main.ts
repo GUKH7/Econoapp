@@ -3,6 +3,7 @@ import { ValidationPipe, RequestMethod } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { json, urlencoded } from 'express';
+import type { Request } from 'express';
 import helmet from 'helmet';
 import { Logger } from 'nestjs-pino';
 import { apiReference } from '@scalar/nestjs-api-reference';
@@ -14,7 +15,12 @@ async function bootstrap(): Promise<void> {
   const express = app.getHttpAdapter().getInstance() as { set(name: string, value: unknown): void };
   express.set('trust proxy', 1);
 
-  app.use(json({ limit: '15mb' }));
+  app.use(json({
+    limit: '15mb',
+    verify: (request: Request & { rawBody?: Buffer }, _response, buffer) => {
+      request.rawBody = Buffer.from(buffer);
+    },
+  }));
   app.use(urlencoded({ extended: true, limit: '15mb' }));
 
   const corsOrigins = env.CORS_ORIGIN

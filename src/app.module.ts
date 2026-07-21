@@ -23,6 +23,7 @@ import { AssistantModule } from '@/modules/assistant/assistant.module';
 import { AdminModule } from '@/modules/admin/admin.module';
 import { BusinessModule } from '@/modules/business/business.module';
 import { randomUUID } from 'node:crypto';
+import { ProductIntelligenceModule } from '@/modules/product-intelligence/product-intelligence.module';
 
 @Module({
   imports: [
@@ -73,6 +74,7 @@ import { randomUUID } from 'node:crypto';
     AssistantModule,
     AdminModule,
     BusinessModule,
+    ProductIntelligenceModule,
 
     TelegramModule,
     WhatsappModule,

@@ -22,6 +22,7 @@ interface CreateTransactionInput {
   userId: string;
   importHash?: string;
   recurringRuleId?: string;
+  sourceEventKey?: string;
 }
 
 @Injectable()

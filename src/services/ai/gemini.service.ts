@@ -3,6 +3,18 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { z } from 'zod';
 import { env } from '@/config/env';
 import { BadRequestException } from '@/common/errors/app.exception';
+import { WHATSAPP_ACTIONS, WhatsappActionClassification } from '@/modules/whatsapp/whatsapp-action.types';
+
+export const GEMINI_MODEL_VERSION = 'gemini-2.5-flash';
+export const GEMINI_PROMPT_VERSIONS = {
+  financialExtraction: 'financial-extraction-v1',
+  audioFinancialExtraction: 'audio-financial-extraction-v1',
+  audioTranscription: 'audio-transcription-v1',
+  whatsappIntent: 'whatsapp-intent-v1',
+  whatsappAction: 'whatsapp-action-v1',
+  whatsappReply: 'whatsapp-reply-v1',
+  receiptExtraction: 'receipt-extraction-v1',
+} as const;
 
 export const geminiOutputSchema = z.object({
   amount: z.number().positive(),
@@ -20,6 +32,17 @@ const geminiAudioOutputSchema = geminiOutputSchema.extend({
 });
 export type GeminiAudioOutput = z.infer<typeof geminiAudioOutputSchema>;
 
+const geminiReceiptSchema = z.object({
+  documentType: z.enum(['RECEIPT', 'INVOICE', 'UNKNOWN']),
+  merchant: z.string().min(1).max(120),
+  amount: z.number().positive(),
+  date: z.string().nullable().optional(),
+  categoryHint: z.string().min(1).max(80),
+  type: z.enum(['INCOME', 'EXPENSE']).default('EXPENSE'),
+  confidence: z.number().min(0).max(1),
+});
+export type GeminiReceiptOutput = z.infer<typeof geminiReceiptSchema>;
+
 const geminiAudioTranscriptionSchema = z.object({
   transcription: z.string().min(1),
 });
@@ -30,6 +53,21 @@ export const whatsappIntentSchema = z.object({
 });
 
 export type WhatsappIntent = z.infer<typeof whatsappIntentSchema>;
+
+export const whatsappActionSchema = z.object({
+  action: z.enum([...WHATSAPP_ACTIONS, 'HELP', 'GENERAL_CONVERSATION', 'UNKNOWN']),
+  confidence: z.number().min(0).max(1),
+  entities: z.object({
+    categoryName: z.string().min(1).max(80).optional(),
+    currentCategoryName: z.string().min(1).max(80).optional(),
+    newCategoryName: z.string().min(1).max(80).optional(),
+    accountName: z.string().min(1).max(80).optional(),
+    counterparty: z.string().min(1).max(120).optional(),
+    description: z.string().min(1).max(120).optional(),
+    amount: z.number().positive().optional(),
+    dueDate: z.string().optional(),
+  }).default({}),
+});
 
 export interface WhatsappConversationMessage {
   role: 'user' | 'assistant';
@@ -45,7 +83,7 @@ export class GeminiService {
     message: string,
     context?: { channelNames?: string[]; categoryNames?: string[] },
   ): Promise<GeminiFinancialOutput> {
-    const model = this.client.getGenerativeModel({ model: 'gemini-2.5-flash' });
+    const model = this.client.getGenerativeModel({ model: GEMINI_MODEL_VERSION });
 
     const contextLines = this.buildContextLines(context);
 
@@ -96,7 +134,7 @@ export class GeminiService {
     mimeType: string,
     context?: { channelNames?: string[]; categoryNames?: string[] },
   ): Promise<GeminiAudioOutput> {
-    const model = this.client.getGenerativeModel({ model: 'gemini-2.5-flash' });
+    const model = this.client.getGenerativeModel({ model: GEMINI_MODEL_VERSION });
     const contextLines = this.buildContextLines(context);
 
     const prompt = [
@@ -135,7 +173,7 @@ export class GeminiService {
   }
 
   async transcribeAudioBase64(audioBase64: string, mimeType: string): Promise<string> {
-    const model = this.client.getGenerativeModel({ model: 'gemini-2.5-flash' });
+    const model = this.client.getGenerativeModel({ model: GEMINI_MODEL_VERSION });
     const prompt = [
       'Transcreva este audio em portugues do Brasil para um assistente financeiro.',
       'Preserve todos os dados financeiros mencionados: valor, item, categoria, forma de pagamento, data, conta, cartao e se e pessoal ou negocio.',
@@ -176,11 +214,33 @@ export class GeminiService {
     }
   }
 
+  async extractReceiptFromImageBase64(imageBase64: string, mimeType: string): Promise<GeminiReceiptOutput> {
+    const model = this.client.getGenerativeModel({ model: GEMINI_MODEL_VERSION });
+    const prompt = [
+      'Analise a imagem de um comprovante, recibo ou nota fiscal brasileira.',
+      'Extraia somente dados claramente visiveis. Nunca invente estabelecimento, valor ou data.',
+      'amount deve ser o total final pago ou recebido, nao subtotal, troco ou valor de um item.',
+      'Se for comprovante de entrada, use INCOME; compras e pagamentos usam EXPENSE.',
+      'Se a imagem nao for documento financeiro legivel, use confidence 0, merchant "Nao identificado", amount 0.01 e documentType UNKNOWN.',
+      'Responda SOMENTE JSON valido:',
+      '{"documentType":"RECEIPT|INVOICE|UNKNOWN","merchant":"string","amount":number,"date":"YYYY-MM-DD|null","categoryHint":"string","type":"INCOME|EXPENSE","confidence":number}',
+    ].join('\n');
+    const result = await model.generateContent([{ inlineData: { data: imageBase64, mimeType } }, prompt]);
+    const cleaned = result.response.text().trim().replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```$/i, '').trim();
+    try {
+      const parsed = geminiReceiptSchema.safeParse(JSON.parse(cleaned));
+      if (!parsed.success) throw new Error('schema');
+      return parsed.data;
+    } catch {
+      throw new BadRequestException('Nao consegui ler esse comprovante com seguranca. Envie uma foto mais nitida.');
+    }
+  }
+
   async classifyWhatsappMessage(
     message: string,
     recentMessages: WhatsappConversationMessage[] = [],
   ): Promise<WhatsappIntent> {
-    const model = this.client.getGenerativeModel({ model: 'gemini-2.5-flash' });
+    const model = this.client.getGenerativeModel({ model: GEMINI_MODEL_VERSION });
     const history = recentMessages
       .slice(-6)
       .map((item) => `${item.role === 'user' ? 'Usuário' : 'Assistente'}: ${item.text}`)
@@ -208,13 +268,54 @@ export class GeminiService {
     return result.data;
   }
 
+  async classifyWhatsappAction(
+    message: string,
+    recentMessages: WhatsappConversationMessage[] = [],
+  ): Promise<WhatsappActionClassification> {
+    const model = this.client.getGenerativeModel({ model: GEMINI_MODEL_VERSION });
+    const history = recentMessages
+      .slice(-6)
+      .map((item) => `${item.role === 'user' ? 'Usuario' : 'Assistente'}: ${item.text}`)
+      .join('\n');
+    const prompt = [
+      'Classifique a mensagem em exatamente uma ação do assistente financeiro.',
+      'Ações permitidas:',
+      'CREATE_CATEGORY: criar ou adicionar categoria.',
+      'LIST_CATEGORIES: listar categorias cadastradas.',
+      'UPDATE_CATEGORY: alterar ou renomear categoria.',
+      'DELETE_CATEGORY: excluir categoria.',
+      'CREATE_TRANSACTION: registrar receita, despesa, compra ou venda.',
+      'QUERY_EXPENSES: consultar gastos, despesas ou categorias de gastos.',
+      'SET_BUDGET: definir orçamento ou limite de categoria.',
+      'CREATE_ACCOUNT: cadastrar conta bancária ou carteira.',
+      'CREATE_RECEIVABLE: cadastrar conta a receber.',
+      'CREATE_PAYABLE: cadastrar conta a pagar.',
+      'HELP, GENERAL_CONVERSATION ou UNKNOWN quando nenhuma ação acima se aplicar.',
+      'Verbos criar, adicionar, alterar e excluir têm prioridade sobre palavras temáticas como gastos.',
+      'Extraia somente entidades explicitamente informadas. Não invente nomes, valores nem datas.',
+      'dueDate deve ser ISO-8601 quando houver data inequívoca; caso contrário omita.',
+      `Data atual para interpretar datas relativas: ${new Date().toISOString().slice(0, 10)}.`,
+      'Responda SOMENTE JSON válido:',
+      '{"action":"ACTION","confidence":0.0,"entities":{"categoryName":"...","currentCategoryName":"...","newCategoryName":"...","accountName":"...","counterparty":"...","description":"...","amount":0,"dueDate":"..."}}',
+      history ? `Contexto recente:\n${history}` : '',
+      `Mensagem atual: ${message}`,
+    ].filter(Boolean).join('\n');
+
+    const parsed = await this.generateJson(model, prompt);
+    const result = whatsappActionSchema.safeParse(parsed);
+    if (!result.success) {
+      throw new BadRequestException('Resposta do Gemini fora da taxonomia de ações esperada');
+    }
+    return { ...result.data, source: 'AI' };
+  }
+
   async generateWhatsappReply(input: {
     message: string;
     userName: string;
     financialContext: string;
     recentMessages?: WhatsappConversationMessage[];
   }): Promise<string> {
-    const model = this.client.getGenerativeModel({ model: 'gemini-2.5-flash' });
+    const model = this.client.getGenerativeModel({ model: GEMINI_MODEL_VERSION });
     const history = (input.recentMessages ?? [])
       .slice(-6)
       .map((item) => `${item.role === 'user' ? 'Usuário' : 'Assistente'}: ${item.text}`)

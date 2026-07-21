@@ -1,5 +1,7 @@
-import { BadRequestException, Inject, Injectable, Optional } from '@nestjs/common';
+import { BadRequestException, ConflictException, Inject, Injectable, Optional } from '@nestjs/common';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import {
+  BusinessEntryType,
   FinancialAccountType,
   FinancialScope,
   Prisma,
@@ -8,12 +10,25 @@ import {
   TransactionType,
 } from '@prisma/client';
 import { PrismaService } from '@/config/database';
-import { GeminiService, WhatsappConversationMessage } from '@/services/ai/gemini.service';
+import {
+  GEMINI_MODEL_VERSION,
+  GEMINI_PROMPT_VERSIONS,
+  GeminiService,
+  WhatsappConversationMessage,
+} from '@/services/ai/gemini.service';
 import { TransactionService } from '@/modules/transactions/transaction.service';
+import { ProductIntelligenceService } from '@/modules/product-intelligence/product-intelligence.service';
+import { InsightAction } from '@/modules/product-intelligence/dto/insight-action.dto';
 import { SendWhatsappMessageDto } from './dto/send-whatsapp-message.dto';
 import { WhatsappWebhookDto } from './dto/whatsapp-webhook.dto';
 import { WhatsappConversationStore } from './whatsapp-conversation.store';
 import { WhatsappProviderClient } from './whatsapp-provider.client';
+import { WhatsappActionClassifierService } from './whatsapp-action-classifier.service';
+import { sanitizeWhatsappPayload } from './whatsapp-payload-sanitizer';
+import {
+  WhatsappActionClassification,
+  WhatsappPendingAction,
+} from './whatsapp-action.types';
 import {
   FinancialPeriod,
   WhatsappCategoryDraft,
@@ -25,6 +40,11 @@ import {
   WhatsappStatusResponse,
   WhatsappTransactionDraft,
 } from './whatsapp.types';
+import {
+  AssistantSessionChannel,
+  WhatsappQuickAction,
+  assertFlowTransition,
+} from './whatsapp-state-machine';
 
 export type { WhatsappStatusResponse } from './whatsapp.types';
 
@@ -52,6 +72,15 @@ type DinActivityEventView = {
   replyText: string | null;
   errorMessage: string | null;
   attempts: number;
+  externalMessageId: string | null;
+  detectedIntent: string | null;
+  confidence: number | null;
+  aiDurationMs: number;
+  processingDurationMs: number | null;
+  executedAction: string | null;
+  errorCode: string | null;
+  promptVersion: string | null;
+  modelVersion: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -63,9 +92,27 @@ type WhatsappAudioInput = {
   seconds?: number | null;
 };
 
+type WhatsappExecutionTelemetry = {
+  startedAt: number;
+  aiDurationMs: number;
+  detectedIntent: string;
+  confidence: number | null;
+  executedAction: string;
+  promptVersions: Set<string>;
+  modelVersion: string;
+};
+
+type AssistantExecutionContext = {
+  channel: AssistantSessionChannel;
+  telemetry?: WhatsappExecutionTelemetry;
+  transactionSource?: TransactionSource;
+};
+
 @Injectable()
 export class WhatsappService {
   private readonly conversationStore: WhatsappConversationStore;
+  private readonly actionClassifier: WhatsappActionClassifierService;
+  private readonly sessionContext = new AsyncLocalStorage<AssistantExecutionContext>();
 
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
@@ -77,8 +124,15 @@ export class WhatsappService {
     @Optional()
     @Inject(WhatsappConversationStore)
     conversationStore?: WhatsappConversationStore,
+    @Optional()
+    @Inject(WhatsappActionClassifierService)
+    actionClassifier?: WhatsappActionClassifierService,
+    @Optional()
+    @Inject(ProductIntelligenceService)
+    private readonly productIntelligence?: ProductIntelligenceService,
   ) {
     this.conversationStore = conversationStore ?? new WhatsappConversationStore(prisma);
+    this.actionClassifier = actionClassifier ?? new WhatsappActionClassifierService();
   }
 
   async getStatus(): Promise<WhatsappStatusResponse> {
@@ -160,34 +214,76 @@ export class WhatsappService {
     return result;
   }
 
-  async handleWebhook(dto: WhatsappWebhookDto): Promise<{ phone: string; reply: string }> {
+  async handleWebhook(
+    dto: WhatsappWebhookDto,
+    options: { deferDelivery?: boolean; inboundMessageId?: string } = {},
+  ): Promise<{ phone: string; reply: string }> {
+    return this.sessionContext.run({
+      channel: 'WHATSAPP',
+      telemetry: {
+        startedAt: Date.now(),
+        aiDurationMs: 0,
+        detectedIntent: 'UNKNOWN',
+        confidence: null,
+        executedAction: 'NONE',
+        promptVersions: new Set<string>(),
+        modelVersion: GEMINI_MODEL_VERSION,
+      },
+    }, () => this.handleWebhookInSession(dto, options));
+  }
+
+  private async handleWebhookInSession(
+    dto: WhatsappWebhookDto,
+    options: { deferDelivery?: boolean; inboundMessageId?: string } = {},
+  ): Promise<{ phone: string; reply: string }> {
+    const deferDelivery = options.deferDelivery ?? false;
     const phone = this.extractPhone(dto);
     const activityId = await this.createDinActivityEvent({
       phone: phone || null,
       channel: 'WHATSAPP',
       eventType: 'WEBHOOK_RECEIVED',
       status: 'RECEIVED',
-      payload: this.toJsonValue(dto),
+      provider: 'BAILEYS',
+      externalMessageId: this.extractExternalMessageId(dto),
+      payload: sanitizeWhatsappPayload(dto),
     });
 
     if (!phone) {
+      const telemetry = this.currentTelemetry();
       await this.updateDinActivityEvent(activityId, {
         status: 'FAILED',
         errorMessage: 'Webhook WhatsApp precisa informar telefone e mensagem.',
+        detectedIntent: telemetry?.detectedIntent ?? 'UNKNOWN',
+        confidence: telemetry?.confidence ?? null,
+        aiDurationMs: telemetry?.aiDurationMs ?? 0,
+        processingDurationMs: telemetry ? Date.now() - telemetry.startedAt : 0,
+        executedAction: telemetry?.executedAction ?? 'NONE',
+        errorCode: 'INVALID_WEBHOOK',
+        promptVersion: telemetry ? [...telemetry.promptVersions].join(',') || null : null,
+        modelVersion: telemetry?.modelVersion ?? null,
       });
       throw new BadRequestException('Webhook WhatsApp precisa informar telefone e mensagem.');
     }
 
-    const receivedAudio = this.hasAudioOrMediaSignal(dto);
-    const message = await this.extractMessageOrTranscribeAudio(dto);
+    const receivedImage = this.hasImageSignal(dto);
+    const receivedAudio = !receivedImage && this.hasAudioOrMediaSignal(dto);
+    const message = receivedImage
+      ? await this.extractReceiptMessage(dto)
+      : await this.extractMessageOrTranscribeAudio(dto);
+    if (receivedImage) {
+      const context = this.sessionContext.getStore();
+      if (context) context.transactionSource = TransactionSource.RECEIPT;
+    }
     if (message === null) {
-      const reply = this.audioTranscriptionFailedReply();
+      const reply = receivedImage
+        ? 'Não consegui ler esse comprovante com segurança. Envie uma foto mais nítida, mostrando o estabelecimento e o valor total.'
+        : this.audioTranscriptionFailedReply();
       await this.finishDinActivityEvent(activityId, phone, {
-        eventType: receivedAudio ? 'AUDIO_TRANSCRIPTION_FAILED' : 'MESSAGE_FAILED',
+        eventType: receivedImage ? 'RECEIPT_EXTRACTION_FAILED' : receivedAudio ? 'AUDIO_TRANSCRIPTION_FAILED' : 'MESSAGE_FAILED',
         status: 'FAILED',
         replyText: reply,
         errorMessage: 'Não foi possível transcrever o áudio recebido.',
-      });
+      }, deferDelivery);
       return { phone, reply };
     }
     if (message === MEDIA_WITHOUT_DOWNLOADABLE_AUDIO) {
@@ -197,7 +293,7 @@ export class WhatsappService {
         status: 'FAILED',
         replyText: reply,
         errorMessage: 'Payload de áudio sem base64 ou URL baixável.',
-      });
+      }, deferDelivery);
       return { phone, reply };
     }
     if (!message) {
@@ -207,9 +303,9 @@ export class WhatsappService {
       });
       throw new BadRequestException('Webhook WhatsApp precisa informar telefone e mensagem.');
     }
-    const activityMessage = this.activityUserMessage(message, receivedAudio);
+    const activityMessage = receivedImage ? `Comprovante lido: ${message}` : this.activityUserMessage(message, receivedAudio);
     await this.updateDinActivityEvent(activityId, {
-      eventType: receivedAudio ? 'AUDIO_TRANSCRIBED' : 'MESSAGE_RECEIVED',
+      eventType: receivedImage ? 'RECEIPT_EXTRACTED' : receivedAudio ? 'AUDIO_TRANSCRIBED' : 'MESSAGE_RECEIVED',
       status: 'PROCESSING',
       messageText: activityMessage,
       audioTranscription: receivedAudio ? message : null,
@@ -222,7 +318,7 @@ export class WhatsappService {
       await this.finishDinActivityEvent(activityId, phone, {
         status: 'USER_NOT_FOUND',
         replyText: reply,
-      });
+      }, deferDelivery);
       return { phone, reply };
     }
 
@@ -236,31 +332,62 @@ export class WhatsappService {
         userId: user.id,
         status: 'ACCESS_BLOCKED',
         replyText: reply,
-      });
+      }, deferDelivery);
       return { phone, reply };
     }
 
     const conversation = await this.getConversation(user.id, phone);
+    await this.claimConversationTurn(user.id, Number(conversation.stateVersion ?? 0));
     const recentMessages = this.parseRecentMessages(conversation.recentMessages);
     const pendingValue = this.conversationPendingValue(conversation);
+    if (conversation.pendingType) {
+      this.recordIntent(`CONTINUE_${conversation.pendingType}`, 1);
+      this.recordAction(`CONTINUE_${conversation.pendingStep ?? conversation.pendingType}`);
+    }
     await this.updateDinActivityEvent(activityId, {
       userId: user.id,
       conversationId: conversation.id,
     });
 
+    const insightActionReply = await this.tryInsightAction(user.id, message);
+    if (insightActionReply) {
+      this.recordIntent('ACT_ON_INSIGHT', 1);
+      this.recordAction('ACT_ON_INSIGHT');
+      await this.appendConversation(user.id, phone, recentMessages, activityMessage, insightActionReply);
+      await this.finishDinActivityEvent(
+        activityId,
+        phone,
+        { status: 'PROCESSED', replyText: insightActionReply },
+        deferDelivery,
+      );
+      return { phone, reply: insightActionReply };
+    }
+
+    if (this.isMenuCommand(message) || this.isUndoCommand(message)) {
+      if (this.isMenuCommand(message)) await this.clearPendingMessage(user.id);
+      this.recordIntent(this.isUndoCommand(message) ? 'UNDO_TRANSACTION' : 'MENU', 1);
+      this.recordAction(this.isUndoCommand(message) ? 'UNDO_TRANSACTION' : 'SHOW_CONTEXTUAL_MENU');
+      const reply = this.isUndoCommand(message)
+        ? await this.undoLastTransaction(user.id)
+        : await this.contextualMenuReply(user.id);
+      await this.appendConversation(user.id, phone, recentMessages, activityMessage, reply);
+      await this.finishDinActivityEvent(activityId, phone, { status: 'PROCESSED', replyText: reply }, deferDelivery);
+      return { phone, reply };
+    }
+
     const categoryDraft = this.parseCategoryDraft(pendingValue);
     if (categoryDraft) {
       const reply = await this.handleCategorySelection(user.id, phone, message, categoryDraft);
       await this.appendConversation(user.id, phone, recentMessages, activityMessage, reply);
-      await this.finishDinActivityEvent(activityId, phone, { status: 'PROCESSED', replyText: reply });
+      await this.finishDinActivityEvent(activityId, phone, { status: 'PROCESSED', replyText: reply }, deferDelivery);
       return { phone, reply };
     }
 
     if (this.isMenuCommand(message)) {
       await this.clearPendingMessage(user.id);
-      const reply = this.helpReply();
+      const reply = await this.contextualMenuReply(user.id);
       await this.appendConversation(user.id, phone, recentMessages, activityMessage, reply);
-      await this.finishDinActivityEvent(activityId, phone, { status: 'PROCESSED', replyText: reply });
+      await this.finishDinActivityEvent(activityId, phone, { status: 'PROCESSED', replyText: reply }, deferDelivery);
       return { phone, reply };
     }
 
@@ -268,7 +395,7 @@ export class WhatsappService {
     if (paymentDraft) {
       const reply = await this.handlePaymentSelection(user.id, phone, message, paymentDraft);
       await this.appendConversation(user.id, phone, recentMessages, activityMessage, reply);
-      await this.finishDinActivityEvent(activityId, phone, { status: 'PROCESSED', replyText: reply });
+      await this.finishDinActivityEvent(activityId, phone, { status: 'PROCESSED', replyText: reply }, deferDelivery);
       return { phone, reply };
     }
 
@@ -276,7 +403,7 @@ export class WhatsappService {
     if (mutationDraft) {
       const reply = await this.handleMutationConfirmation(user.id, message, mutationDraft);
       await this.appendConversation(user.id, phone, recentMessages, activityMessage, reply);
-      await this.finishDinActivityEvent(activityId, phone, { status: 'PROCESSED', replyText: reply });
+      await this.finishDinActivityEvent(activityId, phone, { status: 'PROCESSED', replyText: reply }, deferDelivery);
       return { phone, reply };
     }
 
@@ -287,9 +414,18 @@ export class WhatsappService {
         phone,
         message,
         transactionDraft,
+        options.inboundMessageId,
       );
       await this.appendConversation(user.id, phone, recentMessages, activityMessage, reply);
-      await this.finishDinActivityEvent(activityId, phone, { status: 'PROCESSED', replyText: reply });
+      await this.finishDinActivityEvent(activityId, phone, { status: 'PROCESSED', replyText: reply }, deferDelivery);
+      return { phone, reply };
+    }
+
+    const pendingAction = this.parsePendingAction(conversation);
+    if (pendingAction) {
+      const reply = await this.handlePendingAction(user.id, phone, message, pendingAction);
+      await this.appendConversation(user.id, phone, recentMessages, activityMessage, reply);
+      await this.finishDinActivityEvent(activityId, phone, { status: 'PROCESSED', replyText: reply }, deferDelivery);
       return { phone, reply };
     }
 
@@ -299,7 +435,7 @@ export class WhatsappService {
         ? 'Conversa cancelada. Nenhuma informação pendente foi salva.'
         : 'Não há nenhuma conversa pendente para cancelar.';
       await this.appendConversation(user.id, phone, recentMessages, activityMessage, reply);
-      await this.finishDinActivityEvent(activityId, phone, { status: 'PROCESSED', replyText: reply });
+      await this.finishDinActivityEvent(activityId, phone, { status: 'PROCESSED', replyText: reply }, deferDelivery);
       return { phone, reply };
     }
 
@@ -311,7 +447,7 @@ export class WhatsappService {
     ) {
       const reply = this.audioAmountNotCapturedReply(pendingDetails);
       await this.appendConversation(user.id, phone, recentMessages, activityMessage, reply);
-      await this.finishDinActivityEvent(activityId, phone, { status: 'PROCESSED', replyText: reply });
+      await this.finishDinActivityEvent(activityId, phone, { status: 'PROCESSED', replyText: reply }, deferDelivery);
       return { phone, reply };
     }
 
@@ -328,11 +464,18 @@ export class WhatsappService {
       recentMessages,
     );
     await this.appendConversation(user.id, phone, recentMessages, activityMessage, reply);
-    await this.finishDinActivityEvent(activityId, phone, { status: 'PROCESSED', replyText: reply });
+    await this.finishDinActivityEvent(activityId, phone, { status: 'PROCESSED', replyText: reply }, deferDelivery);
     return { phone, reply };
   }
 
-  async handleAppMessage(userId: string, message: string): Promise<{ reply: string }> {
+  async handleAppMessage(userId: string, message: string): Promise<{ reply: string; actions?: WhatsappQuickAction[] }> {
+    return this.sessionContext.run({ channel: 'APP' }, () => this.handleAppMessageInSession(userId, message));
+  }
+
+  private async handleAppMessageInSession(
+    userId: string,
+    message: string,
+  ): Promise<{ reply: string; actions?: WhatsappQuickAction[] }> {
     const cleanMessage = message.trim();
     if (!cleanMessage) {
       throw new BadRequestException('Informe uma mensagem para o Din.');
@@ -348,42 +491,59 @@ export class WhatsappService {
 
     const phone = user.phone ? this.normalizeRecipientPhone(user.phone) : `app-${user.id}`;
     const conversation = await this.getConversation(user.id, phone);
+    await this.claimConversationTurn(user.id, Number(conversation.stateVersion ?? 0));
     const recentMessages = this.parseRecentMessages(conversation.recentMessages);
     const pendingValue = this.conversationPendingValue(conversation);
+
+    if (this.isMenuCommand(cleanMessage) || this.isUndoCommand(cleanMessage)) {
+      if (this.isMenuCommand(cleanMessage)) await this.clearPendingMessage(user.id);
+      const reply = this.isUndoCommand(cleanMessage)
+        ? await this.undoLastTransaction(user.id)
+        : await this.contextualMenuReply(user.id);
+      await this.appendConversation(user.id, phone, recentMessages, cleanMessage, reply);
+      return { reply, actions: this.interactionsForReply(reply) };
+    }
 
     const categoryDraft = this.parseCategoryDraft(pendingValue);
     if (categoryDraft) {
       const reply = await this.handleCategorySelection(user.id, phone, cleanMessage, categoryDraft);
       await this.appendConversation(user.id, phone, recentMessages, cleanMessage, reply);
-      return { reply };
+      return { reply, actions: this.interactionsForReply(reply) };
     }
 
     if (this.isMenuCommand(cleanMessage)) {
       await this.clearPendingMessage(user.id);
-      const reply = this.helpReply();
+      const reply = await this.contextualMenuReply(user.id);
       await this.appendConversation(user.id, phone, recentMessages, cleanMessage, reply);
-      return { reply };
+      return { reply, actions: this.interactionsForReply(reply) };
     }
 
     const paymentDraft = this.parsePaymentDraft(pendingValue);
     if (paymentDraft) {
       const reply = await this.handlePaymentSelection(user.id, phone, cleanMessage, paymentDraft);
       await this.appendConversation(user.id, phone, recentMessages, cleanMessage, reply);
-      return { reply };
+      return { reply, actions: this.interactionsForReply(reply) };
     }
 
     const mutationDraft = this.parseMutationDraft(pendingValue);
     if (mutationDraft) {
       const reply = await this.handleMutationConfirmation(user.id, cleanMessage, mutationDraft);
       await this.appendConversation(user.id, phone, recentMessages, cleanMessage, reply);
-      return { reply };
+      return { reply, actions: this.interactionsForReply(reply) };
     }
 
     const transactionDraft = this.parseTransactionDraft(pendingValue);
     if (transactionDraft) {
       const reply = await this.handleTransactionConfirmation(user.id, phone, cleanMessage, transactionDraft);
       await this.appendConversation(user.id, phone, recentMessages, cleanMessage, reply);
-      return { reply };
+      return { reply, actions: this.interactionsForReply(reply) };
+    }
+
+    const pendingAction = this.parsePendingAction(conversation);
+    if (pendingAction) {
+      const reply = await this.handlePendingAction(user.id, phone, cleanMessage, pendingAction);
+      await this.appendConversation(user.id, phone, recentMessages, cleanMessage, reply);
+      return { reply, actions: this.interactionsForReply(reply) };
     }
 
     if (this.isCancelCommand(cleanMessage)) {
@@ -392,7 +552,7 @@ export class WhatsappService {
         ? 'Conversa cancelada. Nenhuma informacao pendente foi salva.'
         : 'Nao ha nenhuma conversa pendente para cancelar.';
       await this.appendConversation(user.id, phone, recentMessages, cleanMessage, reply);
-      return { reply };
+      return { reply, actions: this.interactionsForReply(reply) };
     }
 
     const pendingDetails = this.pendingDetailsText(conversation);
@@ -403,7 +563,7 @@ export class WhatsappService {
     ) {
       const reply = this.audioAmountNotCapturedReply(pendingDetails);
       await this.appendConversation(user.id, phone, recentMessages, cleanMessage, reply);
-      return { reply };
+      return { reply, actions: this.interactionsForReply(reply) };
     }
 
     const textToProcess = pendingDetails ? `${pendingDetails}. ${cleanMessage}` : cleanMessage;
@@ -419,7 +579,7 @@ export class WhatsappService {
       recentMessages,
     );
     await this.appendConversation(user.id, phone, recentMessages, cleanMessage, reply);
-    return { reply };
+    return { reply, actions: this.interactionsForReply(reply) };
   }
 
   async getAssistantActivity(userId: string): Promise<{
@@ -473,29 +633,63 @@ export class WhatsappService {
     message: string,
     recentMessages: WhatsappConversationMessage[],
   ): Promise<string> {
+    if (this.isUndoCommand(message)) {
+      this.recordIntent('UNDO_TRANSACTION', 1);
+      this.recordAction('UNDO_TRANSACTION');
+      return this.undoLastTransaction(userId);
+    }
+
+    const intelligenceReply = await this.tryProductIntelligenceMessage(userId, message);
+    if (intelligenceReply) {
+      this.recordIntent('PRODUCT_INSIGHT', 1);
+      this.recordAction('QUERY_PRODUCT_INSIGHT');
+      return intelligenceReply;
+    }
+
     const accountReply = await this.tryCreateFinancialAccount(userId, message);
     if (accountReply) {
+      this.recordIntent('CREATE_ACCOUNT', 1);
+      this.recordAction('CREATE_ACCOUNT');
       return accountReply;
     }
 
     const budgetReply = await this.trySetCategoryBudget(userId, message);
     if (budgetReply) {
+      this.recordIntent('SET_BUDGET', 1);
+      this.recordAction('SET_BUDGET');
       return budgetReply;
     }
 
     const mutationReply = await this.tryCreateMutationDraft(userId, phone, message);
     if (mutationReply) {
+      this.recordIntent('MUTATE_TRANSACTION', 1);
+      this.recordAction('PREPARE_TRANSACTION_MUTATION');
       return mutationReply;
     }
 
+    const actionClassification = await this.classifyAction(message, recentMessages);
+    const actionReply = await this.executeClassifiedAction(
+      userId,
+      phone,
+      message,
+      actionClassification,
+    );
+    if (actionReply !== null) return actionReply;
+
     if (this.isHelpRequest(message)) {
+      this.recordIntent('HELP', 1);
+      this.recordAction('SHOW_HELP');
       return this.helpReply();
     }
     if (this.isKnownFinancialQuestion(message)) {
+      this.recordIntent('FINANCIAL_QUERY', 1);
+      this.recordAction('QUERY_FINANCES');
       return this.answerQuestion(userId, message);
     }
 
     if (this.isTransactionWithoutAmount(message)) {
+      this.recordIntent('CREATE_TRANSACTION', 0.8);
+      this.recordAction('REQUEST_TRANSACTION_AMOUNT');
       await this.setPendingMessage(
         userId,
         phone,
@@ -507,6 +701,8 @@ export class WhatsappService {
     }
 
     if (this.needsMoreDescription(message)) {
+      this.recordIntent('CREATE_TRANSACTION', 0.8);
+      this.recordAction('REQUEST_TRANSACTION_DESCRIPTION');
       await this.setPendingMessage(
         userId,
         phone,
@@ -518,11 +714,17 @@ export class WhatsappService {
     }
 
     if (this.looksLikeTransaction(message)) {
+      this.recordIntent('CREATE_TRANSACTION', 0.9);
+      this.recordAction('CREATE_TRANSACTION_DRAFT');
       return this.createTransactionFromMessage(userId, phone, message);
     }
 
     try {
-      const classification = await this.geminiService.classifyWhatsappMessage(message, recentMessages);
+      const classification = await this.measureAi(
+        GEMINI_PROMPT_VERSIONS.whatsappIntent,
+        () => this.geminiService.classifyWhatsappMessage(message, recentMessages),
+      );
+      this.recordIntent(classification.intent, classification.confidence);
 
       if (classification.confidence < 0.6) {
         return '🤔 Não entendi com segurança. Você quer registrar um lançamento ou consultar suas finanças?';
@@ -538,12 +740,13 @@ export class WhatsappService {
           classification.intent === 'FINANCIAL_QUERY'
             ? await this.buildFinancialContext(userId)
             : 'Nenhuma consulta financeira foi solicitada nesta mensagem.';
-        return this.geminiService.generateWhatsappReply({
+        this.recordAction('GENERATE_FINANCIAL_REPLY');
+        return this.measureAi(GEMINI_PROMPT_VERSIONS.whatsappReply, () => this.geminiService.generateWhatsappReply({
           message,
           userName,
           financialContext,
           recentMessages,
-        });
+        }));
       }
     } catch {
       if (this.isGreeting(message)) {
@@ -553,6 +756,231 @@ export class WhatsappService {
     }
 
     return '💬 Posso registrar receitas e gastos ou responder perguntas sobre suas finanças. O que você quer consultar?';
+  }
+
+  private async classifyAction(
+    message: string,
+    recentMessages: WhatsappConversationMessage[],
+  ): Promise<WhatsappActionClassification | null> {
+    const rule = this.actionClassifier.classify(message);
+    if (rule) this.recordIntent(rule.action, rule.confidence);
+    let ai: WhatsappActionClassification | null = null;
+    const needsAi = !rule ||
+      rule.action === 'CREATE_RECEIVABLE' ||
+      rule.action === 'CREATE_PAYABLE' ||
+      (rule.action === 'UPDATE_CATEGORY' &&
+        (!rule.entities.currentCategoryName || !rule.entities.newCategoryName));
+    try {
+      const classifier = this.geminiService as GeminiService & {
+        classifyWhatsappAction?: (
+          text: string,
+          history: WhatsappConversationMessage[],
+        ) => Promise<WhatsappActionClassification>;
+      };
+      if (needsAi && classifier.classifyWhatsappAction) {
+        ai = await this.measureAi(
+          GEMINI_PROMPT_VERSIONS.whatsappAction,
+          () => classifier.classifyWhatsappAction!(message, recentMessages),
+        );
+      }
+    } catch {
+      ai = null;
+    }
+
+    if (rule) {
+      const ruleEntities = Object.fromEntries(
+        Object.entries(rule.entities).filter(([, value]) => value !== undefined),
+      );
+      return {
+        ...rule,
+        entities: rule.action === 'CREATE_RECEIVABLE' || rule.action === 'CREATE_PAYABLE'
+          ? { ...ruleEntities, ...(ai?.entities ?? {}) }
+          : { ...(ai?.entities ?? {}), ...ruleEntities },
+        source: ai ? 'HYBRID' : 'RULE',
+      };
+    }
+    if (ai && ai.confidence >= 0.6) this.recordIntent(ai.action, ai.confidence);
+    return ai && ai.confidence >= 0.6 ? ai : null;
+  }
+
+  private async executeClassifiedAction(
+    userId: string,
+    phone: string,
+    message: string,
+    classification: WhatsappActionClassification | null,
+  ): Promise<string | null> {
+    if (!classification) return null;
+    this.recordIntent(classification.action, classification.confidence);
+    this.recordAction(classification.action);
+    const entities = classification.entities;
+    if (classification.ambiguity === 'CATEGORY_CREATE_OR_QUERY' && entities.categoryName) {
+      await this.setPendingAction(userId, phone, {
+        action: 'DISAMBIGUATE_CATEGORY',
+        categoryName: entities.categoryName,
+      });
+      return `Você quer criar uma categoria chamada ${entities.categoryName} ou consultar os gastos dessa categoria?`;
+    }
+
+    switch (classification.action) {
+      case 'CREATE_CATEGORY':
+        if (!entities.categoryName) {
+          await this.setPendingAction(userId, phone, { action: 'CREATE_CATEGORY' });
+          return 'Qual será o nome da nova categoria? Por exemplo: Academia, Mercado ou Material de trabalho.';
+        }
+        return this.createCategoryAction(userId, entities.categoryName);
+      case 'LIST_CATEGORIES':
+        return this.listCategoriesAction(userId);
+      case 'UPDATE_CATEGORY':
+        if (!entities.currentCategoryName || !entities.newCategoryName) {
+          await this.setPendingAction(userId, phone, {
+            action: 'UPDATE_CATEGORY',
+            ...(entities.currentCategoryName ? { currentCategoryName: entities.currentCategoryName } : {}),
+          });
+          return entities.currentCategoryName
+            ? `Qual será o novo nome da categoria ${entities.currentCategoryName}?`
+            : 'Qual categoria você quer renomear? Responda, por exemplo: Mercado para Supermercado.';
+        }
+        return this.updateCategoryAction(userId, entities.currentCategoryName, entities.newCategoryName);
+      case 'DELETE_CATEGORY':
+        if (!entities.categoryName) return 'Qual categoria você quer excluir?';
+        await this.setPendingAction(userId, phone, {
+          action: 'DELETE_CATEGORY',
+          categoryName: entities.categoryName,
+          awaitingConfirmation: true,
+        });
+        return `Confirma a exclusão da categoria ${entities.categoryName}? Responda Confirmar ou Cancelar.`;
+      case 'CREATE_TRANSACTION':
+        return this.createTransactionFromMessage(userId, phone, message);
+      case 'QUERY_EXPENSES':
+        return this.answerQuestion(userId, message);
+      case 'SET_BUDGET':
+        return (await this.trySetCategoryBudget(userId, message)) ??
+          'Informe o limite e a categoria. Exemplo: definir orçamento de R$ 500 para Mercado.';
+      case 'CREATE_ACCOUNT':
+        return (await this.tryCreateFinancialAccount(userId, message)) ??
+          'Informe o tipo e o nome. Exemplo: criar conta Nubank ou adicionar carteira Dinheiro.';
+      case 'CREATE_RECEIVABLE':
+        return this.createBusinessEntryAction(
+          userId,
+          phone,
+          message,
+          BusinessEntryType.RECEIVABLE,
+          entities,
+        );
+      case 'CREATE_PAYABLE':
+        return this.createBusinessEntryAction(
+          userId,
+          phone,
+          message,
+          BusinessEntryType.PAYABLE,
+          entities,
+        );
+      case 'HELP':
+        return this.helpReply();
+      default:
+        return null;
+    }
+  }
+
+  private async createCategoryAction(userId: string, rawName: string): Promise<string> {
+    const name = this.safeCategoryActionName(rawName);
+    if (!name) return 'Informe um nome específico para a categoria.';
+    const categories = await this.prisma.category.findMany({ where: { userId }, select: { id: true, name: true } });
+    const existing = categories.find((item) => this.normalizeText(item.name) === this.normalizeText(name));
+    if (existing) return `A categoria ${existing.name} já está cadastrada.`;
+    const created = await this.prisma.category.create({ data: { userId, name } });
+    return `✅ Categoria ${created.name} criada com sucesso.`;
+  }
+
+  private async listCategoriesAction(userId: string): Promise<string> {
+    const categories = await this.prisma.category.findMany({
+      where: { userId },
+      orderBy: { name: 'asc' },
+      select: { name: true },
+    });
+    if (!categories.length) return 'Você ainda não possui categorias. Diga “criar categoria” para começar.';
+    return ['🏷️ *Suas categorias*', ...categories.map((item, index) => `${index + 1}. ${item.name}`)].join('\n');
+  }
+
+  private async updateCategoryAction(userId: string, currentRaw: string, nextRaw: string): Promise<string> {
+    const currentName = this.safeCategoryActionName(currentRaw);
+    const nextName = this.safeCategoryActionName(nextRaw);
+    if (!currentName || !nextName) return 'Informe o nome atual e o novo nome da categoria.';
+    const categories = await this.prisma.category.findMany({ where: { userId }, select: { id: true, name: true } });
+    const current = categories.find((item) => this.normalizeText(item.name) === this.normalizeText(currentName));
+    if (!current) return `Não encontrei a categoria ${currentName}.`;
+    const duplicate = categories.find((item) => this.normalizeText(item.name) === this.normalizeText(nextName));
+    if (duplicate && duplicate.id !== current.id) return `Já existe uma categoria chamada ${duplicate.name}.`;
+    const updated = await this.prisma.category.update({ where: { id: current.id }, data: { name: nextName } });
+    return `✅ Categoria ${current.name} renomeada para ${updated.name}.`;
+  }
+
+  private async deleteCategoryAction(userId: string, rawName: string): Promise<string> {
+    const name = this.safeCategoryActionName(rawName);
+    const categories = await this.prisma.category.findMany({ where: { userId }, select: { id: true, name: true } });
+    const category = categories.find((item) => this.normalizeText(item.name) === this.normalizeText(name));
+    if (!category) return `Não encontrei a categoria ${name}.`;
+    const references = await Promise.all([
+      this.prisma.transaction.count({ where: { userId, categoryId: category.id } }),
+      this.prisma.businessEntry.count({ where: { userId, categoryId: category.id } }),
+      this.prisma.recurringTransaction.count({ where: { userId, categoryId: category.id } }),
+    ]);
+    if (references.some((count) => count > 0)) {
+      return `Não posso excluir ${category.name} porque ela possui lançamentos, recorrências ou contas vinculadas.`;
+    }
+    await this.prisma.category.delete({ where: { id: category.id } });
+    return `✅ Categoria ${category.name} excluída.`;
+  }
+
+  private async createBusinessEntryAction(
+    userId: string,
+    phone: string,
+    message: string,
+    type: BusinessEntryType,
+    entities: WhatsappActionClassification['entities'],
+  ): Promise<string> {
+    const amount = Number(entities.amount);
+    const description = String(entities.description ?? '').trim().slice(0, 120);
+    const counterparty = String(entities.counterparty ?? '').trim().slice(0, 120);
+    const missing = [
+      !description ? 'descrição' : '',
+      !counterparty ? (type === BusinessEntryType.RECEIVABLE ? 'cliente' : 'fornecedor') : '',
+      !Number.isFinite(amount) || amount <= 0 ? 'valor' : '',
+      !entities.dueDate ? 'vencimento' : '',
+    ].filter(Boolean);
+    if (missing.length) {
+      await this.setPendingAction(userId, phone, {
+        action: type === BusinessEntryType.RECEIVABLE ? 'CREATE_RECEIVABLE' : 'CREATE_PAYABLE',
+        message,
+        entities,
+      });
+      const label = type === BusinessEntryType.RECEIVABLE ? 'conta a receber' : 'conta a pagar';
+      return `Para criar a ${label}, informe ${missing.join(', ')}. Exemplo: ${label} de R$ 250 do João, serviço de design, vencimento 30/07/2026.`;
+    }
+    const dueDate = new Date(entities.dueDate!);
+    if (Number.isNaN(dueDate.getTime())) return 'Não reconheci o vencimento. Envie uma data completa, como 30/07/2026.';
+    const category = await this.resolveCategory(
+      userId,
+      entities.categoryName ?? (type === BusinessEntryType.RECEIVABLE ? 'Contas a receber' : 'Contas a pagar'),
+      type === BusinessEntryType.RECEIVABLE ? TransactionType.INCOME : TransactionType.EXPENSE,
+    );
+    const entry = await this.prisma.businessEntry.create({
+      data: {
+        userId,
+        type,
+        title: description,
+        counterparty,
+        amount,
+        dueDate,
+        categoryId: category.id,
+      },
+    });
+    return `✅ ${type === BusinessEntryType.RECEIVABLE ? 'Conta a receber' : 'Conta a pagar'} criada: ${entry.title}, ${this.formatMoney(Number(entry.amount))}, vencimento ${dueDate.toLocaleDateString('pt-BR', { timeZone: 'UTC' })}.`;
+  }
+
+  private safeCategoryActionName(value?: string): string {
+    const cleaned = String(value ?? '').trim().replace(/[.!?]+$/g, '').replace(/\s+/g, ' ').slice(0, 60);
+    return cleaned ? this.titleCasePt(cleaned) : '';
   }
 
   private async createTransactionFromMessage(
@@ -567,10 +995,10 @@ export class WhatsappService {
 
     let extracted;
     try {
-      extracted = await this.geminiService.extractFinancialData(message, {
+      extracted = await this.measureAi(GEMINI_PROMPT_VERSIONS.financialExtraction, () => this.geminiService.extractFinancialData(message, {
         channelNames: channels.map((item) => item.name),
         categoryNames: categories.map((item) => item.name),
-      });
+      }));
     } catch {
       return this.transactionExtractionFailedReply();
     }
@@ -670,6 +1098,7 @@ export class WhatsappService {
       type: extracted.type as TransactionType,
       scope,
       categoryHint,
+      source: this.sessionContext.getStore()?.transactionSource ?? TransactionSource.WHATSAPP,
       ...(scope === FinancialScope.BUSINESS && extracted.channelHint
         ? { channelHint: extracted.channelHint }
         : {}),
@@ -1532,58 +1961,26 @@ export class WhatsappService {
 
   private transactionDraftConfirmation(draft: WhatsappTransactionDraft): string {
     const type = draft.type === TransactionType.EXPENSE ? 'Despesa' : 'Receita';
-    const headline =
-      draft.type === TransactionType.EXPENSE
-        ? '🧾 *Despesa pronta para salvar*'
-        : '🧾 *Receita pronta para salvar*';
     const amountLine =
       draft.installmentCount && draft.totalAmount
-        ? `💵 *Valor: ${this.formatMoney(draft.totalAmount)} em ${draft.installmentCount}x de ${this.formatMoney(draft.amount)}*`
-        : `💵 *Valor: ${this.formatMoney(draft.amount)}*`;
-    const actionLines = draft.possibleDuplicate
-      ? [
-          '✅ Para criar mesmo assim, responda *Ok*, *Sim* ou *Confirmar*.',
-          '🗑️ Para desistir, responda *Cancelar*.',
-        ]
-      : [
-          '✅ Para salvar, responda *Confirmar*.',
-          '✏️ Para ajustar, responda algo como:',
-          '• "altere o valor para R$ 25"',
-          '• "mude o título para compra de toalha"',
-          '• "troque o pagamento para Nubank"',
-          '🗑️ Para desistir, responda *Cancelar*.',
-        ];
-    const reviewIntro = draft.lowConfidence
-      ? [
-          '⚠️ *Entendi com pouca segurança.*',
-          'Confira principalmente título, valor, categoria e pagamento antes de confirmar.',
-          '',
-        ]
-      : [];
+        ? `${this.formatMoney(draft.totalAmount)} em ${draft.installmentCount}x de ${this.formatMoney(draft.amount)}`
+        : this.formatMoney(draft.amount);
 
     return [
-      draft.possibleDuplicate ? '⚠️ *Possível lançamento duplicado*' : '',
       draft.possibleDuplicate
-        ? `Já existe: *${draft.possibleDuplicate.description}* — ${this.formatMoney(draft.possibleDuplicate.amount)} em ${this.formatDateTime(draft.possibleDuplicate.date)}.`
+        ? '⚠️ *Possível lançamento duplicado*'
+        : `🧾 *${type} pronta para salvar*`,
+      draft.possibleDuplicate
+        ? `Já existe ${draft.possibleDuplicate.description}, ${this.formatMoney(draft.possibleDuplicate.amount)}.`
         : '',
-      headline,
-      'Revise antes de salvar:',
-      '',
-      ...reviewIntro,
-      `${draft.type === TransactionType.EXPENSE ? '💸' : '💰'} *Tipo: ${type}*`,
-      `📝 *Título: ${draft.description}*`,
-      amountLine,
-      draft.transactionDate
-        ? `📅 *Data: ${this.formatDateOnly(draft.transactionDate)}*`
-        : '',
-      `🏷️ *Categoria: ${draft.categoryHint}*`,
-      draft.channelHint ? `🛒 *Canal: ${draft.channelHint}*` : '',
-      draft.paymentLabel
-        ? `🏦 *Pagamento: ${draft.paymentLabel}*`
-        : '🏦 *Pagamento: não informado*',
-      `👤 *Modo: ${draft.scope === FinancialScope.BUSINESS ? 'Negócio' : 'Pessoal'}*`,
-      '',
-      ...actionLines,
+      draft.lowConfidence ? '⚠️ Entendi com pouca segurança. Confira principalmente os dados abaixo.' : '',
+      draft.possibleDuplicate ? 'Revise antes de salvar.' : '',
+      `Título: ${draft.description}`,
+      `Valor: ${amountLine}`,
+      `Categoria: ${draft.categoryHint}`,
+      `Pagamento: ${draft.paymentLabel ?? 'não informado'}`,
+      `Modo: ${draft.scope === FinancialScope.BUSINESS ? 'Negócio' : 'Pessoal'}${draft.transactionDate ? ` · ${this.formatDateOnly(draft.transactionDate)}` : ''}`,
+      draft.possibleDuplicate ? 'Para criar mesmo assim, responda Ok ou confirme.' : 'Confirme, ajuste ou cancele.',
     ]
       .filter(Boolean)
       .join('\n');
@@ -1594,6 +1991,7 @@ export class WhatsappService {
     phone: string,
     message: string,
     draft: WhatsappTransactionDraft,
+    inboundMessageId?: string,
   ): Promise<string> {
     const command = this.normalizeCommand(message);
     const confirmsDuplicate =
@@ -1677,7 +2075,7 @@ export class WhatsappService {
             : draft.description,
         amount: installmentAmount,
         type: draft.type,
-        source: TransactionSource.WHATSAPP,
+        source: draft.source ?? TransactionSource.WHATSAPP,
         scope: draft.scope,
         categoryId: category.id,
         ...(draft.transactionDate || installmentCount > 1
@@ -1686,6 +2084,7 @@ export class WhatsappService {
         ...(channel ? { channelId: channel.id } : {}),
         ...(draft.accountId ? { accountId: draft.accountId } : {}),
         ...(draft.creditCardId ? { creditCardId: draft.creditCardId } : {}),
+        ...(inboundMessageId ? { sourceEventKey: `${inboundMessageId}:${index}` } : {}),
       });
       transactions.push(transaction);
     }
@@ -2105,6 +2504,7 @@ export class WhatsappService {
 
   private async tryCreateFinancialAccount(userId: string, message: string): Promise<string | null> {
     const normalized = this.normalizeText(message);
+    if (/\bcontas? a (?:receber|pagar)\b/.test(normalized)) return null;
     const isCreateIntent = /\b(criar|crie|nova|novo|cadastrar|cadastre|adicionar|adicione)\b/.test(
       normalized,
     );
@@ -2498,7 +2898,18 @@ export class WhatsappService {
   }
 
   private async getConversation(userId: string, phone: string) {
-    return this.conversationStore.get(userId, phone);
+    return this.conversationStore.get(userId, phone, this.currentSessionChannel());
+  }
+
+  private async claimConversationTurn(userId: string, expectedVersion: number): Promise<void> {
+    const claimed = await this.conversationStore.claimTurn(
+      userId,
+      expectedVersion,
+      this.currentSessionChannel(),
+    );
+    if (!claimed) {
+      throw new ConflictException('Outra mensagem atualizou esta conversa. Envie novamente para continuar.');
+    }
   }
 
   private async setPendingMessage(
@@ -2509,6 +2920,7 @@ export class WhatsappService {
     pendingStep = 'WAITING_INPUT',
     pendingData: Prisma.InputJsonValue = { text: pendingText },
   ): Promise<void> {
+    assertFlowTransition('IDLE', pendingStep);
     await this.conversationStore.setPending({
       userId,
       phone,
@@ -2516,7 +2928,140 @@ export class WhatsappService {
       pendingType,
       pendingStep,
       pendingData,
+      channel: this.currentSessionChannel(),
     });
+  }
+
+  private async setPendingAction(
+    userId: string,
+    phone: string,
+    action: WhatsappPendingAction,
+  ): Promise<void> {
+    await this.setPendingMessage(
+      userId,
+      phone,
+      `__ACTION__:${JSON.stringify(action)}`,
+      'ACTION',
+      action.action === 'DELETE_CATEGORY' ? 'WAITING_CONFIRMATION' : 'WAITING_INPUT',
+      action as unknown as Prisma.InputJsonValue,
+    );
+  }
+
+  private parsePendingAction(conversation: WhatsappConversationState): WhatsappPendingAction | null {
+    if (conversation.pendingType !== 'ACTION') return null;
+    const data = conversation.pendingData;
+    if (!data || typeof data !== 'object' || Array.isArray(data) || !('action' in data)) return null;
+    const action = String(data.action);
+    if (action === 'CREATE_CATEGORY') return { action };
+    if (action === 'UPDATE_CATEGORY') {
+      return {
+        action,
+        ...('currentCategoryName' in data && typeof data.currentCategoryName === 'string'
+          ? { currentCategoryName: data.currentCategoryName }
+          : {}),
+      };
+    }
+    if (
+      action === 'DELETE_CATEGORY' &&
+      'categoryName' in data &&
+      typeof data.categoryName === 'string'
+    ) {
+      return { action, categoryName: data.categoryName, awaitingConfirmation: true };
+    }
+    if (
+      action === 'DISAMBIGUATE_CATEGORY' &&
+      'categoryName' in data &&
+      typeof data.categoryName === 'string'
+    ) {
+      return { action, categoryName: data.categoryName };
+    }
+    if (
+      (action === 'CREATE_RECEIVABLE' || action === 'CREATE_PAYABLE') &&
+      'message' in data &&
+      typeof data.message === 'string' &&
+      'entities' in data &&
+      data.entities &&
+      typeof data.entities === 'object' &&
+      !Array.isArray(data.entities)
+    ) {
+      return {
+        action,
+        message: data.message,
+        entities: data.entities as WhatsappActionClassification['entities'],
+      };
+    }
+    return null;
+  }
+
+  private async handlePendingAction(
+    userId: string,
+    phone: string,
+    message: string,
+    pending: WhatsappPendingAction,
+  ): Promise<string> {
+    const command = this.normalizeCommand(message);
+    if (/^(cancelar|cancela|nao|não)$/.test(command)) {
+      await this.clearPendingMessage(userId);
+      return 'Operação cancelada.';
+    }
+    if (pending.action === 'CREATE_CATEGORY') {
+      await this.clearPendingMessage(userId);
+      return this.createCategoryAction(userId, message);
+    }
+    if (pending.action === 'UPDATE_CATEGORY') {
+      let current = pending.currentCategoryName;
+      let next = message;
+      if (!current) {
+        const match = message.match(/^(.+?)\s+(?:para|pra|por)\s+(.+)$/i);
+        current = match?.[1]?.trim();
+        next = match?.[2]?.trim() ?? '';
+      }
+      if (!current || !next) {
+        return 'Responda com o nome atual e o novo nome. Exemplo: Mercado para Supermercado.';
+      }
+      await this.clearPendingMessage(userId);
+      return this.updateCategoryAction(userId, current, next);
+    }
+    if (pending.action === 'DELETE_CATEGORY') {
+      if (!this.isConfirmationCommand(command)) {
+        return `Para excluir ${pending.categoryName}, responda Confirmar ou Cancelar.`;
+      }
+      await this.clearPendingMessage(userId);
+      return this.deleteCategoryAction(userId, pending.categoryName);
+    }
+    if (pending.action === 'CREATE_RECEIVABLE' || pending.action === 'CREATE_PAYABLE') {
+      const combinedMessage = `${pending.message}. ${message}`;
+      await this.clearPendingMessage(userId);
+      const classification = await this.classifyAction(combinedMessage, []);
+      const expectedAction = pending.action;
+      const safeClassification: WhatsappActionClassification = {
+        action: expectedAction,
+        confidence: classification?.confidence ?? 0.8,
+        source: classification?.source ?? 'RULE',
+        entities: { ...pending.entities, ...(classification?.entities ?? {}) },
+      };
+      return (await this.executeClassifiedAction(
+        userId,
+        phone,
+        combinedMessage,
+        safeClassification,
+      )) ?? 'Não consegui completar essa conta. Informe cliente ou fornecedor, descrição, valor e vencimento.';
+    }
+    if (pending.action === 'DISAMBIGUATE_CATEGORY') {
+      if (/\b(criar|crie|adicionar|adicione)\b/.test(command)) {
+        await this.clearPendingMessage(userId);
+        return this.createCategoryAction(userId, pending.categoryName);
+      }
+      if (/\b(consultar|ver|mostrar|gastos|despesas)\b/.test(command)) {
+        await this.clearPendingMessage(userId);
+        return this.answerQuestion(userId, `gastos da categoria ${pending.categoryName}`);
+      }
+      await this.setPendingAction(userId, phone, pending);
+      return `Você quer criar a categoria ${pending.categoryName} ou consultar os gastos dela?`;
+    }
+
+    await this.clearPendingMessage(userId);
+    return 'Não consegui retomar essa solicitação. Envie o pedido novamente.';
   }
 
   private async setPendingTransactionDraft(
@@ -2580,7 +3125,7 @@ export class WhatsappService {
   }
 
   private async clearPendingMessage(userId: string): Promise<void> {
-    await this.conversationStore.clearPending(userId);
+    await this.conversationStore.clearPending(userId, this.currentSessionChannel());
   }
 
   private assistantPendingSummary(conversation: {
@@ -2649,6 +3194,23 @@ export class WhatsappService {
             ? `Excluir ${mutationDraft.accountName}`
             : `Alterar ${mutationDraft.description}`,
         action: 'Responda Confirmar ou Cancelar.',
+        updatedAt: conversation.updatedAt.toISOString(),
+      };
+    }
+
+    const pendingAction = this.parsePendingAction(conversation);
+    if (pendingAction) {
+      const categoryName = 'categoryName' in pendingAction ? pendingAction.categoryName : undefined;
+      return {
+        type: 'ACTION',
+        step: conversation.pendingStep ?? 'WAITING_INPUT',
+        title: pendingAction.action === 'DELETE_CATEGORY'
+          ? 'Exclusão de categoria pendente'
+          : 'Ação aguardando informação',
+        summary: categoryName ? `Categoria: ${categoryName}` : 'Continue a solicitação iniciada com o Din.',
+        action: pendingAction.action === 'DELETE_CATEGORY'
+          ? 'Responda Confirmar ou Cancelar.'
+          : 'Responda à pergunta do Din.',
         updatedAt: conversation.updatedAt.toISOString(),
       };
     }
@@ -2837,7 +3399,49 @@ export class WhatsappService {
       current,
       userMessage,
       assistantMessage,
+      channel: this.currentSessionChannel(),
     });
+  }
+
+  private currentSessionChannel(): AssistantSessionChannel {
+    return this.sessionContext.getStore()?.channel ?? 'WHATSAPP';
+  }
+
+  private currentTelemetry(): WhatsappExecutionTelemetry | undefined {
+    return this.sessionContext.getStore()?.telemetry;
+  }
+
+  private recordIntent(intent: string, confidence: number): void {
+    const telemetry = this.currentTelemetry();
+    if (!telemetry) return;
+    telemetry.detectedIntent = intent.slice(0, 80);
+    telemetry.confidence = Math.max(0, Math.min(1, confidence));
+  }
+
+  private recordAction(action: string): void {
+    const telemetry = this.currentTelemetry();
+    if (telemetry) telemetry.executedAction = action.slice(0, 100);
+  }
+
+  private async measureAi<T>(promptVersion: string, operation: () => Promise<T>): Promise<T> {
+    const startedAt = Date.now();
+    const telemetry = this.currentTelemetry();
+    if (telemetry) telemetry.promptVersions.add(promptVersion);
+    try {
+      return await operation();
+    } finally {
+      if (telemetry) telemetry.aiDurationMs += Date.now() - startedAt;
+    }
+  }
+
+  private errorCode(error?: string | null): string | null {
+    if (!error) return null;
+    const normalized = this.normalizeText(error);
+    if (normalized.includes('timeout') || normalized.includes('demorou')) return 'TIMEOUT';
+    if (normalized.includes('nao autorizado') || normalized.includes('unauthorized')) return 'UNAUTHORIZED';
+    if (normalized.includes('transcrev')) return 'AUDIO_TRANSCRIPTION_FAILED';
+    if (normalized.includes('duplic')) return 'DUPLICATE';
+    return 'PROCESSING_ERROR';
   }
 
   private parseRecentMessages(value: unknown): WhatsappConversationMessage[] {
@@ -2871,6 +3475,135 @@ export class WhatsappService {
     ].join('\n');
   }
 
+  private async tryProductIntelligenceMessage(userId: string, message: string): Promise<string | null> {
+    if (!this.productIntelligence) return null;
+    const normalized = this.normalizeText(message);
+    if (/\b(previsao|projecao)\b.*\b(saldo|caixa|fim do mes)\b/.test(normalized)) {
+      const forecast = await this.productIntelligence.forecast(userId);
+      return [
+        `🔮 *Previsão para o fim do mês: ${this.formatMoney(forecast.projectedBalance)}*`,
+        `Saldo calculado hoje: ${this.formatMoney(forecast.currentBalance)}.`,
+        `Entradas esperadas: ${this.formatMoney(forecast.components.expectedIncome)}.`,
+        `Saídas esperadas: ${this.formatMoney(forecast.components.expectedExpense)}.`,
+        `A receber: ${this.formatMoney(forecast.components.receivable)} · A pagar: ${this.formatMoney(forecast.components.payable)}.`,
+        '',
+        `Como calculei: ${forecast.explanation.calculation}.`,
+        'A previsão usa a média diária dos últimos 60 dias e muda conforme você registra novos dados.',
+      ].join('\n');
+    }
+    if (/\b(sugestoes|insights|alertas inteligentes|fora do padrao)\b/.test(normalized)) {
+      const insights = await this.productIntelligence.list(userId, true);
+      if (!insights.length) return '✅ Não encontrei nenhum gasto fora do padrão ou alerta importante agora.';
+      return [
+        '✨ *Sugestões do Din*',
+        ...insights.slice(0, 3).map((item, index) => `${index + 1}. *${item.title}*\n${item.summary}`),
+        '',
+        'No app você pode revisar o cálculo e escolher Criar orçamento, Lembrar depois ou Ignorar.',
+      ].join('\n');
+    }
+    if (/\b(como|porque|por que)\b.*\b(calculou|chegou|resultado|previsao)\b/.test(normalized)) {
+      const insights = await this.productIntelligence.list(userId, false);
+      const insight = insights[0];
+      if (!insight) return 'Ainda não há um resultado inteligente recente para explicar.';
+      const explanation = this.asRecord(insight.explanation);
+      const calculation = String(explanation?.calculation ?? explanation?.rule ?? 'Usei apenas os lançamentos registrados na sua conta.');
+      return `🧮 *${insight.title}*\n${calculation}\n\nBase usada: ${JSON.stringify(explanation).slice(0, 600)}.`;
+    }
+    return null;
+  }
+
+  private async tryInsightAction(userId: string, message: string): Promise<string | null> {
+    if (!this.productIntelligence) return null;
+    const match = message.trim().match(/^insight:([^:]+):(CREATE_BUDGET|REMIND_LATER|IGNORE)$/i);
+    if (!match?.[1] || !match[2]) return null;
+    const action = match[2].toUpperCase() as InsightAction;
+    await this.productIntelligence.act(userId, match[1], { action });
+    if (action === InsightAction.CREATE_BUDGET) return '✅ Orçamento criado a partir da sugestão. Você pode ajustá-lo no app quando quiser.';
+    if (action === InsightAction.REMIND_LATER) return '⏰ Combinado. Vou lembrar você novamente em 24 horas.';
+    return '👍 Sugestão ignorada. Não vou insistir neste alerta.';
+  }
+
+  private async contextualMenuReply(userId: string): Promise<string> {
+    const recent = await this.prisma.transaction.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+      select: { type: true, scope: true },
+    });
+    const transactions = recent ?? [];
+    if (!transactions.length) {
+      return [
+        '👋 *Posso ajudar. Por onde quer começar?*',
+        '1. Adicionar gasto',
+        '2. Adicionar receita',
+        '3. Ver meu saldo',
+        '',
+        'Você também pode escrever ou enviar um áudio.',
+      ].join('\n');
+    }
+
+    const expenseCount = transactions.filter((item) => item.type === TransactionType.EXPENSE).length;
+    const businessCount = transactions.filter((item) => item.scope === FinancialScope.BUSINESS).length;
+    const primary = expenseCount >= transactions.length / 2 ? 'Ver gastos do mês' : 'Ver receitas do mês';
+    return [
+      '⚡ *Atalhos para você*',
+      `1. ${primary}`,
+      `2. ${businessCount > transactions.length / 2 ? 'Resumo do negócio' : 'Adicionar lançamento'}`,
+      '3. Desfazer último lançamento',
+      '',
+      'Digite uma opção ou faça seu pedido normalmente.',
+    ].join('\n');
+  }
+
+  private isUndoCommand(message: string): boolean {
+    const normalized = this.normalizeText(message).trim();
+    return /^(desfazer|desfaz|desfaca|desfazer ultimo lancamento|desfazer o ultimo lancamento|apagar ultimo lancamento)$/.test(normalized);
+  }
+
+  private async undoLastTransaction(userId: string): Promise<string> {
+    const transaction = await this.prisma.transaction.findFirst({
+      where: { userId, source: { in: [TransactionSource.WHATSAPP, TransactionSource.AUDIO, TransactionSource.RECEIPT] } },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, description: true, amount: true, type: true },
+    });
+    if (!transaction) {
+      return 'Não encontrei um lançamento recente do Din para desfazer.';
+    }
+    await this.transactionService.delete(userId, transaction.id);
+    return `↩️ Desfeito: ${transaction.description}, ${this.formatMoney(Number(transaction.amount))}.`;
+  }
+
+  interactionsForReply(reply: string): WhatsappQuickAction[] {
+    const normalized = this.normalizeText(reply);
+    if (/confirmar|confirme|pronta para salvar|possivel duplicidade/.test(normalized)) {
+      return [
+        { id: 'confirm', label: 'Confirmar', value: 'Confirmar' },
+        { id: 'adjust', label: 'Ajustar', value: 'Alterar lançamento' },
+        { id: 'cancel', label: 'Cancelar', value: 'Cancelar' },
+      ];
+    }
+    if (/quer criar a categoria/.test(normalized)) {
+      return [
+        { id: 'create-category', label: 'Criar categoria', value: 'Criar' },
+        { id: 'query-category', label: 'Consultar gastos', value: 'Consultar gastos' },
+        { id: 'cancel', label: 'Cancelar', value: 'Cancelar' },
+      ];
+    }
+    const numbered = reply
+      .split(/\r?\n/)
+      .map((line) => line.match(/^\s*([1-3])[.)]\s+(.+)$/))
+      .filter((match): match is RegExpMatchArray => Boolean(match))
+      .slice(0, 3);
+    if (numbered.length) {
+      return numbered.map((match) => ({
+        id: `option-${match[1] ?? ''}`,
+        label: (match[2] ?? '').replace(/[*_~]/g, '').slice(0, 20),
+        value: match[1] ?? '',
+      }));
+    }
+    return [];
+  }
+
   private async createDinActivityEvent(input: {
     userId?: string | null;
     conversationId?: string | null;
@@ -2884,6 +3617,8 @@ export class WhatsappService {
     errorMessage?: string | null;
     payload?: Prisma.InputJsonValue;
     attempts?: number;
+    provider?: string | null;
+    externalMessageId?: string | null;
   }): Promise<string | null> {
     try {
       const event = await this.prisma.dinActivityEvent.create({
@@ -2900,6 +3635,9 @@ export class WhatsappService {
           errorMessage: input.errorMessage ?? null,
           payload: input.payload ?? Prisma.JsonNull,
           attempts: input.attempts ?? 0,
+          provider: input.provider ?? null,
+          externalMessageId: input.externalMessageId ?? null,
+          retentionUntil: new Date(Date.now() + 30 * 24 * 60 * 60_000),
         },
       });
       return event.id;
@@ -2922,6 +3660,14 @@ export class WhatsappService {
       errorMessage?: string | null;
       payload?: Prisma.InputJsonValue;
       attempts?: number;
+      detectedIntent?: string | null;
+      confidence?: number | null;
+      aiDurationMs?: number;
+      processingDurationMs?: number | null;
+      executedAction?: string | null;
+      errorCode?: string | null;
+      promptVersion?: string | null;
+      modelVersion?: string | null;
     },
   ): Promise<void> {
     if (!id) return;
@@ -2943,6 +3689,16 @@ export class WhatsappService {
           ...(input.errorMessage !== undefined ? { errorMessage: input.errorMessage } : {}),
           ...(input.payload !== undefined ? { payload: input.payload } : {}),
           ...(input.attempts !== undefined ? { attempts: input.attempts } : {}),
+          ...(input.detectedIntent !== undefined ? { detectedIntent: input.detectedIntent } : {}),
+          ...(input.confidence !== undefined ? { confidence: input.confidence } : {}),
+          ...(input.aiDurationMs !== undefined ? { aiDurationMs: input.aiDurationMs } : {}),
+          ...(input.processingDurationMs !== undefined
+            ? { processingDurationMs: input.processingDurationMs }
+            : {}),
+          ...(input.executedAction !== undefined ? { executedAction: input.executedAction } : {}),
+          ...(input.errorCode !== undefined ? { errorCode: input.errorCode } : {}),
+          ...(input.promptVersion !== undefined ? { promptVersion: input.promptVersion } : {}),
+          ...(input.modelVersion !== undefined ? { modelVersion: input.modelVersion } : {}),
         },
       });
     } catch {
@@ -2960,16 +3716,28 @@ export class WhatsappService {
       replyText: string;
       errorMessage?: string | null;
     },
+    deferDelivery = false,
   ): Promise<void> {
-    const delivery = await this.safeReply(phone, input.replyText);
+    const delivery = deferDelivery
+      ? { sent: false, attempts: 0 }
+      : await this.safeReply(phone, input.replyText);
+    const telemetry = this.currentTelemetry();
     await this.updateDinActivityEvent(id, {
       ...(input.eventType !== undefined ? { eventType: input.eventType } : {}),
       ...(input.userId !== undefined ? { userId: input.userId } : {}),
       status: input.status,
-      sendStatus: delivery.sent ? 'SENT' : 'FAILED',
+      sendStatus: deferDelivery ? 'QUEUED' : delivery.sent ? 'SENT' : 'FAILED',
       replyText: input.replyText,
       errorMessage: delivery.errorMessage ?? input.errorMessage ?? null,
       attempts: delivery.attempts,
+      detectedIntent: telemetry?.detectedIntent ?? 'UNKNOWN',
+      confidence: telemetry?.confidence ?? null,
+      aiDurationMs: telemetry?.aiDurationMs ?? 0,
+      processingDurationMs: telemetry ? Date.now() - telemetry.startedAt : null,
+      executedAction: telemetry?.executedAction ?? 'NONE',
+      errorCode: this.errorCode(delivery.errorMessage ?? input.errorMessage),
+      promptVersion: telemetry ? [...telemetry.promptVersions].join(',') || null : null,
+      modelVersion: telemetry?.modelVersion ?? null,
     });
   }
 
@@ -2985,6 +3753,15 @@ export class WhatsappService {
     replyText: string | null;
     errorMessage: string | null;
     attempts: number;
+    externalMessageId: string | null;
+    detectedIntent: string | null;
+    confidence: number | null;
+    aiDurationMs: number;
+    processingDurationMs: number | null;
+    executedAction: string | null;
+    errorCode: string | null;
+    promptVersion: string | null;
+    modelVersion: string | null;
     createdAt: Date;
     updatedAt: Date;
   }): DinActivityEventView {
@@ -3000,6 +3777,15 @@ export class WhatsappService {
       replyText: event.replyText,
       errorMessage: event.errorMessage,
       attempts: event.attempts,
+      externalMessageId: event.externalMessageId,
+      detectedIntent: event.detectedIntent,
+      confidence: event.confidence,
+      aiDurationMs: event.aiDurationMs,
+      processingDurationMs: event.processingDurationMs,
+      executedAction: event.executedAction,
+      errorCode: event.errorCode,
+      promptVersion: event.promptVersion,
+      modelVersion: event.modelVersion,
       createdAt: event.createdAt.toISOString(),
       updatedAt: event.updatedAt.toISOString(),
     };
@@ -3039,6 +3825,14 @@ export class WhatsappService {
     return String(value || '').replace(/\D/g, '');
   }
 
+  private extractExternalMessageId(payload: WhatsappWebhookDto): string | null {
+    const data = this.asRecord(payload.data);
+    const key = this.asRecord(data?.key);
+    const value = payload.messageId ?? payload.id ?? data?.messageId ?? data?.id ?? key?.id;
+    const messageId = String(value ?? '').trim().slice(0, 200);
+    return messageId || null;
+  }
+
   private extractMessage(payload: WhatsappWebhookDto): string {
     const data = this.asRecord(payload.data);
     const nestedMessage = this.asRecord(data?.message);
@@ -3063,10 +3857,10 @@ export class WhatsappService {
     try {
       const audioBase64 = audio.base64 ?? (await this.downloadAudioBase64(audio.url));
       if (!audioBase64) return MEDIA_WITHOUT_DOWNLOADABLE_AUDIO;
-      const transcription = await this.geminiService.transcribeAudioBase64(
+      const transcription = await this.measureAi(GEMINI_PROMPT_VERSIONS.audioTranscription, () => this.geminiService.transcribeAudioBase64(
         audioBase64,
         this.normalizeAudioMimeType(audio.mimeType),
-      );
+      ));
       if (this.isSuspiciousAudioTranscription(transcription, audio.seconds)) {
         return null;
       }
@@ -3074,6 +3868,41 @@ export class WhatsappService {
     } catch {
       return null;
     }
+  }
+
+  private hasImageSignal(payload: WhatsappWebhookDto): boolean {
+    const image = this.asRecord(payload.image) ?? this.asRecord(this.asRecord(payload.message)?.imageMessage)
+      ?? this.asRecord(this.asRecord(payload.data)?.image);
+    return Boolean(image || this.normalizeText(String(payload.messageType ?? payload.type ?? '')) === 'image');
+  }
+
+  private async extractReceiptMessage(payload: WhatsappWebhookDto): Promise<string | null> {
+    const message = this.asRecord(payload.message);
+    const data = this.asRecord(payload.data);
+    const image = this.asRecord(payload.image) ?? this.asRecord(message?.imageMessage) ?? this.asRecord(data?.image);
+    if (!image) return null;
+    const base64 = this.cleanImageBase64(this.stringValue(image.base64 ?? image.data ?? image.buffer ?? image.file));
+    const url = this.stringValue(image.url ?? image.mediaUrl ?? image.downloadUrl ?? image.fileUrl);
+    const imageBase64 = base64 ?? (url ? await this.downloadAudioBase64(url) : null);
+    if (!imageBase64) return null;
+    const mimeType = this.stringValue(image.mimeType ?? image.mimetype) ?? 'image/jpeg';
+    try {
+      const extracted = await this.measureAi(
+        GEMINI_PROMPT_VERSIONS.receiptExtraction,
+        () => this.geminiService.extractReceiptFromImageBase64(imageBase64, mimeType),
+      );
+      if (extracted.confidence < 0.55 || extracted.documentType === 'UNKNOWN') return null;
+      const action = extracted.type === 'INCOME' ? 'Recebi' : 'Gastei';
+      const date = extracted.date ? ` em ${extracted.date}` : '';
+      return `${action} R$ ${extracted.amount.toFixed(2).replace('.', ',')} em ${extracted.merchant}, categoria ${extracted.categoryHint}${date}`;
+    } catch {
+      return null;
+    }
+  }
+
+  private cleanImageBase64(value?: string | null): string | null {
+    if (!value) return null;
+    return value.replace(/^data:image\/[^;]+;base64,/i, '').trim() || null;
   }
 
   private audioTranscriptionFailedReply(): string {
