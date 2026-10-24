@@ -6,3 +6,11 @@ coverage/
 test-results/
 .DS_Store
 *.log
+
+# Financial backups and offline encryption keys must never enter the repository
+*.dump
+*.dump.age
+*.agekey
+*.pgpass
+*.pgpass.*
+*.backup
