@@ -24,7 +24,7 @@ const probes = [
 
 async function requestStatus(url) {
   const endpoint = new URL(url);
-  if (endpoint.protocol !== 'https:' || endpoint.username || endpoint.password) {
+  if (endpoint.protocol !== 'https:' || endpoint.username || endpoint.password || endpoint.search || endpoint.hash) {
     throw new Error('Endpoint must use HTTPS without embedded credentials');
   }
 
@@ -33,6 +33,7 @@ async function requestStatus(url) {
     method: 'GET',
     headers: { Accept: 'application/json', 'Cache-Control': 'no-cache' },
     signal: AbortSignal.timeout(BASE_TIMEOUT_MS),
+    redirect: 'error',
   });
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
