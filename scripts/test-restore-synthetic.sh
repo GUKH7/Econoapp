@@ -14,7 +14,7 @@ trap cleanup EXIT
 docker run --rm -d --network none --name "$source_container" -e POSTGRES_PASSWORD=only-fake-data postgres:18-alpine >/dev/null
 ready=0
 for _ in {1..40}; do
-  if docker exec "$source_container" pg_isready -U postgres -d postgres >/dev/null 2>&1; then ready=1; break; fi
+  if docker logs "$source_container" 2>&1 | grep -q "PostgreSQL init process complete" && docker exec "$source_container" pg_isready -U postgres -d postgres >/dev/null 2>&1; then ready=1; break; fi
   sleep 1
 done
 [[ "$ready" -eq 1 ]] || { echo 'Synthetic PostgreSQL unavailable' >&2; exit 1; }
