@@ -44,5 +44,19 @@ jobs:
           node --check scripts/monitor-production.mjs
           node --check scripts/e2e-whatsapp-production.mjs
           node --check scripts/test-monitor-contracts.mjs
+          node --check scripts/preflight-current-production.mjs
       - name: Validate monitoring contracts without live requests
         run: node scripts/test-monitor-contracts.mjs
+
+  current-production-preflight:
+    name: Existing production health (read-only)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Probe existing backend, web and admin health (no credentials)
+        run: node scripts/preflight-current-production.mjs
