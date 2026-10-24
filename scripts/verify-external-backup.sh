@@ -19,7 +19,7 @@ trap cleanup EXIT
 docker run -d --rm --network none --name "$name" -e POSTGRES_PASSWORD="$pass" postgres:18-alpine >/dev/null
 ready=0
 for _ in {1..40}; do
-  if docker exec "$name" pg_isready -U postgres -d postgres >/dev/null 2>&1; then ready=1; break; fi
+  if docker logs "$name" 2>&1 | grep -q "PostgreSQL init process complete" && docker exec "$name" pg_isready -U postgres -d postgres >/dev/null 2>&1; then ready=1; break; fi
   sleep 1
 done
 [[ "$ready" -eq 1 ]] || fail 'Temporary local database did not become ready'
