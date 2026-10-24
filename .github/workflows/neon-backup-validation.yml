@@ -1,0 +1,44 @@
+name: Din offline backup validation (zero new cost)
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/backup-neon-local.sh'
+      - 'scripts/verify-external-backup.sh'
+      - 'scripts/test-local-backup.sh'
+      - 'scripts/test-restore-synthetic.sh'
+      - '.github/workflows/neon-backup-validation.yml'
+      - 'docs/runbooks/din-external-backups.md'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/backup-neon-local.sh'
+      - 'scripts/verify-external-backup.sh'
+      - 'scripts/test-local-backup.sh'
+      - 'scripts/test-restore-synthetic.sh'
+      - '.github/workflows/neon-backup-validation.yml'
+      - 'docs/runbooks/din-external-backups.md'
+
+permissions:
+  contents: read
+
+jobs:
+  validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Local export fail-closed tests (mock tools, synthetic bytes)
+        run: |
+          bash -n scripts/backup-neon-local.sh
+          bash -n scripts/verify-external-backup.sh
+          bash -n scripts/test-local-backup.sh
+          bash -n scripts/test-restore-synthetic.sh
+          bash scripts/test-local-backup.sh
+      - name: Offline PostgreSQL 18 encrypted restore (synthetic only)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y age
+          docker pull postgres:18-alpine
+          bash scripts/test-restore-synthetic.sh
