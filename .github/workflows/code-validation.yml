@@ -43,3 +43,6 @@ jobs:
         run: |
           node --check scripts/monitor-production.mjs
           node --check scripts/e2e-whatsapp-production.mjs
+          node --check scripts/test-monitor-contracts.mjs
+      - name: Validate monitoring contracts without live requests
+        run: node scripts/test-monitor-contracts.mjs
