@@ -1,0 +1,34 @@
+name: Din backup tooling validation
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/backup-neon-external.sh'
+      - 'scripts/verify-external-backup.sh'
+      - 'scripts/test-external-backup.sh'
+      - '.github/workflows/neon-external-backup.yml'
+      - '.github/workflows/neon-backup-validation.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/backup-neon-external.sh'
+      - 'scripts/verify-external-backup.sh'
+      - 'scripts/test-external-backup.sh'
+      - '.github/workflows/neon-external-backup.yml'
+      - '.github/workflows/neon-backup-validation.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Syntax and fail-closed mock test (no real database or cloud access)
+        run: |
+          bash -n scripts/backup-neon-external.sh
+          bash -n scripts/verify-external-backup.sh
+          bash scripts/test-external-backup.sh
