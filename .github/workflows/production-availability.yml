@@ -1,0 +1,27 @@
+name: Production availability
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Four independent read-only checks per day (UTC).
+    - cron: '43 */6 * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-availability
+  cancel-in-progress: false
+
+jobs:
+  availability:
+    name: Liveness + database readiness
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Read-only production probes
+        run: node scripts/monitor-production.mjs
