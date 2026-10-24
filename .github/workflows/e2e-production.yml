@@ -1,4 +1,4 @@
-name: E2E production
+name: E2E WhatsApp (manual)
 
 on:
   workflow_dispatch:
@@ -8,9 +8,6 @@ on:
         required: false
         type: boolean
         default: false
-  schedule:
-    - cron: '20 11 * * *'
-
 permissions:
   contents: read
 
@@ -31,5 +28,17 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+      - name: Validate isolated E2E test configuration
+        run: |
+          for key in E2E_USER_PHONE E2E_USER_PASSWORD E2E_WEBHOOK_TOKEN; do
+            if [ -z "${!key}" ]; then
+              echo "::error title=Missing E2E configuration::${key} must be configured in GitHub Actions Secrets"
+              exit 1
+            fi
+          done
+          if [ "${{ inputs.run_outbound }}" = "true" ] && [ -z "$E2E_WHATSAPP_RECIPIENT" ]; then
+            echo "::error title=Missing outbound recipient::E2E_WHATSAPP_RECIPIENT required for real WhatsApp sends"
+            exit 1
+          fi
       - name: Run production E2E
         run: npm run test:e2e:production
