@@ -1,0 +1,23 @@
+name: Din one-time post-deploy health validation
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/din-postdeploy-readonly.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  postdeploy-readonly:
+    name: Four production health endpoints (GET only)
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Monitor live backend DB readiness, backend, PWA, Admin
+        run: node scripts/monitor-production.mjs
