@@ -1,0 +1,62 @@
+name: Code validation
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Lint, build and unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Fake values for unit tests only; no production secrets or database access.
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/din_ci?schema=public
+      JWT_SECRET: ci-only-secret-not-valid-for-production-0123456789
+      JWT_EXPIRES_IN: 15m
+      JWT_REFRESH_EXPIRES_IN: 7d
+      TELEGRAM_BOT_TOKEN: ci-disabled-telegram
+      GEMINI_API_KEY: ci-disabled-gemini
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Generate Prisma client
+        run: npx prisma generate
+      - name: Lint
+        run: npm run lint
+      - name: Build
+        run: npm run build
+      - name: Tests
+        run: npm test
+      - name: Check monitoring scripts
+        run: |
+          node --check scripts/monitor-production.mjs
+          node --check scripts/e2e-whatsapp-production.mjs
+          node --check scripts/test-monitor-contracts.mjs
+          node --check scripts/preflight-current-production.mjs
+      - name: Validate monitoring contracts without live requests
+        run: node scripts/test-monitor-contracts.mjs
+
+  current-production-preflight:
+    name: Existing production health (read-only)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Probe existing backend, web and admin health (no credentials)
+        run: node scripts/preflight-current-production.mjs

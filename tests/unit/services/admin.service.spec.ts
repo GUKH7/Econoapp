@@ -69,7 +69,7 @@ describe('AdminService', () => {
     prisma.user.findUnique.mockResolvedValue({ id: 'user-1' });
     const result = await service.recordPayment('admin-1', 'user-1', {
       amount: 49.9,
-      validUntil: '2026-08-18T23:59:59.999Z',
+      validUntil: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
       notes: 'Mensalidade',
     });
 
