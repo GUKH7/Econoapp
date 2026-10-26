@@ -40,3 +40,21 @@
 - [ ] Verificar primeira execução agendada e monitorar alertas reais posteriormente.
 
 **Limite:** availability /health/ready não prova backup ou integridade de dados financeiros.
+
+## Homologação de notificações e evidências em 26/10/2026
+
+- A menção original no PR #12 era de autoria GUKH7; **não era um teste independente de entrega**.
+- Foi criado smoke automatizado do GitHub Actions com menção a @GUKH7, publicado uma única vez em https://github.com/GUKH7/Econoapp/pull/12#issuecomment-6428290916 pela conta github-actions[bot]. O workflow de testes passou: https://github.com/GUKH7/Econoapp/actions/runs/40408547005. Ainda falta o proprietário confirmar entrega em sua caixa do GitHub/e-mail.
+- O primeiro smoke falhou com HTTP 403 ao comentar um PR usando apenas issues:write. Ajustou-se APENAS o job de smoke com pull-requests:write e issues:write. **O watchdog de produção só utiliza issues:write para comentar na issue #5**, que é uma issue regular; a entrega real desta rota ainda não foi demonstrada.
+- Há evidência de e-mail de falha de workflow PR chegando ao Gmail conectado; isso não confirma entrega de notificações de agendamentos nem da menção pelo bot.
+- A tarefa pontual 'Teste de alerta Din' do ChatGPT concluiu a execução e produziu a mensagem prevista. O sistema registra delivery_status unknown, portanto a notificação push/e-mail segue **não comprovada**. A tarefa pontual ficou desativada após execução, sem afetar a Vigília diária.
+- GitHub Actions nativo para runs schedule pode notificar o criador/último editor do cron; o comentário @GUKH7 no issue #5 usa um caminho de menção independente desse ator. O recebimento depende das preferências do usuário, e deve ser testado após configuração.
+- Não adicionar token pessoal, login externo, webhook ou serviço pago. Não há aprovação de merge/deploy/rollback.
+
+## Critérios restantes para GO (ainda NÃO atendidos)
+
+- [ ] Usuário confirma a menção do bot no inbox GitHub ou por e-mail (recebimento real).
+- [ ] Usuário confirma push/e-mail da tarefa ChatGPT ou habilita o canal e testa de novo.
+- [ ] Verificar e autorizar separadamente uma demonstração real de comentário na **issue #5** pelo job programado; até então só existe a simulação segura no PR.
+- [ ] CI do commit final do PR #12 verde, nenhum alerta falso em produção.
+- [ ] Autorizar explicitamente estratégia de impedir/coordenar autodeploy Render no merge; não integrar apenas porque os testes passaram.
