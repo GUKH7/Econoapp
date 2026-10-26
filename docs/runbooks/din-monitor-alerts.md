@@ -35,7 +35,7 @@
 - [ ] Confirmar pelo usuário que a menção do bot apareceu em web/e-mail.
 - [ ] Confirmar pelo usuário que o lembrete ChatGPT foi entregue por push/e-mail.
 - [ ] Revisar destinatário e evitar excesso de comentários em issue #5.
-- [ ] Planejar publicação: QUALQUER merge na main provoca deploy automático de backend/web/admin no Render, mesmo que este PR apenas modifique workflows e scripts. Não mesclar sem autorização específica ou controle explícito do gatilho de deploy.
+- [ ] Planejar publicação: a main está associada ao autodeploy dos 3 serviços Render. No merge autorizado usar **explicitamente [skip render] no título/mensagem do commit criado na main**, de acordo com https://render.com/docs/deploys , e conferir nos Events/Deploys dos três que o deploy foi ignorado. Se esta garantia operacional não for aceitável, primeiro apresentar e autorizar uma estratégia alternativa de bloqueio de autodeploy. Não mesclar sem autorização específica.
 - [ ] Confirmar R$ 0 nos planos/cotas e sem novos recursos.
 - [ ] Verificar primeira execução agendada e monitorar alertas reais posteriormente.
 
@@ -58,3 +58,9 @@
 - [ ] Verificar e autorizar separadamente uma demonstração real de comentário na **issue #5** pelo job programado; até então só existe a simulação segura no PR.
 - [ ] CI do commit final do PR #12 verde, nenhum alerta falso em produção.
 - [ ] Autorizar explicitamente estratégia de impedir/coordenar autodeploy Render no merge; não integrar apenas porque os testes passaram.
+
+### Segurança da versão final do PR
+
+- O job de smoke (que precisava de issues:write + pull-requests:write para comentar em PR) foi REMOVIDO após o sucesso. A versão final mantém somente o job watchdog para schedule/manual, com actions:read, contents:read e issues:write; a POST à issue #5 só ocorre em alertas de schedule reais, se futuramente aprovado.
+- A frase [skip render] não é equivalente a [skip ci]. Não acrescentar [skip ci] pois isso impediria o CI desejado.
+- Autodeploy da main ainda está em On Commit nos três serviços; só o commit especificamente marcado será ignorado. Validar eventos de skip com as versões live intactas antes de declarar ativação concluída.
