@@ -1,6 +1,7 @@
-// Din monitor-of-monitor: read only GitHub Actions history. No Render, Neon, POST or secrets in output.
+// Din monitor-of-monitor: reads GitHub Actions; on a real scheduled alert posts only to GitHub issue #5. No Render/Neon or financial data.
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
+import { notifyGithubIssue } from './notify-watchdog-github.mjs';
 
 export const MAX_SUCCESS_AGE_MS = 36 * 60 * 60 * 1000;
 const HOUR_MS = 60 * 60 * 1000;
@@ -76,7 +77,18 @@ async function main() {
   console.log(JSON.stringify({
     checkedAt: new Date().toISOString(), workflow: workflowId, ...assessment,
   }, null, 2));
-  if (assessment.status !== 'healthy') process.exitCode = 1;
+  if (assessment.status !== 'healthy') {
+    process.exitCode = 1;
+    // Only real scheduled checks may notify: workflow_dispatch and PR tests are read-only.
+    if (process.env.GITHUB_EVENT_NAME === 'schedule') {
+      try {
+        const notification = await notifyGithubIssue({ token, issueNumber: 5, assessment });
+        console.log('Alert delivery: ' + notification.result);
+      } catch (error) {
+        console.error('Alert delivery failure: ' + String(error.message).slice(0, 120));
+      }
+    }
+  }
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
