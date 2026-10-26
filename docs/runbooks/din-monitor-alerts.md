@@ -1,40 +1,42 @@
-# Din — Alertas gratuitos e watchdog (proposta sem deploy)
+# Din — Alertas gratuitos e watchdog (PR #12 em rascunho)
 
-Inspeção em 26/10/2026. A rotina de produção não foi alterada.
+**Estado:** somente branch de proposta. Nenhum merge, deploy, alteração de produção ou mudança financeira autorizados.
 
-## Evidências
-- PR #8 integrado à main, commit 594b26c565d4966785274b933d983a782355cc8b.
-- Production availability: cron 43 */6 * * * (UTC); 4 verificações esperadas por dia.
-- Até a inspeção de 26/10: somente 2 execuções agendadas, às 05:17Z e 13:34Z. Ambas passaram nos 4 healthchecks.
-- GitHub admite atrasos e descarte de alguns agendamentos sob carga e desativação automática em repositórios públicos inativos por 60 dias: https://docs.github.com/en/actions/how-tos/troubleshoot-workflows
-- A automação independente Vigília do Din está habilitada e registrou uma execução, mas notificações push e e-mail estão desativadas. Uma mensagem anterior da tarefa informou erro, mas a causa específica não foi disponibilizada.
+## Diagnóstico — 26/10/2026
+- PR #8 foi implantado; 4 sondas funcionaram nas duas primeiras execuções do monitor principal.
+- O monitor 'Production availability' tem cron 43 */6 * * * UTC, mas somente duas execuções agendadas haviam sido observadas no dia, ambas aprovadas. O GitHub pode atrasar ou descartar execuções programadas.
+- A Vigília do Din no ChatGPT está habilitada; notificações push e e-mail estão desativadas. Houve registro de mensagem sobre erro da tarefa, mas a causa específica não está comprovada.
+- A primeira menção de teste no PR #12 foi feita pela própria conta GUKH7; não comprova recebimento por e-mail/web. Uma menção via GitHub Actions com autoria de bot é um teste melhor.
+- O GitHub direciona notificações de workflows agendados ao usuário que criou ou posteriormente alterou o cron; não assumir que o destino é sempre o proprietário do repositório.
+  Fonte: https://docs.github.com/en/actions/concepts/workflows-and-actions/notifications-for-workflow-runs
 
-## Solução proposta
-- Novo workflow Production availability watchdog (zero new cost), executado duas vezes ao dia, às 04:17 UTC e 16:17 UTC, deslocado do cron principal.
-- Acesso somente GET à API GitHub, usando GITHUB_TOKEN efêmero com permissões mínimas (actions: read e contents: read).
-- Detecta workflow inativo, falta de sucesso agendado há mais de 36h, execução agendada mais recente concluída com erro, cancelamento ou timeout.
-- Execuções manuais não substituem agendamentos na contagem.
-- Inclui contagem de runs das últimas 24h e links somente para metadados públicos do Actions.
-- Não acessa Render, Neon, saldos, transações, segredos, nem faz POST, SQL, deploy, rollback ou mudanças de infraestrutura.
-- Enquanto a branch estiver em PR draft, são executados APENAS os testes com dados fictícios. O schedule do watchdog não fica ativo antes do merge na main.
+## Proposta técnica
+1. Watchdog avalia histórico do workflow principal em GET GitHub API usando o GITHUB_TOKEN nativo (sem segredos novos).
+2. No workflow de produção, se o watchdog detectar falha recente, inatividade ou intervalo acima de 36 horas sem sucesso, o job falha e publica **um comentário no issue existente #5** com menção `@GUKH7`. A etapa de publicação faz um POST somente à API do GitHub (não ao Din ou Neon), condicionado a evento 'schedule' e a um alerta real.
+3. Para não gerar mensagens duplicadas, é aplicado um identificador SHA-256 do tipo de ocorrência e links/datas do último erro e sucesso. Antes da publicação, compara o marcador com até 100 comentários recentes do issue #5; se já existir, não repete.
+4. Jobs do GitHub Actions usam permissões mínimas: `contents: read`, `actions: read` e `issues: write` apenas no watchdog de produção; nenhum token pessoal ou webhook externo.
+5. A simulação em PR #12 cria **apenas uma menção por GitHub Actions bot** no próprio PR, para medir entrega real, com marcador e deduplicação. Restringe explicitamente ao PR #12 da branch interna, e só executa após testes com mocks.
+6. Não escreve no GitHub Issues durante simulações de contrato; o único comentário real de teste é no PR #12. Não existe alerta enviado a partir do novo watchdog em produção enquanto o PR não for integrado.
+7. O watchdog depende do agendamento do GitHub e pode atrasar; a Vigília do Din é uma camada independente, desde que o usuário habilite e valide push ou e-mail.
 
-## Como receber avisos sem gastos
-1. GitHub: em https://github.com/settings/notifications, seção System > Actions, escolher Email ou On GitHub e, se disponível, Only notify for failed workflows. A notificação de workflows agendados é normalmente entregue ao usuário que criou ou alterou o cron; confirmar que o destinatário correto recebe. Documentação: https://docs.github.com/en/actions/concepts/workflows-and-actions/notifications-for-workflow-runs
-2. ChatGPT: em Configurações > Notificações, habilitar push ou e-mail para tarefas e testar a recepção com um lembrete inofensivo. Estar ativa não é prova de entrega.
-3. Não foi configurada criação automática de Issues, webhooks ou novas integrações com terceiros.
+## Testes
+- Cenários simulados para monitor: normal, falha recente, recuperação, atraso 36h, desativação, execução manual, pendência, timeout/cancelamento, ordem e timestamps.
+- Cenários simulados para entregas: destinatário fixo, ausência de segredos, deduplicação, mudança de ocorrência, URL allowlist e conteúdo.
+- Nenhum teste lê contas, transações, e-mails pessoais, Neon, Render ou dados financeiros.
 
-## Testes simulados
-- Sucesso recente, falha posterior, recuperação, último sucesso há mais de 36 horas, apenas execuções manuais, workflow desativado, corrida pendente, cancelamento, timeout, resultados fora de ordem e timestamp futuro.
-- A PR aciona node --test local somente com fixtures; não consulta a API real e não envia dados.
+## Configuração gratuita pelo proprietário
+- GitHub: https://github.com/settings/notifications → System → Actions: On GitHub ou Email, preferencialmente somente falhas; garantir menções e notificações de conversas. Verificar inbox https://github.com/notifications e e-mail.
+- ChatGPT: Settings → Notifications → Tasks, habilitar push/e-mail; testar recebimento de um lembrete inofensivo.
+- O GitHub Actions usa runners ubuntu-latest em repositório público, sem contratação adicional; manter o repo público e sem runners maiores.
+- O watchdog exige `issues:write` no job de produção para comentar; jamais publica saldos, credenciais ou dados do Neon.
 
-## Restrições
-- Projeto público e runners padrão do GitHub Actions não exigem nova contratação. Confirmar novamente se regras de cobrança mudarem.
-- Watchdog depende também dos schedules do GitHub e pode atrasar. A Vigília do ChatGPT deve permanecer como verificação independente, mediante entrega real de notificações.
-- O monitor reporta saúde das verificações, NÃO prova disponibilidade contínua, recuperação de desastre ou integridade financeira.
-- Como Render faz deploy automático de main nos três serviços, o merge do PR draft não deve ocorrer sem autorização específica e plano de controle de deploy.
+## Bloqueios de liberação
+- [ ] Confirmar CI do PR e simulação por GitHub Actions bot.
+- [ ] Confirmar pelo usuário que a menção do bot apareceu em web/e-mail.
+- [ ] Confirmar pelo usuário que o lembrete ChatGPT foi entregue por push/e-mail.
+- [ ] Revisar destinatário e evitar excesso de comentários em issue #5.
+- [ ] Planejar publicação: QUALQUER merge na main provoca deploy automático de backend/web/admin no Render, mesmo que este PR apenas modifique workflows e scripts. Não mesclar sem autorização específica ou controle explícito do gatilho de deploy.
+- [ ] Confirmar R$ 0 nos planos/cotas e sem novos recursos.
+- [ ] Verificar primeira execução agendada e monitorar alertas reais posteriormente.
 
-## Situação
-- [x] Código e testes locais preparados.
-- [ ] CI da PR aprovado.
-- [ ] Alertas GitHub e ChatGPT configurados e testados pelo proprietário.
-- [ ] Aprovação específica para merge/deploy e primeira execução agendada.
+**Limite:** availability /health/ready não prova backup ou integridade de dados financeiros.
