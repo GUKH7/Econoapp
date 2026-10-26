@@ -8,7 +8,6 @@ on:
       - 'scripts/test-production-monitor-watchdog.mjs'
       - 'scripts/notify-watchdog-github.mjs'
       - 'scripts/test-notify-watchdog-github.mjs'
-      - 'scripts/smoke-watchdog-notification.mjs'
       - '.github/workflows/production-monitor-watchdog.yml'
       - 'docs/runbooks/din-monitor-alerts.md'
   workflow_dispatch:
@@ -38,29 +37,7 @@ jobs:
         run: |
           node --check scripts/production-monitor-watchdog.mjs
           node --check scripts/notify-watchdog-github.mjs
-          node --check scripts/smoke-watchdog-notification.mjs
           node --test scripts/test-production-monitor-watchdog.mjs scripts/test-notify-watchdog-github.mjs
-
-  notification-smoke:
-    name: GitHub bot mention smoke — draft PR #12 only
-    needs: tests
-    if: github.event_name == 'pull_request' && github.event.pull_request.number == 12 && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'feat/din-monitoring-watchdog-no-cost-20261026'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: read
-      issues: write
-      pull-requests: write
-    env:
-      GITHUB_TOKEN: ${{ github.token }}
-      GITHUB_PR_NUMBER: ${{ github.event.pull_request.number }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - name: Send one harmless automated @mention, deduplicated
-        run: node scripts/smoke-watchdog-notification.mjs
 
   watchdog:
     name: Missing or failed scheduled checks
