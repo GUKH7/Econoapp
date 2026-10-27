@@ -1,0 +1,59 @@
+name: Production availability watchdog (zero new cost)
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/production-monitor-watchdog.mjs'
+      - 'scripts/test-production-monitor-watchdog.mjs'
+      - 'scripts/notify-watchdog-github.mjs'
+      - 'scripts/test-notify-watchdog-github.mjs'
+      - '.github/workflows/production-monitor-watchdog.yml'
+      - 'docs/runbooks/din-monitor-alerts.md'
+  workflow_dispatch:
+  schedule:
+    # Two independent checks, offset from the /health cron; runs ONLY after merge.
+    - cron: '17 4,16 * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: din-monitor-watchdog
+  cancel-in-progress: false
+
+jobs:
+  tests:
+    name: Simulated watchdog and notifier cases (no external access)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Test normal, failure, disabled and missing schedules
+        run: |
+          node --check scripts/production-monitor-watchdog.mjs
+          node --check scripts/notify-watchdog-github.mjs
+          node --test scripts/test-production-monitor-watchdog.mjs scripts/test-notify-watchdog-github.mjs
+
+  watchdog:
+    name: Missing or failed scheduled checks
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+      issues: write
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Read-only GitHub schedule status and notify issue #5 on an actual alert
+        run: node scripts/production-monitor-watchdog.mjs
