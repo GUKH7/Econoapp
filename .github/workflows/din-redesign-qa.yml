@@ -1,0 +1,59 @@
+name: Din redesign branch QA
+
+on:
+  push:
+    branches:
+      - feat/din-home-redesign-20261028
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: Lint, TypeScript build and unit tests (isolated)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/din_ci?schema=public
+      JWT_SECRET: ci-only-secret-not-valid-for-production-0123456789
+      JWT_EXPIRES_IN: 15m
+      JWT_REFRESH_EXPIRES_IN: 7d
+      TELEGRAM_BOT_TOKEN: ci-disabled-telegram
+      GEMINI_API_KEY: ci-disabled-gemini
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npm run lint
+      - run: npm run build
+      - run: npm test
+
+  visual:
+    name: PWA browser, navigation and responsive visual tests (mocked)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      NODE_ENV: test
+      PLAYWRIGHT_BROWSERS_PATH: ~/.cache/ms-playwright
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:visual
+      - name: Keep screenshots for visual review
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: din-home-browser-captures
+          path: test-results/visual/
+          if-no-files-found: ignore
+          retention-days: 7

@@ -474,9 +474,39 @@ async function runViewport(browser, baseUrl, name, viewport) {
   await page.goto(baseUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
   await disableMotion(page);
 
-  await assertText(page, 'Resumo');
+  await assertText(page, 'Resultado dos últimos 6 meses');
   await assertAccessibilityBasics(page, name);
-  await assertVisible(page, '.balance-card', 'card de saldo');
+  await assertVisible(page, '.din-balance', 'saldo principal sem card');
+  await assertVisible(page, '.din-chart-svg', 'gráfico de evolução');
+  await assertVisible(page, '.din-mascot', 'mascote oficial');
+  const homeState = await page.evaluate(() => ({
+    greeting: document.querySelector('.dashboard-appbar')?.textContent?.includes('Olá,'),
+    hasBalanceCard: Boolean(document.querySelector('.balance-card')),
+    mascotLoaded: Boolean(document.querySelector('.din-mascot')?.naturalWidth),
+    pageOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  }));
+  if (homeState.greeting || homeState.hasBalanceCard || !homeState.mascotLoaded || homeState.pageOverflow > 1) {
+    throw new Error('Falha na nova home em ' + name + ': ' + JSON.stringify(homeState));
+  }
+  const quickActions = page.locator('.din-quick');
+  if (await quickActions.count() !== 5) {
+    throw new Error('Quantidade inesperada de ações rápidas em ' + name);
+  }
+  await page.locator('.din-quick[data-action-type="EXPENSE"]').click();
+  await assertVisible(page, '.bottom-sheet', 'nova transação');
+  await page.locator('.bottom-sheet [data-sheet-close]').click();
+  await page.locator('.din-quick[data-action-type="TRANSFER"]').click();
+  await assertVisible(page, '.bottom-sheet', 'transferência');
+  await page.locator('.bottom-sheet [data-sheet-close]').click();
+  await page.locator('.din-quick[data-manage-section="cards"]').click();
+  await assertText(page, 'Cartões');
+  await page.locator('nav.tabs [data-tab="dashboard"]').click();
+  await page.locator('.din-quick[data-tab-jump="reports"]').click();
+  await assertText(page, 'Por categoria');
+  await page.locator('nav.tabs [data-tab="dashboard"]').click();
+  await page.locator('.din-quick[data-tab-jump="assistant"]').click();
+  await assertText(page, 'App e WhatsApp');
+  await page.locator('nav.tabs [data-tab="dashboard"]').click();
   await screenshot(page, `${name}-dashboard`);
   await screenshotBottomViewport(page, `${name}-dashboard`);
   await page.evaluate(() => window.scrollTo(0, 0));
@@ -499,6 +529,7 @@ async function runViewport(browser, baseUrl, name, viewport) {
   await selectChoice(page, 'input[name="reserveTaxes"][value="true"]');
   await page.locator('input[name="taxRate"]').fill('6');
   await page.getByRole('button', { name: 'Concluir configuração' }).click();
+  await page.locator('.din-extra summary').first().click();
   await assertText(page, 'Caixa do negócio');
   await assertText(page, 'Projeção do caixa');
   await assertText(page, 'Lucro líquido estimado');
