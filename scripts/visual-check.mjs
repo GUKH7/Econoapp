@@ -251,6 +251,8 @@ const apiFixtures = {
       salesTiming: { byDay: [{ label: 'sexta-feira', revenue: 4800, sales: 9 }, { label: 'segunda-feira', revenue: 3100, sales: 6 }], byHour: [{ label: '14:00', revenue: 3900, sales: 7 }, { label: '19:00', revenue: 2600, sales: 5 }], bestDay: { label: 'sexta-feira' }, bestHour: { label: '14:00' } },
     },
   },
+  '/api/v1/intelligence/preferences': { data: null },
+  '/api/v1/intelligence/insights': { data: [] },
   '/api/v1/assistant/activity': {
     data: {
       messages: [
