@@ -103,3 +103,10 @@ body:has(.din-home-shell) { background: #fff; }
   min-width: 0;
   overflow-wrap: anywhere;
 }
+
+/* At 320px, two half-width insight panels truncate their action labels. */
+@media (max-width: 360px) {
+  .din-home-shell .din-secondary-grid { grid-template-columns: minmax(0, 1fr); }
+  .din-home-shell .din-small-panel { min-height: 0; }
+  .din-home-shell .din-small-panel .din-section-heading button { flex: 0 0 auto; }
+}

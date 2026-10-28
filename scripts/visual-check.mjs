@@ -460,7 +460,8 @@ async function assertHomeFitsViewport(page, name) {
   const clipped = await page.evaluate(() => {
     const selectors = [
       '.din-home', '.din-recent', '.din-recent .din-section-heading button',
-      '.din-recent .transaction-row > strong', '.din-extra',
+      '.din-recent .transaction-row > strong', '.din-small-panel .din-section-heading button',
+      '.din-extra',
       '.din-extra .business-summary-card',
     ];
     const limit = document.documentElement.clientWidth - 1;
