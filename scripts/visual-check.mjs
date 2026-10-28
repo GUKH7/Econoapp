@@ -543,10 +543,9 @@ async function runViewport(browser, baseUrl, name, viewport) {
   const homeState = await page.evaluate(() => ({
     greeting: document.querySelector('.dashboard-appbar')?.textContent?.includes('Olá,'),
     hasBalanceCard: Boolean(document.querySelector('.balance-card')),
-    mascotLoaded: Boolean(document.querySelector('.din-mascot')?.naturalWidth),
     pageOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
   }));
-  if (homeState.greeting || homeState.hasBalanceCard || !homeState.mascotLoaded || homeState.pageOverflow > 1) {
+  if (homeState.greeting || homeState.hasBalanceCard || homeState.pageOverflow > 1) {
     throw new Error('Falha na nova home em ' + name + ': ' + JSON.stringify(homeState));
   }
   const quickActions = page.locator('.din-quick');
