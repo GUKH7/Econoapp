@@ -36,6 +36,7 @@ function row(type: Row['type'], amount: number, description: string, scope: Row[
 }
 
 beforeAll(async () => {
+  vi.stubGlobal('window', { ECONOAPP_CONFIG: {} });
   vi.stubGlobal('location', { origin: 'http://localhost:5173' });
   vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => undefined });
   vi.stubGlobal('document', { querySelector: () => null });
