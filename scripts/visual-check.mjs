@@ -464,6 +464,13 @@ async function runViewport(browser, baseUrl, name, viewport) {
   });
   const page = await context.newPage();
   const consoleErrors = [];
+  const httpErrors = [];
+  page.on('response', (response) => {
+    if (response.status() >= 400) {
+      const request = response.request();
+      httpErrors.push(`${response.status()} ${request.method()} ${new URL(response.url()).pathname}`);
+    }
+  });
   page.on('console', (message) => {
     if (message.type() === 'error') consoleErrors.push(message.text());
   });
@@ -622,7 +629,7 @@ async function runViewport(browser, baseUrl, name, viewport) {
   await context.close();
 
   if (consoleErrors.length) {
-    throw new Error(`Erros no console em ${name}: ${consoleErrors.join(' | ')}`);
+    throw new Error(`Erros no console em ${name}: ${consoleErrors.join(' | ')}. HTTP: ${httpErrors.join(' | ')}`);
   }
 }
 
@@ -668,12 +675,14 @@ async function main() {
   }
 }
 
+let globalTimeout;
 await Promise.race([
   main(),
   new Promise((_, reject) => {
-    setTimeout(() => reject(new Error('Timeout global da verificacao visual.')), 180000);
+    globalTimeout = setTimeout(() => reject(new Error('Timeout global da verificacao visual.')), 180000);
+    globalTimeout.unref();
   }),
 ]).catch((error) => {
   console.error(error.message);
   process.exitCode = 1;
-});
+}).finally(() => clearTimeout(globalTimeout));
