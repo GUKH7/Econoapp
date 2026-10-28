@@ -18,9 +18,7 @@ import {
   scopeLabel,
 } from './finance.js';
 import {
-  balanceCard,
   fabMenu,
-  metricCard,
   tabButton,
   transactionListHtml,
   transactionSheet,
@@ -503,30 +501,19 @@ function renderApp() {
   }
   const totals = scopedTotals();
   app.innerHTML = `
-    <section class="shell" data-swipe-shell>
+    <section class="shell ${state.tab === 'dashboard' ? 'din-home-shell' : ''}" data-swipe-shell>
       <header class="appbar ${state.tab === 'dashboard' ? 'dashboard-appbar' : ''}">
-        <div>
-          <h1>${state.tab === 'dashboard' && state.user?.name ? `Olá, ${escapeHtml(state.user.name.split(' ')[0])}! <span aria-hidden="true">👋</span>` : screenTitle()}</h1>
-          ${state.tab === 'dashboard' ? '<p>Aqui está o resumo da sua vida financeira.</p>' : ''}
-        </div>
-        ${state.tab === 'dashboard' ? '<img class="din-mark compact" src="./assets/din-mark.svg" alt="Din" />' : ''}
+        ${state.tab === 'dashboard'
+          ? `<span class="din-brand" aria-label="Din">Din</span>
+             <div class="scope-switch" data-scope role="group" aria-label="Tipo de finanças">
+               <button class="${state.scope === 'PERSONAL' ? 'active' : ''}" type="button" data-value="PERSONAL" aria-pressed="${state.scope === 'PERSONAL'}">Pessoal</button>
+               <button class="${state.scope === 'BUSINESS' ? 'active' : ''}" type="button" data-value="BUSINESS" aria-pressed="${state.scope === 'BUSINESS'}">Empresarial</button>
+             </div>
+             <span class="din-header-bell" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg></span>`
+          : `<div><h1>${screenTitle()}</h1></div>`}
       </header>
 
       <main class="page-track" data-swipe-track>
-        ${
-          state.tab === 'dashboard'
-            ? `<div class="scope-switch" data-scope>
-                <button class="${state.scope === 'PERSONAL' ? 'active' : ''}" type="button" data-value="PERSONAL">Pessoal</button>
-                <button class="${state.scope === 'BUSINESS' ? 'active' : ''}" type="button" data-value="BUSINESS">Negócio</button>
-              </div>
-              ${state.scope === 'PERSONAL' ? `<section class="grid dashboard-grid">
-                ${balanceCard(`Saldo total`, totals.balance)}
-                ${metricCard('Receitas', totals.income, 'income')}
-                ${metricCard('Gastos', totals.expense, 'expense')}
-              </section>` : ''}`
-            : ''
-        }
-
         <section class="grid" id="view">${viewHtml()}</section>
       </main>
 

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'din-static-v71';
+const CACHE_NAME = 'din-static-v72';
 const ASSETS = [
   './index.html',
   './styles.css',
@@ -10,10 +10,12 @@ const ASSETS = [
   './styles/business-onboarding.css',
   './styles/transaction-sheet.css',
   './styles/clean-mobile.css',
+  './styles/din-home.css',
   './assets/din-mark.svg',
   './assets/din-logo.svg',
   './assets/din-icon.png',
   './assets/login-illustration.jpg',
+  './assets/din-mascote-oficial.webp',
   './app.js',
   './api.js',
   './finance.js',
@@ -22,6 +24,7 @@ const ASSETS = [
   './views.js',
   './views/chrome.js',
   './views/dashboard.js',
+  './views/din-home.js',
   './views/manage.js',
   './views/reports.js',
   './views/business-onboarding.js',
