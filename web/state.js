@@ -12,6 +12,7 @@ export const state = {
   categories: [],
   channels: [],
   tab: 'dashboard',
+  homePeriodMonths: 6,
   manageSection: '',
   manageAccountTab: 'accounts',
   manageModal: '',

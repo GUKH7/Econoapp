@@ -8,8 +8,9 @@ function valueOf(number) {
 }
 
 function monthResults() {
-  return Array.from({ length: 6 }, (_, index) => {
-    const offset = index - 5;
+  const period = [1, 3, 6, 12].includes(state.homePeriodMonths) ? state.homePeriodMonths : 6;
+  return Array.from({ length: period }, (_, index) => {
+    const offset = index - period + 1;
     const date = new Date();
     date.setDate(1);
     date.setMonth(date.getMonth() + offset);
@@ -32,11 +33,11 @@ function resultsChart() {
   const maximum = Math.max(0, ...values);
   const range = maximum - minimum || 1;
   const points = values.map((value, index) => ({
-    x: 12 + index * 59,
+    x: items.length === 1 ? 160 : 12 + index * (296 / (items.length - 1)),
     y: 90 - ((value - minimum) / range) * 70,
   }));
   const line = points.map((point, index) => (index ? 'L' : 'M') + point.x.toFixed(1) + ' ' + point.y.toFixed(1)).join(' ');
-  const fill = line + ' L 307 100 L 12 100 Z';
+  const fill = line + (points.length === 1 ? ' L 160 100 Z' : ' L 308 100 L 12 100 Z');
   const dots = points.map((point, index) => {
     if (index !== points.length - 1) return '';
     return '<circle cx="' + point.x + '" cy="' + point.y + '" r="5" fill="#fff" stroke="#059B57" stroke-width="3"></circle>';
@@ -47,7 +48,7 @@ function resultsChart() {
     '<path d="' + fill + '" fill="url(#dinChartFill)"></path>',
     '<path d="' + line + '" fill="none" stroke="#059B57" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"></path>',
     dots, '</svg>',
-    '<div class="din-chart-labels">' + items.map((item) => '<span>' + escapeHtml(item.label) + '</span>').join('') + '</div>',
+    '<div class="din-chart-labels">' + items.map((item, index) => '<span' + (items.length > 6 && index % 2 && index !== items.length - 1 ? ' class="din-label-muted"' : '') + '>' + escapeHtml(item.label) + '</span>').join('') + '</div>',
   ].join('');
 }
 
@@ -90,7 +91,9 @@ export function dinHomeHtml() {
     .slice(0, 4).map(transactionRow).join('');
   const totalMovement = current.income + current.expense;
   const incomeShare = totalMovement > 0 ? current.income / totalMovement * 100 : 50;
-  const scopeText = state.scope === 'BUSINESS' ? 'Saldo disponível do negócio' : 'Saldo dos lançamentos';
+  const scopeText = state.scope === 'BUSINESS' ? 'Saldo disponível do negócio' : 'Saldo total';
+  const period = [1, 3, 6, 12].includes(state.homePeriodMonths) ? state.homePeriodMonths : 6;
+  const periodTabs = [1, 3, 6, 12].map((months) => '<button type="button" data-din-period="' + months + '" aria-pressed="' + (months === period) + '" class="' + (months === period ? 'active' : '') + '">' + months + 'M</button>').join('');
   return [
     '<div class="din-home">',
       '<section class="din-hero" aria-label="Seu saldo">',
@@ -98,13 +101,13 @@ export function dinHomeHtml() {
           '<strong class="din-balance ' + (balance < 0 ? 'negative' : '') + '">' + money.format(balance) + '</strong>',
           '<span class="din-comparison">' + escapeHtml(comparison) + '</span>',
         '</div>',
-        '<img class="din-mascot" src="./assets/din-mascote-oficial.webp" width="180" height="310" alt="Din, cachorro amarelo de óculos escuros e coleira verde" />',
       '</section>',
       '<section class="din-chart-section" aria-label="Evolução dos resultados">',
-        '<div class="din-section-heading"><h2>Resultado dos últimos 6 meses</h2><span>Receitas − despesas</span></div>',
+        '<div class="din-section-heading"><h2>Seu dinheiro em movimento</h2><span>Resultado por mês</span></div>',
+        '<div class="din-period-tabs" role="group" aria-label="Período do gráfico">' + periodTabs + '</div>',
         resultsChart(),
       '</section>',
-      '<section class="din-month" aria-label="Movimentações do mês">',
+      '<section class="din-month" aria-label="Resumo do mês">',
         '<div class="din-month-metrics">',
           '<div><span class="din-metric-icon income">' + icon('plus') + '</span><span>Entradas</span><strong>' + money.format(current.income) + '</strong></div>',
           '<div><span class="din-metric-icon expense">' + icon('minus') + '</span><span>Saídas</span><strong>' + money.format(current.expense) + '</strong></div>',
@@ -124,8 +127,8 @@ export function dinHomeHtml() {
           progressPanel(),
         '</section>',
         '<section class="din-small-panel din-tip">',
-          '<div class="din-section-heading"><h2>Dica do Din</h2></div>',
-          '<p>Separe um valor para imprevistos e acompanhe seus gastos ao longo do mês.</p>',
+          '<div class="din-section-heading"><h2>Planeje melhor</h2></div>',
+          '<p>Acompanhe suas metas e movimentações sem perder o controle do mês.</p>',
         '</section>',
       '</div>',
       '<section class="din-recent" aria-label="Últimas transações">',

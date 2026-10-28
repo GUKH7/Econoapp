@@ -525,11 +525,20 @@ async function runViewport(browser, baseUrl, name, viewport) {
   await page.goto(baseUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
   await disableMotion(page);
 
-  await assertText(page, 'Resultado dos últimos 6 meses');
+  await assertText(page, 'Seu dinheiro em movimento');
+  const periodButtons = page.locator('[data-din-period]');
+  if (await periodButtons.count() !== 4) throw new Error('Períodos financeiros ausentes em ' + name);
   await assertAccessibilityBasics(page, name);
   await assertVisible(page, '.din-balance', 'saldo principal sem card');
   await assertVisible(page, '.din-chart-svg', 'gráfico de evolução');
-  await assertVisible(page, '.din-mascot', 'mascote oficial');
+  if (await page.locator('.din-hero img, .din-mascot').count()) {
+    throw new Error('A home não deve mostrar o mascote no redesign 2.0');
+  }
+  await page.locator('[data-din-period="3"]').click();
+  if (await page.locator('[data-din-period="3"]').getAttribute('aria-pressed') !== 'true') throw new Error('Filtro 3M não atualizou');
+  await page.locator('[data-din-period="12"]').click();
+  if (await page.locator('[data-din-period="12"]').getAttribute('aria-pressed') !== 'true') throw new Error('Filtro 12M não atualizou');
+  await page.locator('[data-din-period="6"]').click();
   await assertHomeFitsViewport(page, name + ' pessoal');
   const homeState = await page.evaluate(() => ({
     greeting: document.querySelector('.dashboard-appbar')?.textContent?.includes('Olá,'),

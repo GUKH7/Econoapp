@@ -10,6 +10,7 @@ type Row = {
   source: string;
 };
 type HomeState = {
+  homePeriodMonths: number;
   scope: 'PERSONAL' | 'BUSINESS';
   transactions: Row[];
   categoryBudgets: Array<{ amount: number; spent: number; categoryName: string }>;
@@ -54,6 +55,7 @@ beforeEach(() => {
   state.transactions = [];
   state.categoryBudgets = [];
   state.businessSummary = null;
+  state.homePeriodMonths = 6;
 });
 
 describe('Din home redesign', () => {
@@ -67,6 +69,10 @@ describe('Din home redesign', () => {
     expect(html).toContain('din-balance');
     expect(html).not.toContain('balance-card');
     expect(html).not.toContain('Olá,');
+    expect(html).not.toContain('din-mascot');
+    expect(html).toContain('Seu dinheiro em movimento');
+    expect(html).toContain('data-din-period="6"');
+    expect(html).toContain('aria-pressed="true"');
     expect(html).toContain('Salário');
     expect(html).toContain('Mercado');
   });
@@ -91,6 +97,15 @@ describe('Din home redesign', () => {
     expect(html).toContain('Venda');
     expect(html).not.toContain('Café');
     expect(html).toContain('50%');
+  });
+
+  it('supports switching chart periods without changing financial records', () => {
+    state.homePeriodMonths = 3;
+    const html = render();
+    expect(html).toContain('data-din-period="3" aria-pressed="true"');
+    expect(html).not.toContain('din-mascot');
+    expect(state.transactions).toEqual([]);
+    state.homePeriodMonths = 6;
   });
 
   it('renders actual personal budget progress without invented goals', () => {

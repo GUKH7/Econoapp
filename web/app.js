@@ -804,6 +804,16 @@ function bindViewEvents() {
     renderApp();
   });
 
+  // A troca de período altera apenas a visualização; não requisita nem modifica dados.
+  document.querySelectorAll('[data-din-period]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const months = Number(button.dataset.dinPeriod);
+      if (![1, 3, 6, 12].includes(months)) return;
+      state.homePeriodMonths = months;
+      renderApp();
+    });
+  });
+
   document.querySelectorAll('[data-tab-jump]').forEach((button) => {
     button.addEventListener('click', () => {
       const target = button.dataset.tabJump;
