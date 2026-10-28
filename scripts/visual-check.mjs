@@ -455,6 +455,47 @@ async function assertAccessibilityBasics(page, name) {
   if (issues.length) throw new Error(`Falhas básicas de acessibilidade em ${name}: ${issues.join(', ')}`);
 }
 
+
+async function assertHomeFitsViewport(page, name) {
+  const clipped = await page.evaluate(() => {
+    const selectors = [
+      '.din-home', '.din-recent', '.din-recent .din-section-heading button',
+      '.din-recent .transaction-row > strong', '.din-extra',
+      '.din-extra .business-summary-card',
+    ];
+    const limit = document.documentElement.clientWidth - 1;
+    return selectors.flatMap((selector) => [...document.querySelectorAll(selector)]
+      .filter((node) => node.getBoundingClientRect().width > 0 && node.getBoundingClientRect().right > limit)
+      .map((node) => ({
+        selector,
+        right: Math.round(node.getBoundingClientRect().right),
+        viewport: Math.round(limit),
+      })));
+  });
+  if (clipped.length) throw new Error('Cortes laterais na home em ' + name + ': ' + JSON.stringify(clipped));
+}
+
+async function runNarrowHome(browser, baseUrl) {
+  const context = await browser.newContext({
+    locale: 'pt-BR',
+    viewport: { width: 320, height: 720 },
+    deviceScaleFactor: 2,
+    isMobile: true,
+    hasTouch: true,
+  });
+  const page = await context.newPage();
+  try {
+    await prepareSession(page);
+    await routeApi(page);
+    await page.goto(baseUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
+    await assertVisible(page, '.din-balance', 'saldo na tela estreita');
+    await assertHomeFitsViewport(page, '320px');
+    await screenshot(page, 'narrow-mobile-dashboard');
+  } finally {
+    await context.close();
+  }
+}
+
 async function runViewport(browser, baseUrl, name, viewport) {
   console.log(`Verificando viewport ${name} (${viewport.width}x${viewport.height})...`);
   const context = await browser.newContext({
@@ -488,6 +529,7 @@ async function runViewport(browser, baseUrl, name, viewport) {
   await assertVisible(page, '.din-balance', 'saldo principal sem card');
   await assertVisible(page, '.din-chart-svg', 'gráfico de evolução');
   await assertVisible(page, '.din-mascot', 'mascote oficial');
+  await assertHomeFitsViewport(page, name + ' pessoal');
   const homeState = await page.evaluate(() => ({
     greeting: document.querySelector('.dashboard-appbar')?.textContent?.includes('Olá,'),
     hasBalanceCard: Boolean(document.querySelector('.balance-card')),
@@ -543,6 +585,7 @@ async function runViewport(browser, baseUrl, name, viewport) {
   await assertText(page, 'Projeção do caixa');
   await assertText(page, 'Lucro líquido estimado');
   await assertText(page, 'Faturamento bruto');
+  await assertHomeFitsViewport(page, name + ' empresarial');
   await screenshot(page, `${name}-business-dashboard`);
   await page.locator('[data-manage-section="business"]').first().click();
   await assertText(page, 'Contas a pagar e receber');
@@ -668,6 +711,7 @@ async function main() {
   try {
     browser = await launchBrowser(chromium);
     await runAuthViewport(browser, baseUrl);
+    await runNarrowHome(browser, baseUrl);
     await runViewport(browser, baseUrl, 'mobile', { width: 390, height: 844 });
     await runViewport(browser, baseUrl, 'desktop', { width: 1024, height: 900 });
     console.log(`Verificacao visual concluida. Screenshots em ${path.relative(rootDir, outputDir)}`);

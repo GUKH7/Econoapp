@@ -78,3 +78,28 @@ body:has(.din-home-shell) { background: #fff; }
 }
 @media (min-width: 650px) { .din-home-shell { max-width: 680px; } .din-hero { min-height: 185px; } .din-mascot { height: 185px; } .din-chart-svg { height: 130px; } }
 @media (prefers-reduced-motion: reduce) { .din-quick > span { transition: none; } }
+
+
+/* Grid tracks must shrink to the viewport even when expanded business details
+   contain wide numbers. Hidden horizontal scrolling masked clipped labels. */
+.din-home-shell #view,
+.din-home-shell .din-home,
+.din-home-shell .din-extra,
+.din-home-shell .din-extra .business-summary-card {
+  min-width: 0;
+  max-width: 100%;
+  width: 100%;
+  grid-template-columns: minmax(0, 1fr);
+}
+.din-home-shell .din-home > *,
+.din-home-shell .din-extra .business-summary-card > *,
+.din-home-shell .din-recent {
+  min-width: 0;
+  max-width: 100%;
+}
+.din-home-shell .din-extra .business-summary-head > div:first-child,
+.din-home-shell .din-extra .business-statement span,
+.din-home-shell .din-recent .transaction-main > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
