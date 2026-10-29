@@ -87,7 +87,7 @@ describe('Din 2.0 transactions', () => {
   it('sorts the timeline newest first without changing stored order', () => {
     const html = render();
     expect(html.indexOf('Mercado')).toBeLessThan(html.indexOf('Salário'));
-    expect(state.transactions[0].id).toBe('earlier');
+    expect(state.transactions[0]?.id).toBe('earlier');
   });
   it('escapes untrusted search input in the interface', () => {
     state.transactionSearch = '<img src=x onerror=alert(1)>';
