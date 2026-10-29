@@ -563,6 +563,20 @@ async function runViewport(browser, baseUrl, name, viewport) {
   await page.locator('nav.tabs [data-tab="dashboard"]').click();
   await page.locator('.din-quick[data-tab-jump="reports"]').click();
   await assertText(page, 'Por categoria');
+  await assertVisible(page, '.report-comparison', 'comparativo mensal repaginado');
+  await screenshot(page, `${name}-analysis-v2`);
+  await page.locator('nav.tabs [data-tab="transactions"]').click();
+  await assertVisible(page, '.din-transaction-overview', 'resumo dos lançamentos filtrados');
+  await assertVisible(page, '.din-transactions-metrics', 'totais do histórico');
+  await page.locator('[data-transaction-filter="EXPENSE"]').click();
+  if (await page.locator('[data-transaction-filter="EXPENSE"]').getAttribute('aria-pressed') !== 'true') {
+    throw new Error('Filtro de despesas não atualizou o estado acessível.');
+  }
+  await page.locator('[data-transaction-search]').fill('busca-sem-resultado-da-prévia');
+  await assertText(page, '0 lançamentos');
+  await page.locator('[data-transaction-search]').fill('');
+  await page.locator('[data-transaction-filter="ALL"]').click();
+  await screenshot(page, `${name}-transactions-v2`);
   await page.locator('nav.tabs [data-tab="dashboard"]').click();
   await page.locator('.din-quick[data-tab-jump="assistant"]').click();
   await assertText(page, 'App e WhatsApp');

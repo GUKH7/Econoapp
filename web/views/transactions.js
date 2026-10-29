@@ -1,24 +1,42 @@
 import { dateFmt, money, state } from '../state.js';
 import { escapeHtml } from '../utils.js';
 import { paymentMetaForTransaction, scopedTransactions, transactionScope } from '../finance.js';
-import { currentMonth, emptyState, nextMonth, previousMonth, transactionRow } from './shared.js';
+import { emptyState, transactionRow } from './shared.js';
 
 export function transactionsView() {
   return `
-    <label class="search-field"><input type="search" placeholder="Buscar lançamento" value="${escapeHtml(state.transactionSearch)}" data-transaction-search /></label>
-    <div class="filter-chips">
-      ${transactionFilterButton('ALL', 'Todos')}
-      ${transactionFilterButton('INCOME', 'Receitas')}
-      ${transactionFilterButton('EXPENSE', 'Despesas')}
-      ${transactionFilterButton('TRANSFER', 'Transferências')}
-    </div>
-    <div class="period-switch">
-      <button type="button">${previousMonth}</button>
-      <button class="active" type="button">${currentMonth}</button>
-      <button type="button">${nextMonth}</button>
-    </div>
-    <section class="timeline-list" data-transaction-list>
-      ${transactionListHtml()}
+    <section class="din-transaction-page" aria-label="Histórico financeiro">
+      <p class="din-page-description">Seus lançamentos, organizados para encontrar tudo com facilidade.</p>
+      <label class="search-field din-search-field"><span class="din-sr-only">Buscar lançamento</span><input type="search" placeholder="Buscar por descrição ou categoria" value="${escapeHtml(state.transactionSearch)}" data-transaction-search /></label>
+      <div class="filter-chips din-filter-chips" role="group" aria-label="Filtrar lançamentos">
+        ${transactionFilterButton('ALL', 'Todos')}
+        ${transactionFilterButton('INCOME', 'Receitas')}
+        ${transactionFilterButton('EXPENSE', 'Despesas')}
+        ${transactionFilterButton('TRANSFER', 'Transferências')}
+      </div>
+      ${transactionOverviewHtml()}
+      <section class="timeline-list din-timeline-list" aria-label="Lista de lançamentos" data-transaction-list>
+        ${transactionListHtml()}
+      </section>
+    </section>
+  `;
+}
+
+export function transactionOverviewHtml() {
+  const rows = filteredTransactions();
+  const totals = rows.reduce((result, item) => {
+    const amount = Number(item.netAmount ?? item.amount) || 0;
+    if (item.type === 'INCOME') result.income += amount;
+    if (item.type === 'EXPENSE') result.expense += amount;
+    return result;
+  }, { income: 0, expense: 0 });
+  return `
+    <section class="din-transaction-overview" data-transaction-overview aria-label="Resumo dos lançamentos filtrados">
+      <div class="din-transaction-count"><strong>${rows.length} ${rows.length === 1 ? 'lançamento' : 'lançamentos'}</strong><span>Todos os períodos · Mais recentes primeiro</span></div>
+      <div class="din-transactions-metrics">
+        <div><span>Receitas exibidas</span><strong class="income">${money.format(totals.income)}</strong></div>
+        <div><span>Despesas exibidas</span><strong class="expense">${money.format(totals.expense)}</strong></div>
+      </div>
     </section>
   `;
 }
@@ -31,7 +49,7 @@ export function transactionToolsView() {
 }
 
 function transactionFilterButton(filter, label) {
-  return `<button class="${state.transactionFilter === filter ? 'active' : ''}" type="button" data-transaction-filter="${filter}">${label}</button>`;
+  return `<button class="${state.transactionFilter === filter ? 'active' : ''}" type="button" aria-pressed="${state.transactionFilter === filter}" data-transaction-filter="${filter}">${label}</button>`;
 }
 
 function filteredTransactions() {
@@ -53,7 +71,7 @@ function filteredTransactions() {
       .join(' ')
       .toLowerCase();
     return haystack.includes(query);
-  });
+  }).sort((a, b) => new Date(b.date) - new Date(a.date));
 }
 
 export function transactionListHtml() {

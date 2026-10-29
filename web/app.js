@@ -21,6 +21,7 @@ import {
   fabMenu,
   tabButton,
   transactionListHtml,
+  transactionOverviewHtml,
   transactionSheet,
   transactionSuccessSheet,
   viewHtml,
@@ -501,7 +502,7 @@ function renderApp() {
   }
   const totals = scopedTotals();
   app.innerHTML = `
-    <section class="shell ${state.tab === 'dashboard' ? 'din-home-shell' : ''}" data-swipe-shell>
+    <section class="shell ${['dashboard', 'transactions', 'reports'].includes(state.tab) ? 'din-home-shell din-v2-shell' : ''}" data-swipe-shell>
       <header class="appbar ${state.tab === 'dashboard' ? 'dashboard-appbar' : ''}">
         ${state.tab === 'dashboard'
           ? `<span class="din-brand" aria-label="Din">Din</span>
@@ -510,7 +511,7 @@ function renderApp() {
                <button class="${state.scope === 'BUSINESS' ? 'active' : ''}" type="button" data-value="BUSINESS" aria-pressed="${state.scope === 'BUSINESS'}">Empresarial</button>
              </div>
              <span class="din-header-bell" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg></span>`
-          : `<div><h1>${screenTitle()}</h1></div>`}
+          : `<div class="din-subpage-title"><span class="din-page-kicker">Din · ${state.scope === 'BUSINESS' ? 'Empresarial' : 'Pessoal'}</span><h1>${screenTitle()}</h1></div>`}
       </header>
 
       <main class="page-track" data-swipe-track>
@@ -1076,7 +1077,10 @@ function bindViewEvents() {
       state.transactionFilter = button.dataset.transactionFilter;
       document
         .querySelectorAll('[data-transaction-filter]')
-        .forEach((item) => item.classList.toggle('active', item === button));
+        .forEach((item) => {
+          item.classList.toggle('active', item === button);
+          item.setAttribute('aria-pressed', String(item === button));
+        });
       renderTransactionList();
     });
   });
@@ -1295,6 +1299,8 @@ function scrollAssistantToBottom() {
 function renderTransactionList() {
   const list = document.querySelector('[data-transaction-list]');
   if (list) list.innerHTML = transactionListHtml();
+  const overview = document.querySelector('[data-transaction-overview]');
+  if (overview) overview.outerHTML = transactionOverviewHtml();
 }
 
 function bindSwipeNavigation() {

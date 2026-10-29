@@ -1,4 +1,4 @@
-const CACHE_NAME = 'din-static-v73';
+const CACHE_NAME = 'din-static-v74';
 const ASSETS = [
   './index.html',
   './styles.css',
@@ -11,6 +11,7 @@ const ASSETS = [
   './styles/transaction-sheet.css',
   './styles/clean-mobile.css',
   './styles/din-home.css',
+  './styles/din-pages.css',
   './assets/din-mark.svg',
   './assets/din-logo.svg',
   './assets/din-icon.png',
