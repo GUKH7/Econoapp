@@ -705,7 +705,8 @@ async function runViewport(browser, baseUrl, name, viewport) {
 
   await page.locator('nav.tabs [data-tab="more"]').click();
   await page.locator('[data-tab-jump="budget"]').click();
-  await assertText(page, 'Limite Pessoal');
+  await assertVisible(page, '.din-goals-page', 'metas e limites do perfil');
+  await assertText(page, 'Limites por categoria');
   await assertText(page, 'Alimentacao');
   await assertText(page, 'Moradia');
   await assertVisible(page, '[data-budget-form]', 'formulario de orcamento');
