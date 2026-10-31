@@ -39,7 +39,9 @@ function screenTitle() {
     dashboard: 'Resumo',
     transactions: 'Transações',
     reports: 'Análise',
-    budget: 'Metas',
+    budget: 'Metas e limites',
+    cards: 'Cartões',
+    planning: 'Planejamento',
     assistant: 'Din',
     more: manageTitle(),
     launch: 'Lançamentos',
@@ -502,7 +504,7 @@ function renderApp() {
   }
   const totals = scopedTotals();
   app.innerHTML = `
-    <section class="shell ${['dashboard', 'transactions', 'reports'].includes(state.tab) ? 'din-home-shell din-v2-shell' : ''}" data-swipe-shell>
+    <section class="shell ${['dashboard', 'transactions', 'reports', 'cards', 'budget', 'planning'].includes(state.tab) ? 'din-home-shell din-v2-shell' : ''}" data-swipe-shell>
       <header class="appbar ${state.tab === 'dashboard' ? 'dashboard-appbar' : ''}">
         ${state.tab === 'dashboard'
           ? `<span class="din-brand" aria-label="Din">Din</span>
@@ -806,6 +808,15 @@ function bindViewEvents() {
   });
 
   // A troca de período altera apenas a visualização; não requisita nem modifica dados.
+  document.querySelectorAll('[data-planning-adjustment]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const adjustment = Number(button.dataset.planningAdjustment);
+      if (![-10, 0, 10, 20].includes(adjustment)) return;
+      state.planningExpenseAdjustment = adjustment;
+      renderApp();
+    });
+  });
+
   document.querySelectorAll('[data-din-period]').forEach((button) => {
     button.addEventListener('click', () => {
       const months = Number(button.dataset.dinPeriod);

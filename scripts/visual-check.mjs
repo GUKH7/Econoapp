@@ -492,6 +492,12 @@ async function runNarrowHome(browser, baseUrl) {
     await assertVisible(page, '.din-balance', 'saldo na tela estreita');
     await assertHomeFitsViewport(page, '320px');
     await screenshot(page, 'narrow-mobile-dashboard');
+    await page.locator('nav.tabs [data-tab="more"]').click();
+    await page.locator('[data-tab-jump="planning"]').click();
+    await assertVisible(page, '.din-planning-page', 'planejamento 320px');
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    if (overflow > 1) throw new Error('Planejamento ultrapassa a largura em 320px');
+    await screenshot(page, 'narrow-mobile-planning');
   } finally {
     await context.close();
   }
@@ -558,8 +564,10 @@ async function runViewport(browser, baseUrl, name, viewport) {
   await page.locator('.din-quick[data-action-type="TRANSFER"]').click();
   await assertVisible(page, '.bottom-sheet', 'transferência');
   await page.locator('.bottom-sheet [data-sheet-close]').click();
-  await page.locator('.din-quick[data-manage-section="cards"]').click();
-  await assertText(page, 'Cartões');
+  await page.locator('.din-quick[data-tab-jump="cards"]').click();
+  await assertVisible(page, '.din-cards-page', 'tela de cartões 2.0');
+  await assertVisible(page, '[data-card-form]', 'formulário de cartão existente');
+  await screenshot(page, `${name}-cards-v2`);
   await page.locator('nav.tabs [data-tab="dashboard"]').click();
   await page.locator('.din-quick[data-tab-jump="reports"]').click();
   await assertText(page, 'Por categoria');
@@ -577,6 +585,20 @@ async function runViewport(browser, baseUrl, name, viewport) {
   await page.locator('[data-transaction-search]').fill('');
   await page.locator('[data-transaction-filter="ALL"]').click();
   await screenshot(page, `${name}-transactions-v2`);
+  await page.locator('nav.tabs [data-tab="dashboard"]').click();
+  await page.locator('nav.tabs [data-tab="more"]').click();
+  await page.locator('[data-tab-jump="budget"]').click();
+  await assertVisible(page, '.din-goals-page', 'metas e limites 2.0');
+  await assertVisible(page, '[data-budget-form]', 'formulário existente de orçamento');
+  await screenshot(page, `${name}-goals-v2`);
+  await page.locator('nav.tabs [data-tab="more"]').click();
+  await page.locator('[data-tab-jump="planning"]').click();
+  await assertVisible(page, '.din-planning-page', 'planejamento financeiro 2.0');
+  await page.locator('[data-planning-adjustment="20"]').click();
+  if (await page.locator('[data-planning-adjustment="20"]').getAttribute('aria-pressed') !== 'true') {
+    throw new Error('O cenário de despesas +20% não atualizou.');
+  }
+  await screenshot(page, `${name}-planning-v2`);
   await page.locator('nav.tabs [data-tab="dashboard"]').click();
   await page.locator('.din-quick[data-tab-jump="assistant"]').click();
   await assertText(page, 'App e WhatsApp');

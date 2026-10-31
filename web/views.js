@@ -5,6 +5,7 @@ export { transactionSheet, transactionSuccessSheet, launchView } from './views/t
 export { reportsView } from './views/reports.js';
 export { assistantView } from './views/assistant.js';
 export { budgetView, manageView, moreView } from './views/manage.js';
+export { cardsView, goalsView, planningView, planningForecast } from './views/din-financial.js';
 
 import { dashboardView } from './views/dashboard.js';
 import { transactionsView } from './views/transactions.js';
@@ -13,11 +14,14 @@ import { reportsView } from './views/reports.js';
 import { assistantView } from './views/assistant.js';
 import { budgetView, moreView } from './views/manage.js';
 import { state } from './state.js';
+import { cardsView, goalsView, planningView } from './views/din-financial.js';
 
 export function viewHtml() {
   if (state.tab === 'transactions') return transactionsView();
   if (state.tab === 'reports') return reportsView();
-  if (state.tab === 'budget') return budgetView();
+  if (state.tab === 'budget') return goalsView();
+  if (state.tab === 'cards') return cardsView();
+  if (state.tab === 'planning') return planningView();
   if (state.tab === 'assistant') return assistantView();
   if (state.tab === 'more') return moreView();
   if (state.tab === 'launch') return launchView();

@@ -81,7 +81,7 @@ describe('Din home redesign', () => {
     const html = render();
     expect(html).toContain('data-action-type="EXPENSE"');
     expect(html).toContain('data-action-type="TRANSFER"');
-    expect(html).toContain('data-manage-section="cards"');
+    expect(html).toContain('data-tab-jump="cards"');
     expect(html).toContain('data-tab-jump="transactions"');
     expect(html).toContain('Registre lançamentos');
     expect(html).toContain('Sem base de comparação');
