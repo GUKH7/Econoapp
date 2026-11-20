@@ -343,3 +343,46 @@ body:has(.din-home-shell), body:has(.din-v2-shell) {
     transition-duration: .01ms !important;
   }
 }
+
+/* Five destinations plus a separate floating add action. */
+.din-home-shell .tabs,
+.din-v2-shell .tabs {
+  grid-template-columns: repeat(5, minmax(0,1fr));
+  z-index: 37;
+}
+.din-home-shell .tabs button:not(.nav-fab),
+.din-v2-shell .tabs button:not(.nav-fab) {
+  min-width: 0;
+  font-size: clamp(9px, 2.55vw, 11px);
+  letter-spacing: -.025em;
+  line-height: 1.15;
+}
+.din-home-shell .tabs button.nav-fab,
+.din-v2-shell .tabs button.nav-fab {
+  position: absolute;
+  grid-column: auto;
+  width: 52px;
+  height: 52px;
+  min-height: 52px;
+  right: 16px;
+  bottom: calc(100% + 14px);
+  background: var(--din-forest) !important;
+  box-shadow: 0 6px 17px rgba(7,91,55,.18);
+}
+.din-home-shell .tabs button.nav-fab.open,
+.din-v2-shell .tabs button.nav-fab.open { background: #103622 !important; }
+.din-home-shell .fab-actions,
+.din-v2-shell .fab-actions {
+  bottom: calc(var(--bottom-nav-height) + 95px + env(safe-area-inset-bottom));
+}
+.din-header-bell {
+  border: 0;
+  cursor: pointer;
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
+  background: #eef6ef;
+  border-radius: 15px;
+}
+.din-header-bell svg path { fill: none; stroke: currentColor; }
