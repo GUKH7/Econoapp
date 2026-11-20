@@ -492,7 +492,7 @@ async function runNarrowHome(browser, baseUrl) {
     await assertVisible(page, '.din-balance', 'saldo na tela estreita');
     await assertHomeFitsViewport(page, '320px');
     await screenshot(page, 'narrow-mobile-dashboard');
-    await page.locator('nav.tabs [data-tab="more"]').click();
+    await page.locator('.appbar [data-tab-jump="more"]').click();
     await page.locator('[data-tab-jump="planning"]').click();
     await assertVisible(page, '.din-planning-page', 'planejamento 320px');
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
@@ -532,6 +532,12 @@ async function runViewport(browser, baseUrl, name, viewport) {
   await disableMotion(page);
 
   await assertText(page, 'Seu dinheiro em movimento');
+  const navigationIds = await page.locator('nav.tabs button[data-tab]').evaluateAll((items) => items.map((item) => item.dataset.tab));
+  if (navigationIds.join(',') !== 'dashboard,transactions,reports,cards,budget') {
+    throw new Error('Navegação principal fora do Design System Din: ' + navigationIds.join(','));
+  }
+  await assertVisible(page, 'nav.tabs [data-fab]', 'ação independente para adicionar');
+  await assertVisible(page, '.appbar [data-tab-jump="more"]', 'acesso a configurações');
   const periodButtons = page.locator('[data-din-period]');
   if (await periodButtons.count() !== 4) throw new Error('Períodos financeiros ausentes em ' + name);
   await assertAccessibilityBasics(page, name);
@@ -586,12 +592,12 @@ async function runViewport(browser, baseUrl, name, viewport) {
   await page.locator('[data-transaction-filter="ALL"]').click();
   await screenshot(page, `${name}-transactions-v2`);
   await page.locator('nav.tabs [data-tab="dashboard"]').click();
-  await page.locator('nav.tabs [data-tab="more"]').click();
+  await page.locator('.appbar [data-tab-jump="more"]').click();
   await page.locator('[data-tab-jump="budget"]').click();
   await assertVisible(page, '.din-goals-page', 'metas e limites 2.0');
   await assertVisible(page, '[data-budget-form]', 'formulário existente de orçamento');
   await screenshot(page, `${name}-goals-v2`);
-  await page.locator('nav.tabs [data-tab="more"]').click();
+  await page.locator('.appbar [data-tab-jump="more"]').click();
   await page.locator('[data-tab-jump="planning"]').click();
   await assertVisible(page, '.din-planning-page', 'planejamento financeiro 2.0');
   await page.locator('[data-planning-adjustment="20"]').click();
@@ -662,7 +668,7 @@ async function runViewport(browser, baseUrl, name, viewport) {
   }
   await screenshot(page, `${name}-transactions`);
 
-  await page.locator('nav.tabs [data-tab="more"]').click();
+  await page.locator('.appbar [data-tab-jump="more"]').click();
   await assertText(page, 'Automação e dados');
   await assertText(page, 'Importar e exportar');
   const closedTransactionTools = await page.locator('.transaction-tool:not([open])').count();
@@ -703,7 +709,7 @@ async function runViewport(browser, baseUrl, name, viewport) {
     throw new Error(`Nenhuma categoria renderizada em ${name}`);
   }
 
-  await page.locator('nav.tabs [data-tab="more"]').click();
+  await page.locator('.appbar [data-tab-jump="more"]').click();
   await page.locator('[data-tab-jump="budget"]').click();
   await assertVisible(page, '.din-goals-page', 'metas e limites do perfil');
   await assertText(page, 'Limites por categoria');
