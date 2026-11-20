@@ -29,7 +29,7 @@ import {
 import { icon } from './views/shared.js';
 import { businessOnboardingHtml } from './views/business-onboarding.js';
 
-const MAIN_TABS = ['dashboard', 'transactions', 'reports', 'more'];
+const MAIN_TABS = ['dashboard', 'transactions', 'reports', 'cards', 'budget'];
 const GOOGLE_CLIENT_ID = window.ECONOAPP_CONFIG?.googleClientId || '';
 let pendingGoogleCredential = '';
 let googleInitAttempts = 0;
@@ -512,8 +512,8 @@ function renderApp() {
                <button class="${state.scope === 'PERSONAL' ? 'active' : ''}" type="button" data-value="PERSONAL" aria-pressed="${state.scope === 'PERSONAL'}">Pessoal</button>
                <button class="${state.scope === 'BUSINESS' ? 'active' : ''}" type="button" data-value="BUSINESS" aria-pressed="${state.scope === 'BUSINESS'}">Empresarial</button>
              </div>
-             <span class="din-header-bell" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg></span>`
-          : `<div class="din-subpage-title"><span class="din-page-kicker">Din · ${state.scope === 'BUSINESS' ? 'Empresarial' : 'Pessoal'}</span><h1>${screenTitle()}</h1></div>`}
+             <button class="din-header-bell" type="button" data-tab-jump="more" aria-label="Mais opções e configurações"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>`
+          : `<div class="din-subpage-title"><span class="din-page-kicker">Din · ${state.scope === 'BUSINESS' ? 'Empresarial' : 'Pessoal'}</span><h1>${screenTitle()}</h1></div><button class="din-header-bell" type="button" data-tab-jump="more" aria-label="Mais opções e configurações"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>`}
       </header>
 
       <main class="page-track" data-swipe-track>
@@ -523,9 +523,10 @@ function renderApp() {
       <nav class="tabs" data-tabs>
         ${tabButton('dashboard', 'Início')}
         ${tabButton('transactions', 'Transações')}
-        <button class="fab nav-fab ${state.fabOpen ? 'open' : ''}" type="button" data-fab aria-label="Adicionar">+</button>
         ${tabButton('reports', 'Análise')}
-        ${tabButton('more', 'Mais')}
+        ${tabButton('cards', 'Cartões')}
+        ${tabButton('budget', 'Metas')}
+        <button class="fab nav-fab ${state.fabOpen ? 'open' : ''}" type="button" data-fab aria-label="Adicionar lançamento">+</button>
       </nav>
       ${state.tab === 'assistant' ? assistantInputHtml() : ''}
       ${state.fabOpen ? fabMenu() : ''}
