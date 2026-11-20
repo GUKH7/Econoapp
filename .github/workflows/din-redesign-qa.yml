@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feat/din-home-redesign-20261028
+      - feat/din-fluida-moderna-v1-20261120
 
 permissions:
   contents: read
