@@ -830,6 +830,10 @@ function bindViewEvents() {
   document.querySelectorAll('[data-tab-jump]').forEach((button) => {
     button.addEventListener('click', () => {
       const target = button.dataset.tabJump;
+      if (target === 'more') {
+        switchTab('more');
+        return;
+      }
       if (MAIN_TABS.includes(target)) {
         switchTab(target);
         return;
