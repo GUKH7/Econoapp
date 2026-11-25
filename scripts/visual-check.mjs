@@ -272,6 +272,7 @@ const contentTypes = {
   '.webmanifest': 'application/manifest+json; charset=utf-8',
   '.jpg': 'image/jpeg',
   '.png': 'image/png',
+  '.webp': 'image/webp',
   '.svg': 'image/svg+xml',
 };
 
@@ -456,6 +457,44 @@ async function assertAccessibilityBasics(page, name) {
 }
 
 
+async function assertDinNavigationFits(page, name) {
+  const result = await page.evaluate(() => {
+    const nav = document.querySelector('nav.tabs');
+    const items = Array.from(nav?.querySelectorAll('button[data-tab]') || []);
+    const fab = nav?.querySelector('button[data-fab]');
+    const viewport = document.documentElement.clientWidth;
+    const rects = items.map((item) => item.getBoundingClientRect());
+    const clipped = rects.some((rect) => rect.left < -1 || rect.right > viewport + 1 || rect.height < 44);
+    const overlaps = rects.some((rect, index) => rects.slice(index + 1).some((other) => rect.left < other.right - 1 && rect.right > other.left + 1));
+    const fabRect = fab?.getBoundingClientRect();
+    return {
+      destinations: items.map((item) => item.dataset.tab),
+      clipped,
+      overlaps,
+      floatingActionVisible: Boolean(fabRect && fabRect.width >= 44 && fabRect.left >= 0 && fabRect.right <= viewport + 1),
+    };
+  });
+  const expected = 'dashboard,transactions,reports,cards,budget';
+  if (result.destinations.join(',') !== expected || result.clipped || result.overlaps || !result.floatingActionVisible) {
+    throw new Error('Navegação mobile inconsistente em ' + name + ': ' + JSON.stringify(result));
+  }
+}
+
+async function assertHomeReadingOrder(page, name) {
+  const result = await page.locator('.din-home > *').evaluateAll((sections) =>
+    sections.map((node) => ({
+      name: node.classList[0],
+      top: node.getBoundingClientRect().top,
+    })),
+  );
+  const expected = 'din-hero,din-chart-section,din-actions,din-month,din-secondary-grid,din-recent';
+  const domOrder = result.map((item) => item.name).join(',');
+  const visuallyReordered = result.some((item, index) => index > 0 && item.top < result[index - 1].top - 1);
+  if (domOrder !== expected || visuallyReordered) {
+    throw new Error('Ordem visual e semântica divergente em ' + name + ': ' + JSON.stringify(result));
+  }
+}
+
 async function assertHomeFitsViewport(page, name) {
   const clipped = await page.evaluate(() => {
     const selectors = [
@@ -490,6 +529,8 @@ async function runNarrowHome(browser, baseUrl) {
     await routeApi(page);
     await page.goto(baseUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
     await assertVisible(page, '.din-balance', 'saldo na tela estreita');
+    await assertDinNavigationFits(page, '320px');
+    await assertHomeReadingOrder(page, '320px');
     await assertHomeFitsViewport(page, '320px');
     await screenshot(page, 'narrow-mobile-dashboard');
     await page.locator('.appbar [data-tab-jump="more"]').click();
@@ -541,6 +582,8 @@ async function runViewport(browser, baseUrl, name, viewport) {
   const periodButtons = page.locator('[data-din-period]');
   if (await periodButtons.count() !== 4) throw new Error('Períodos financeiros ausentes em ' + name);
   await assertAccessibilityBasics(page, name);
+  await assertDinNavigationFits(page, name);
+  await assertHomeReadingOrder(page, name);
   await assertVisible(page, '.din-balance', 'saldo principal sem card');
   await assertVisible(page, '.din-chart-svg', 'gráfico de evolução');
   if (await page.locator('.din-hero img, .din-mascot').count()) {
