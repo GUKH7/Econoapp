@@ -27,6 +27,7 @@ export function tabButton(id, label) {
     transactions: icon('flow'),
     reports: icon('reports'),
     budget: icon('target'),
+    cards: icon('card'),
     more: icon('more'),
   };
   return `<button class="${state.tab === id ? 'active' : ''}" type="button" data-tab="${id}"><span class="tab-icon">${icons[id]}</span>${label}</button>`;

@@ -1,3 +1,4 @@
+import { dinHomeHtml } from './din-home.js';
 import { money, state } from '../state.js';
 import { escapeHtml } from '../utils.js';
 import { scopedTotals, scopedTransactions, scopeLabel, totalsByCategory } from '../finance.js';
@@ -15,33 +16,13 @@ import {
 } from './shared.js';
 
 export function dashboardView() {
-  const rows = scopedTransactions().slice(0, 3).map(transactionRow).join('');
-
-  return `
-    ${onboardingGuideHtml()}
-    ${state.scope === 'BUSINESS' ? businessSummaryCard() : ''}
-    ${dashboardInsightsHtml()}
-    <article class="card dashboard-recent">
-      <div class="panel-title">
-        <div>
-          <span class="eyebrow">Movimentações</span>
-          <h2>Últimos lançamentos</h2>
-        </div>
-        <button class="button secondary compact-action" type="button" data-tab-jump="transactions">Ver fluxo</button>
-      </div>
-      ${
-        rows ||
-        emptyState(
-          'Comece seu histórico financeiro',
-          'Adicione uma receita ou gasto para o Din montar seu resumo do mês.',
-          icon('plus'),
-          { label: 'Adicionar lançamento', attrs: 'data-assistant-action="expense"' },
-        )
-      }
-    </article>
-  `;
+  return [
+    onboardingGuideHtml(),
+    dinHomeHtml(),
+    state.scope === 'BUSINESS' ? '<details class="din-extra"><summary>Detalhes do negócio</summary>' + businessSummaryCard() + '</details>' : '',
+    '<details class="din-extra"><summary>Indicadores adicionais</summary>' + dashboardInsightsHtml() + '</details>',
+  ].join('');
 }
-
 function onboardingGuideHtml() {
   if (state.onboardingDismissed) return '';
 

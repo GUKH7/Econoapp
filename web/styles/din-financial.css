@@ -1,0 +1,63 @@
+/* Din 2.0 financial workspace — light, compact, accessible and responsive. */
+.din-finance-page { display:grid;gap:18px;min-width:0;width:100%;color:#1b3023; }
+.din-finance-intro {margin:0;font-size:13px;line-height:1.6;color:#65796b;max-width:54ch}
+.din-finance-overview { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;background:#f7fbf8;border:1px solid #eaf1eb;border-radius:19px;padding:18px; }
+.din-finance-overview > div {display:grid;align-content:start;gap:8px;min-width:0}
+.din-finance-overview > div + div{border-left:1px solid #e0eae2;padding-left:13px}
+.din-finance-overview span,.din-finance-form label,.din-finance-goal p{color:#617566;font-size:12px}
+.din-finance-overview strong{font-size:clamp(17px,4.5vw,25px);font-weight:900;color:#173422;letter-spacing:-.65px;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+.din-finance-heading{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.din-finance-heading h2{font-size:17px;margin:0;color:#172b1d;letter-spacing:-.3px;font-weight:850}
+.din-finance-heading > span{font-size:11px;color:#77877a;white-space:nowrap}
+.din-cards-list,.din-goal-list,.din-projection-list{display:grid;gap:12px;min-width:0}
+.din-card-item{border:1px solid #e4ece6;background:linear-gradient(142deg,#ffffff 4%,#f3f9f5 100%);border-radius:20px;padding:20px;display:grid;gap:16px;box-shadow:0 5px 25px #15362108}
+.din-card-top{display:flex;align-items:center;gap:8px;color:#658070;font-size:11px;font-weight:700}
+.din-card-chip{display:grid;place-items:center;width:29px;height:21px;background:#d4e9d7;color:#478963;border-radius:6px;font-size:19px}
+.din-card-item h3{font-weight:900;font-size:21px;color:#163a27;margin:0;overflow-wrap:anywhere}
+.din-card-values{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:15px}
+.din-card-values div{display:grid;gap:6px;min-width:0}
+.din-card-values small{font-size:11px;color:#718576}
+.din-card-values strong{font-size:17px;font-weight:850;color:#244332;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+.din-track{height:8px;border-radius:999px;background:#e4eee7;overflow:hidden;min-width:0}
+.din-track > span{display:block;height:100%;background:linear-gradient(90deg,#09a364,#087e4b);border-radius:999px}
+.din-finance-note{color:#76887c;font-size:11px;line-height:1.6;margin:0}
+.din-empty{background:#f6faf7;color:#63766b;border:1px dashed #d5e6da;border-radius:16px;padding:23px 18px;line-height:1.6;font-size:13px;margin:0}
+.din-finance-form,.din-finance-goal{background:#fff;border:1px solid #e8f0e9;border-radius:19px;padding:18px;display:grid;gap:17px}
+.din-finance-form form{margin:0;display:grid;gap:12px}
+.din-finance-form .field{margin:0;color:#4b6655;font-size:12px}
+.din-finance-form .field :is(input,select){background:#f9fbf9;border:1px solid #dfebe2;border-radius:12px;min-height:46px;color:#243e2d;font-size:14px;width:100%}
+.din-finance-form .button{background:#087e48;border:0;border-radius:12px;min-height:46px;box-shadow:none;font-size:13px;font-weight:850;color:white}
+.din-finance-form .button:hover{background:#066c3e}
+.din-text-action{background:none;border:0;color:#07824d;font-weight:800;font-size:13px;text-align:left;justify-self:start;padding:7px 0;cursor:pointer}
+.din-text-action:focus-visible,.din-planning-options button:focus-visible,.din-finance-page [data-budget-delete]:focus-visible{outline:3px solid #0b9a63;outline-offset:3px}
+.din-goal-item{background:#fbfcfb;border:1px solid #e8efe9;border-radius:17px;padding:16px;display:grid;gap:13px}
+.din-goal-head{display:flex;justify-content:space-between;gap:10px;align-items:start}
+.din-goal-head h3{font-size:14px;font-weight:850;margin:0 0 5px}
+.din-goal-head p{font-size:12px;color:#708275;margin:0}
+.din-goal-head button{color:#a14742;background:#fff5f3;border:0;border-radius:99px;padding:8px 12px;font-size:11px;font-weight:800;cursor:pointer}
+.din-target-number{font-size:clamp(25px,6.5vw,32px);letter-spacing:-.8px;font-weight:900;color:#07824a}
+.din-business-target{background:#f7fbf8}
+.din-planning-options{display:flex;flex-wrap:wrap;gap:7px}
+.din-planning-options button{padding:11px 15px;border-radius:99px;border:1px solid #e5eee7;color:#4f6657;background:#f4f8f5;font-size:12px;font-weight:800;min-width:60px;cursor:pointer}
+.din-planning-options button.active{background:#087e49;border-color:#087e49;color:white}
+.din-planning-result{background:linear-gradient(135deg,#f0faf3,#e5f7e9);border:1px solid #d9eddf;border-radius:20px;padding:20px;display:grid;gap:10px}
+.din-planning-result > span{font-size:12px;font-weight:750;color:#4b6d56}
+.din-planning-result > strong{color:#087e49;font-weight:900;font-size:clamp(25px,7vw,38px);font-variant-numeric:tabular-nums;letter-spacing:-1px;overflow-wrap:anywhere}
+.din-planning-result > strong.negative,.din-projection-row strong.negative{color:#c94b40}
+.din-planning-result p{margin:0;font-size:11px;color:#708273;line-height:1.5}
+.din-projection-list{gap:0;border-radius:17px;border:1px solid #e6eee8;overflow:hidden}
+.din-projection-row{display:flex;gap:12px;align-items:center;justify-content:space-between;padding:15px 17px;border-bottom:1px solid #eaf0ea}
+.din-projection-row:last-child{border-bottom:0}
+.din-projection-row > span{font-size:13px;color:#5d7364;text-transform:capitalize}
+.din-projection-row > strong{color:#08784a;font-size:15px;font-weight:850;overflow-wrap:anywhere;text-align:right}
+@media(max-width:360px){
+.din-finance-page{gap:15px}
+.din-finance-overview{padding:13px;gap:8px}
+.din-finance-overview > div + div{padding-left:9px}
+.din-finance-overview strong{font-size:16px}
+.din-card-item{padding:15px}
+.din-card-values{gap:8px}
+.din-card-values strong{font-size:14px}
+.din-finance-form,.din-finance-goal{padding:14px}
+}
+@media(prefers-reduced-motion:reduce){.din-planning-options button{transition:none}}

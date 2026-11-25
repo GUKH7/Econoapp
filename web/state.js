@@ -12,6 +12,8 @@ export const state = {
   categories: [],
   channels: [],
   tab: 'dashboard',
+  homePeriodMonths: 6,
+  planningExpenseAdjustment: 0,
   manageSection: '',
   manageAccountTab: 'accounts',
   manageModal: '',

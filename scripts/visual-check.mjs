@@ -12,6 +12,11 @@ function currentMonthDate(day = 1) {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), day, 12)).toISOString();
 }
 
+function relativeMonthDate(monthOffset, day = 1) {
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + monthOffset, day, 12)).toISOString();
+}
+
 const categories = [
   { id: 'cat-food', name: 'Alimentacao', color: '#22C55E' },
   { id: 'cat-home', name: 'Moradia', color: '#3B82F6' },
@@ -74,6 +79,17 @@ const transactions = [
     creditCardId: 'card-main',
     date: currentMonthDate(6),
   },
+  // Historical synthetic entries are intentionally included to exercise the
+  // trend chart and planning simulation without touching real accounts.
+  ...[
+    { id: 'tx-prev-income', description: 'Salário anterior', amount: 4200, type: 'INCOME', categoryId: 'cat-salary', date: relativeMonthDate(-1, 3) },
+    { id: 'tx-prev-rent', description: 'Moradia anterior', amount: 1200, type: 'EXPENSE', categoryId: 'cat-home', date: relativeMonthDate(-1, 5) },
+    { id: 'tx-prev-food', description: 'Compras anteriores', amount: 250, type: 'EXPENSE', categoryId: 'cat-food', date: relativeMonthDate(-1, 7) },
+    { id: 'tx-two-income', description: 'Salário dois meses atrás', amount: 4100, type: 'INCOME', categoryId: 'cat-salary', date: relativeMonthDate(-2, 3) },
+    { id: 'tx-two-expense', description: 'Despesas dois meses atrás', amount: 1410, type: 'EXPENSE', categoryId: 'cat-home', date: relativeMonthDate(-2, 5) },
+    { id: 'tx-three-income', description: 'Salário três meses atrás', amount: 3980, type: 'INCOME', categoryId: 'cat-salary', date: relativeMonthDate(-3, 3) },
+    { id: 'tx-three-expense', description: 'Despesas três meses atrás', amount: 1500, type: 'EXPENSE', categoryId: 'cat-home', date: relativeMonthDate(-3, 5) },
+  ].map((tx) => ({ ...tx, netAmount: tx.amount, source: 'MANUAL', scope: 'PERSONAL', accountId: 'acc-main' })),
   {
     id: 'tx-5',
     description: 'Venda loja online',
@@ -104,7 +120,7 @@ const apiFixtures = {
   '/api/v1/dashboard/reports': {
     data: {
       period: { startDate: currentMonthDate(1).slice(0, 10), endDate: currentMonthDate(28).slice(0, 10) },
-      comparisonPeriod: { startDate: '2026-06-01', endDate: '2026-06-30' },
+      comparisonPeriod: { startDate: relativeMonthDate(-1, 1).slice(0, 10), endDate: relativeMonthDate(0, 0).slice(0, 10) },
       current: { income: 4500, expense: 1599.4, balance: 2900.6 },
       previous: { income: 4200, expense: 1450, balance: 2750 },
       categories: {
@@ -251,6 +267,8 @@ const apiFixtures = {
       salesTiming: { byDay: [{ label: 'sexta-feira', revenue: 4800, sales: 9 }, { label: 'segunda-feira', revenue: 3100, sales: 6 }], byHour: [{ label: '14:00', revenue: 3900, sales: 7 }, { label: '19:00', revenue: 2600, sales: 5 }], bestDay: { label: 'sexta-feira' }, bestHour: { label: '14:00' } },
     },
   },
+  '/api/v1/intelligence/preferences': { data: null },
+  '/api/v1/intelligence/insights': { data: [] },
   '/api/v1/assistant/activity': {
     data: {
       messages: [
@@ -270,6 +288,7 @@ const contentTypes = {
   '.webmanifest': 'application/manifest+json; charset=utf-8',
   '.jpg': 'image/jpeg',
   '.png': 'image/png',
+  '.webp': 'image/webp',
   '.svg': 'image/svg+xml',
 };
 
@@ -364,6 +383,12 @@ async function selectChoice(page, selector) {
 }
 
 async function screenshot(page, name) {
+  // Full-page screenshots may paint focus-only fixed links at an old scroll
+  // offset. Reset the viewport and focus before recording the visual baseline.
+  await page.evaluate(() => {
+    document.activeElement?.blur?.();
+    window.scrollTo(0, 0);
+  });
   await page.waitForTimeout(350);
   await page.screenshot({ path: path.join(outputDir, `${name}.png`), fullPage: true });
 }
@@ -453,6 +478,98 @@ async function assertAccessibilityBasics(page, name) {
   if (issues.length) throw new Error(`Falhas básicas de acessibilidade em ${name}: ${issues.join(', ')}`);
 }
 
+
+async function assertDinNavigationFits(page, name) {
+  const result = await page.evaluate(() => {
+    const nav = document.querySelector('nav.tabs');
+    const items = Array.from(nav?.querySelectorAll('button[data-tab]') || []);
+    const fab = nav?.querySelector('button[data-fab]');
+    const viewport = document.documentElement.clientWidth;
+    const rects = items.map((item) => item.getBoundingClientRect());
+    const clipped = rects.some((rect) => rect.left < -1 || rect.right > viewport + 1 || rect.height < 44);
+    const overlaps = rects.some((rect, index) => rects.slice(index + 1).some((other) => rect.left < other.right - 1 && rect.right > other.left + 1));
+    const fabRect = fab?.getBoundingClientRect();
+    return {
+      destinations: items.map((item) => item.dataset.tab),
+      clipped,
+      overlaps,
+      floatingActionVisible: Boolean(fabRect && fabRect.width >= 44 && fabRect.left >= 0 && fabRect.right <= viewport + 1),
+      actionOverlapsTab: Boolean(fabRect && rects.some((rect) =>
+        rect.left < fabRect.right - 1 && rect.right > fabRect.left + 1 &&
+        rect.top < fabRect.bottom - 1 && rect.bottom > fabRect.top + 1)),
+    };
+  });
+  const expected = 'dashboard,transactions,reports,cards,budget';
+  if (result.destinations.join(',') !== expected || result.clipped || result.overlaps || !result.floatingActionVisible || result.actionOverlapsTab) {
+    throw new Error('Navegação mobile inconsistente em ' + name + ': ' + JSON.stringify(result));
+  }
+}
+
+async function assertHomeReadingOrder(page, name) {
+  const result = await page.locator('.din-home > *').evaluateAll((sections) =>
+    sections.map((node) => ({
+      name: node.classList[0],
+      top: node.getBoundingClientRect().top,
+    })),
+  );
+  const expected = 'din-hero,din-chart-section,din-actions,din-month,din-secondary-grid,din-recent';
+  const domOrder = result.map((item) => item.name).join(',');
+  const visuallyReordered = result.some((item, index) => index > 0 && item.top < result[index - 1].top - 1);
+  if (domOrder !== expected || visuallyReordered) {
+    throw new Error('Ordem visual e semântica divergente em ' + name + ': ' + JSON.stringify(result));
+  }
+}
+
+async function assertHomeFitsViewport(page, name) {
+  const clipped = await page.evaluate(() => {
+    const selectors = [
+      '.din-home', '.din-recent', '.din-recent .din-section-heading button',
+      '.din-recent .transaction-row > strong', '.din-small-panel .din-section-heading button',
+      '.din-extra',
+      '.din-extra .business-summary-card',
+    ];
+    const limit = document.documentElement.clientWidth - 1;
+    return selectors.flatMap((selector) => [...document.querySelectorAll(selector)]
+      .filter((node) => node.getBoundingClientRect().width > 0 && node.getBoundingClientRect().right > limit)
+      .map((node) => ({
+        selector,
+        right: Math.round(node.getBoundingClientRect().right),
+        viewport: Math.round(limit),
+      })));
+  });
+  if (clipped.length) throw new Error('Cortes laterais na home em ' + name + ': ' + JSON.stringify(clipped));
+}
+
+async function runNarrowHome(browser, baseUrl) {
+  const context = await browser.newContext({
+    locale: 'pt-BR',
+    viewport: { width: 320, height: 720 },
+    deviceScaleFactor: 2,
+    isMobile: true,
+    hasTouch: true,
+  });
+  const page = await context.newPage();
+  try {
+    await prepareSession(page);
+    await routeApi(page);
+    await page.goto(baseUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
+    await assertVisible(page, '.din-balance', 'saldo na tela estreita');
+    await assertDinNavigationFits(page, '320px');
+    await assertHomeReadingOrder(page, '320px');
+    await assertHomeFitsViewport(page, '320px');
+    await screenshot(page, 'narrow-mobile-dashboard');
+    await page.locator('.appbar [data-tab-jump="more"]').click();
+    await page.locator('[data-tab-jump="planning"]').click();
+    await assertVisible(page, '.din-planning-page', 'planejamento 320px');
+    await assertText(page, 'Resultado mensal simulado');
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    if (overflow > 1) throw new Error('Planejamento ultrapassa a largura em 320px');
+    await screenshot(page, 'narrow-mobile-planning');
+  } finally {
+    await context.close();
+  }
+}
+
 async function runViewport(browser, baseUrl, name, viewport) {
   console.log(`Verificando viewport ${name} (${viewport.width}x${viewport.height})...`);
   const context = await browser.newContext({
@@ -464,6 +581,13 @@ async function runViewport(browser, baseUrl, name, viewport) {
   });
   const page = await context.newPage();
   const consoleErrors = [];
+  const httpErrors = [];
+  page.on('response', (response) => {
+    if (response.status() >= 400) {
+      const request = response.request();
+      httpErrors.push(`${response.status()} ${request.method()} ${new URL(response.url()).pathname}`);
+    }
+  });
   page.on('console', (message) => {
     if (message.type() === 'error') consoleErrors.push(message.text());
   });
@@ -474,9 +598,88 @@ async function runViewport(browser, baseUrl, name, viewport) {
   await page.goto(baseUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
   await disableMotion(page);
 
-  await assertText(page, 'Resumo');
+  await assertText(page, 'Seu dinheiro em movimento');
+  const navigationIds = await page.locator('nav.tabs button[data-tab]').evaluateAll((items) => items.map((item) => item.dataset.tab));
+  if (navigationIds.join(',') !== 'dashboard,transactions,reports,cards,budget') {
+    throw new Error('Navegação principal fora do Design System Din: ' + navigationIds.join(','));
+  }
+  await assertVisible(page, 'nav.tabs [data-fab]', 'ação independente para adicionar');
+  await assertVisible(page, '.appbar [data-tab-jump="more"]', 'acesso a configurações');
+  const periodButtons = page.locator('[data-din-period]');
+  if (await periodButtons.count() !== 4) throw new Error('Períodos financeiros ausentes em ' + name);
   await assertAccessibilityBasics(page, name);
-  await assertVisible(page, '.balance-card', 'card de saldo');
+  await assertDinNavigationFits(page, name);
+  await assertHomeReadingOrder(page, name);
+  await assertVisible(page, '.din-balance', 'saldo principal sem card');
+  await assertVisible(page, '.din-chart-svg', 'gráfico de evolução');
+  if (await page.locator('.din-hero img, .din-mascot').count()) {
+    throw new Error('A home não deve mostrar o mascote no redesign 2.0');
+  }
+  await page.locator('[data-din-period="3"]').click();
+  if (await page.locator('[data-din-period="3"]').getAttribute('aria-pressed') !== 'true') throw new Error('Filtro 3M não atualizou');
+  await page.locator('[data-din-period="12"]').click();
+  if (await page.locator('[data-din-period="12"]').getAttribute('aria-pressed') !== 'true') throw new Error('Filtro 12M não atualizou');
+  await page.locator('[data-din-period="6"]').click();
+  await assertHomeFitsViewport(page, name + ' pessoal');
+  const homeState = await page.evaluate(() => ({
+    greeting: document.querySelector('.dashboard-appbar')?.textContent?.includes('Olá,'),
+    hasBalanceCard: Boolean(document.querySelector('.balance-card')),
+    pageOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  }));
+  if (homeState.greeting || homeState.hasBalanceCard || homeState.pageOverflow > 1) {
+    throw new Error('Falha na nova home em ' + name + ': ' + JSON.stringify(homeState));
+  }
+  const quickActions = page.locator('.din-quick');
+  if (await quickActions.count() !== 5) {
+    throw new Error('Quantidade inesperada de ações rápidas em ' + name);
+  }
+  await page.locator('.din-quick[data-action-type="EXPENSE"]').click();
+  await assertVisible(page, '.bottom-sheet', 'nova transação');
+  await page.locator('.bottom-sheet [data-sheet-close]').click();
+  await page.locator('.din-quick[data-action-type="TRANSFER"]').click();
+  await assertVisible(page, '.bottom-sheet', 'transferência');
+  await page.locator('.bottom-sheet [data-sheet-close]').click();
+  await page.locator('.din-quick[data-tab-jump="cards"]').click();
+  await assertVisible(page, '.din-cards-page', 'tela de cartões 2.0');
+  await assertVisible(page, '[data-card-form]', 'formulário de cartão existente');
+  await screenshot(page, `${name}-cards-v2`);
+  await page.locator('nav.tabs [data-tab="dashboard"]').click();
+  await page.locator('.din-quick[data-tab-jump="reports"]').click();
+  await assertText(page, 'Por categoria');
+  await assertVisible(page, '.report-comparison', 'comparativo mensal repaginado');
+  await screenshot(page, `${name}-analysis-v2`);
+  await page.locator('nav.tabs [data-tab="transactions"]').click();
+  await assertVisible(page, '.din-transaction-overview', 'resumo dos lançamentos filtrados');
+  await assertVisible(page, '.din-transactions-metrics', 'totais do histórico');
+  await page.locator('[data-transaction-filter="EXPENSE"]').click();
+  if (await page.locator('[data-transaction-filter="EXPENSE"]').getAttribute('aria-pressed') !== 'true') {
+    throw new Error('Filtro de despesas não atualizou o estado acessível.');
+  }
+  await page.locator('[data-transaction-search]').fill('busca-sem-resultado-da-prévia');
+  await assertText(page, '0 lançamentos');
+  await page.locator('[data-transaction-search]').fill('');
+  await page.locator('[data-transaction-filter="ALL"]').click();
+  await screenshot(page, `${name}-transactions-v2`);
+  await page.locator('nav.tabs [data-tab="dashboard"]').click();
+  await page.locator('.appbar [data-tab-jump="more"]').click();
+  await page.locator('[data-tab-jump="budget"]').click();
+  await assertVisible(page, '.din-goals-page', 'metas e limites 2.0');
+  await assertVisible(page, '[data-budget-form]', 'formulário existente de orçamento');
+  await screenshot(page, `${name}-goals-v2`);
+  await page.locator('.appbar [data-tab-jump="more"]').click();
+  await page.locator('[data-tab-jump="planning"]').click();
+  await assertVisible(page, '.din-planning-page', 'planejamento financeiro 2.0');
+  await assertText(page, 'Resultado mensal simulado');
+  await assertText(page, 'Próximos 3 meses');
+  await page.locator('[data-planning-adjustment="20"]').click();
+  if (await page.locator('[data-planning-adjustment="20"]').getAttribute('aria-pressed') !== 'true') {
+    throw new Error('O cenário de despesas +20% não atualizou.');
+  }
+  await screenshot(page, `${name}-planning-v2`);
+  await page.locator('nav.tabs [data-tab="dashboard"]').click();
+  await page.locator('.din-quick[data-tab-jump="assistant"]').click();
+  await assertText(page, 'App e WhatsApp');
+  await page.locator('nav.tabs [data-tab="dashboard"]').click();
   await screenshot(page, `${name}-dashboard`);
   await screenshotBottomViewport(page, `${name}-dashboard`);
   await page.evaluate(() => window.scrollTo(0, 0));
@@ -499,10 +702,12 @@ async function runViewport(browser, baseUrl, name, viewport) {
   await selectChoice(page, 'input[name="reserveTaxes"][value="true"]');
   await page.locator('input[name="taxRate"]').fill('6');
   await page.getByRole('button', { name: 'Concluir configuração' }).click();
+  await page.locator('.din-extra summary').first().click();
   await assertText(page, 'Caixa do negócio');
   await assertText(page, 'Projeção do caixa');
   await assertText(page, 'Lucro líquido estimado');
   await assertText(page, 'Faturamento bruto');
+  await assertHomeFitsViewport(page, name + ' empresarial');
   await screenshot(page, `${name}-business-dashboard`);
   await page.locator('[data-manage-section="business"]').first().click();
   await assertText(page, 'Contas a pagar e receber');
@@ -534,7 +739,7 @@ async function runViewport(browser, baseUrl, name, viewport) {
   }
   await screenshot(page, `${name}-transactions`);
 
-  await page.locator('nav.tabs [data-tab="more"]').click();
+  await page.locator('.appbar [data-tab-jump="more"]').click();
   await assertText(page, 'Automação e dados');
   await assertText(page, 'Importar e exportar');
   const closedTransactionTools = await page.locator('.transaction-tool:not([open])').count();
@@ -575,9 +780,10 @@ async function runViewport(browser, baseUrl, name, viewport) {
     throw new Error(`Nenhuma categoria renderizada em ${name}`);
   }
 
-  await page.locator('nav.tabs [data-tab="more"]').click();
+  await page.locator('.appbar [data-tab-jump="more"]').click();
   await page.locator('[data-tab-jump="budget"]').click();
-  await assertText(page, 'Limite Pessoal');
+  await assertVisible(page, '.din-goals-page', 'metas e limites do perfil');
+  await assertText(page, 'Limites por categoria');
   await assertText(page, 'Alimentacao');
   await assertText(page, 'Moradia');
   await assertVisible(page, '[data-budget-form]', 'formulario de orcamento');
@@ -591,7 +797,7 @@ async function runViewport(browser, baseUrl, name, viewport) {
   await context.close();
 
   if (consoleErrors.length) {
-    throw new Error(`Erros no console em ${name}: ${consoleErrors.join(' | ')}`);
+    throw new Error(`Erros no console em ${name}: ${consoleErrors.join(' | ')}. HTTP: ${httpErrors.join(' | ')}`);
   }
 }
 
@@ -628,6 +834,7 @@ async function main() {
   try {
     browser = await launchBrowser(chromium);
     await runAuthViewport(browser, baseUrl);
+    await runNarrowHome(browser, baseUrl);
     await runViewport(browser, baseUrl, 'mobile', { width: 390, height: 844 });
     await runViewport(browser, baseUrl, 'desktop', { width: 1024, height: 900 });
     console.log(`Verificacao visual concluida. Screenshots em ${path.relative(rootDir, outputDir)}`);
@@ -637,12 +844,14 @@ async function main() {
   }
 }
 
+let globalTimeout;
 await Promise.race([
   main(),
   new Promise((_, reject) => {
-    setTimeout(() => reject(new Error('Timeout global da verificacao visual.')), 180000);
+    globalTimeout = setTimeout(() => reject(new Error('Timeout global da verificacao visual.')), 180000);
+    globalTimeout.unref();
   }),
 ]).catch((error) => {
   console.error(error.message);
   process.exitCode = 1;
-});
+}).finally(() => clearTimeout(globalTimeout));

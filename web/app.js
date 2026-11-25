@@ -18,11 +18,10 @@ import {
   scopeLabel,
 } from './finance.js';
 import {
-  balanceCard,
   fabMenu,
-  metricCard,
   tabButton,
   transactionListHtml,
+  transactionOverviewHtml,
   transactionSheet,
   transactionSuccessSheet,
   viewHtml,
@@ -30,7 +29,7 @@ import {
 import { icon } from './views/shared.js';
 import { businessOnboardingHtml } from './views/business-onboarding.js';
 
-const MAIN_TABS = ['dashboard', 'transactions', 'reports', 'more'];
+const MAIN_TABS = ['dashboard', 'transactions', 'reports', 'cards', 'budget'];
 const GOOGLE_CLIENT_ID = window.ECONOAPP_CONFIG?.googleClientId || '';
 let pendingGoogleCredential = '';
 let googleInitAttempts = 0;
@@ -40,7 +39,9 @@ function screenTitle() {
     dashboard: 'Resumo',
     transactions: 'Transações',
     reports: 'Análise',
-    budget: 'Metas',
+    budget: 'Metas e limites',
+    cards: 'Cartões',
+    planning: 'Planejamento',
     assistant: 'Din',
     more: manageTitle(),
     launch: 'Lançamentos',
@@ -503,39 +504,29 @@ function renderApp() {
   }
   const totals = scopedTotals();
   app.innerHTML = `
-    <section class="shell" data-swipe-shell>
+    <section class="shell ${['dashboard', 'transactions', 'reports', 'cards', 'budget', 'planning'].includes(state.tab) ? 'din-home-shell din-v2-shell' : ''}" data-swipe-shell>
       <header class="appbar ${state.tab === 'dashboard' ? 'dashboard-appbar' : ''}">
-        <div>
-          <h1>${state.tab === 'dashboard' && state.user?.name ? `Olá, ${escapeHtml(state.user.name.split(' ')[0])}! <span aria-hidden="true">👋</span>` : screenTitle()}</h1>
-          ${state.tab === 'dashboard' ? '<p>Aqui está o resumo da sua vida financeira.</p>' : ''}
-        </div>
-        ${state.tab === 'dashboard' ? '<img class="din-mark compact" src="./assets/din-mark.svg" alt="Din" />' : ''}
+        ${state.tab === 'dashboard'
+          ? `<span class="din-brand" aria-label="Din">Din</span>
+             <div class="scope-switch" data-scope role="group" aria-label="Tipo de finanças">
+               <button class="${state.scope === 'PERSONAL' ? 'active' : ''}" type="button" data-value="PERSONAL" aria-pressed="${state.scope === 'PERSONAL'}">Pessoal</button>
+               <button class="${state.scope === 'BUSINESS' ? 'active' : ''}" type="button" data-value="BUSINESS" aria-pressed="${state.scope === 'BUSINESS'}">Empresarial</button>
+             </div>
+             <button class="din-header-bell" type="button" data-tab-jump="more" aria-label="Mais opções e configurações"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>`
+          : `<div class="din-subpage-title"><span class="din-page-kicker">Din · ${state.scope === 'BUSINESS' ? 'Empresarial' : 'Pessoal'}</span><h1>${screenTitle()}</h1></div><button class="din-header-bell" type="button" data-tab-jump="more" aria-label="Mais opções e configurações"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>`}
       </header>
 
       <main class="page-track" data-swipe-track>
-        ${
-          state.tab === 'dashboard'
-            ? `<div class="scope-switch" data-scope>
-                <button class="${state.scope === 'PERSONAL' ? 'active' : ''}" type="button" data-value="PERSONAL">Pessoal</button>
-                <button class="${state.scope === 'BUSINESS' ? 'active' : ''}" type="button" data-value="BUSINESS">Negócio</button>
-              </div>
-              ${state.scope === 'PERSONAL' ? `<section class="grid dashboard-grid">
-                ${balanceCard(`Saldo total`, totals.balance)}
-                ${metricCard('Receitas', totals.income, 'income')}
-                ${metricCard('Gastos', totals.expense, 'expense')}
-              </section>` : ''}`
-            : ''
-        }
-
         <section class="grid" id="view">${viewHtml()}</section>
       </main>
 
       <nav class="tabs" data-tabs>
         ${tabButton('dashboard', 'Início')}
         ${tabButton('transactions', 'Transações')}
-        <button class="fab nav-fab ${state.fabOpen ? 'open' : ''}" type="button" data-fab aria-label="Adicionar">+</button>
+        <button class="fab nav-fab ${state.fabOpen ? 'open' : ''}" type="button" data-fab aria-label="Adicionar lançamento">+</button>
         ${tabButton('reports', 'Análise')}
-        ${tabButton('more', 'Mais')}
+        ${tabButton('cards', 'Cartões')}
+        ${tabButton('budget', 'Metas')}
       </nav>
       ${state.tab === 'assistant' ? assistantInputHtml() : ''}
       ${state.fabOpen ? fabMenu() : ''}
@@ -817,9 +808,32 @@ function bindViewEvents() {
     renderApp();
   });
 
+  // A troca de período altera apenas a visualização; não requisita nem modifica dados.
+  document.querySelectorAll('[data-planning-adjustment]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const adjustment = Number(button.dataset.planningAdjustment);
+      if (![-10, 0, 10, 20].includes(adjustment)) return;
+      state.planningExpenseAdjustment = adjustment;
+      renderApp();
+    });
+  });
+
+  document.querySelectorAll('[data-din-period]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const months = Number(button.dataset.dinPeriod);
+      if (![1, 3, 6, 12].includes(months)) return;
+      state.homePeriodMonths = months;
+      renderApp();
+    });
+  });
+
   document.querySelectorAll('[data-tab-jump]').forEach((button) => {
     button.addEventListener('click', () => {
       const target = button.dataset.tabJump;
+      if (target === 'more') {
+        switchTab('more');
+        return;
+      }
       if (MAIN_TABS.includes(target)) {
         switchTab(target);
         return;
@@ -1079,7 +1093,10 @@ function bindViewEvents() {
       state.transactionFilter = button.dataset.transactionFilter;
       document
         .querySelectorAll('[data-transaction-filter]')
-        .forEach((item) => item.classList.toggle('active', item === button));
+        .forEach((item) => {
+          item.classList.toggle('active', item === button);
+          item.setAttribute('aria-pressed', String(item === button));
+        });
       renderTransactionList();
     });
   });
@@ -1298,6 +1315,8 @@ function scrollAssistantToBottom() {
 function renderTransactionList() {
   const list = document.querySelector('[data-transaction-list]');
   if (list) list.innerHTML = transactionListHtml();
+  const overview = document.querySelector('[data-transaction-overview]');
+  if (overview) overview.outerHTML = transactionOverviewHtml();
 }
 
 function bindSwipeNavigation() {

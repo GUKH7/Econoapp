@@ -1,0 +1,386 @@
+/*
+ * Din 2.0 — Fluida e Moderna v1.0
+ * Isolated visual layer. No data access, API behavior, or financial calculations.
+ * Based on the approved Din prototype; apply after din-home/pages/financial.
+ */
+.din-home-shell,
+.din-v2-shell {
+  --din-forest: #075b37;
+  --din-primary: #087a48;
+  --din-text: #10251a;
+  --din-muted: #53685b;
+  --din-soft: #f5f8f6;
+  --din-mint: #ddf5e3;
+  --din-outline: #dfe9e2;
+  --din-orange: #f5a623;
+  --din-danger: #b3261e;
+  --din-radius: 20px;
+  --din-motion: cubic-bezier(.22, 1, .36, 1);
+  --green: var(--din-primary);
+  --green-dark: var(--din-forest);
+  --green-soft: var(--din-mint);
+  --text: var(--din-text);
+  --muted: var(--din-muted);
+  --line: var(--din-outline);
+  --bg: #fff;
+  color: var(--din-text);
+  background: #fff;
+  font-family: "DM Sans", Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+
+body:has(.din-home-shell), body:has(.din-v2-shell) {
+  background: #fff;
+}
+
+.din-home-shell .page-track,
+.din-v2-shell .page-track {
+  gap: 16px;
+}
+
+.din-home-shell .dashboard-appbar,
+.din-v2-shell .appbar {
+  margin-bottom: 13px;
+}
+
+.din-home-shell .scope-switch,
+.din-v2-shell .scope-switch {
+  background: #eff5f1;
+  border: 1px solid #e5eee8;
+  border-radius: 999px;
+  padding: 3px;
+  min-height: 44px;
+}
+
+.din-home-shell .scope-switch button,
+.din-v2-shell .scope-switch button {
+  border-radius: 999px;
+  min-height: 36px;
+}
+
+.din-home-shell .scope-switch button.active,
+.din-v2-shell .scope-switch button.active {
+  background: var(--din-forest);
+  color: white;
+  box-shadow: 0 3px 10px rgba(7, 91, 55, .12);
+}
+
+/* The approved home prioritizes balance, chart, quick actions, insights, history. */
+.din-home {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 23px;
+}
+
+
+.din-hero {
+  min-height: 0;
+  padding: 8px 0 0;
+}
+
+.din-hero-copy { max-width: 100%; gap: 6px; }
+.din-eyebrow { color: var(--din-muted); font-weight: 650; }
+.din-balance {
+  font-size: clamp(32px, 9vw, 44px);
+  font-weight: 820;
+  line-height: 1.08;
+  letter-spacing: -.045em;
+  overflow-wrap: anywhere;
+  color: var(--din-text);
+}
+.din-comparison {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  padding: 5px 10px;
+  border-radius: 999px;
+  color: var(--din-forest);
+  background: #e7f8e9;
+  font-weight: 750;
+  line-height: 1.45;
+}
+
+.din-section-heading h2,
+.din-finance-heading h2,
+.din-v2-shell .din-subpage-title h1 {
+  letter-spacing: -.035em;
+  color: var(--din-text);
+}
+
+.din-chart-section { gap: 10px; padding-top: 0; }
+.din-chart-svg { height: 120px; }
+.din-period-tabs {
+  background: #f2f6f3;
+  border-color: var(--din-outline);
+}
+.din-period-tabs button.active {
+  background: var(--din-forest);
+  box-shadow: none;
+}
+.din-chart-labels { color: #68796e; }
+
+.din-actions {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: clamp(4px, 1.2vw, 10px);
+}
+.din-quick {
+  align-items: center;
+  min-height: 78px;
+  gap: 8px;
+  font-size: clamp(10px, 2.6vw, 12px);
+  font-weight: 700;
+  line-height: 1.3;
+}
+.din-quick > span {
+  width: clamp(42px, 11vw, 54px);
+  height: clamp(42px, 11vw, 54px);
+  border-radius: 16px;
+  background: #eef6ef;
+  box-shadow: none;
+  color: var(--din-forest);
+  transition: transform .22s var(--din-motion), background .18s ease;
+}
+.din-quick.primary > span {
+  background: var(--din-forest);
+  color: white;
+  box-shadow: 0 7px 16px rgba(7, 91, 55, .13);
+}
+.din-quick:hover > span { transform: translateY(-2px); }
+.din-quick:active > span { transform: scale(.96); }
+
+.din-secondary-grid {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+.din-small-panel {
+  background: #fff;
+  border: 1px solid #e5eee8;
+  border-radius: var(--din-radius);
+  padding: 16px;
+  min-height: 0;
+  box-shadow: 0 6px 20px rgba(15, 57, 30, .04);
+}
+.din-small-panel .din-section-heading h2 { font-size: 15px; }
+.din-small-panel small, .din-small-panel p {
+  font-size: 12px;
+  color: var(--din-muted);
+}
+.din-tip {
+  position: relative;
+  background: linear-gradient(112deg, #f0fbed 0%, #e7f9e9 100%);
+  border-color: #e2f2e6;
+  padding-right: min(30%, 110px);
+  overflow: hidden;
+}
+.din-tip::after {
+  content: "";
+  position: absolute;
+  width: clamp(65px, 19vw, 90px);
+  height: clamp(65px, 19vw, 90px);
+  bottom: -7px;
+  right: 4px;
+  background: url("../assets/din-mascote-oficial.webp") center bottom / contain no-repeat;
+  pointer-events: none;
+}
+.din-tip .din-section-heading,
+.din-tip p { position: relative; z-index: 1; }
+.din-progress-track {
+  background: #e6eee7;
+  height: 8px;
+}
+.din-progress-track span { background: var(--din-primary); }
+
+.din-recent { gap: 7px; padding-bottom: 0; }
+.din-recent .row { min-height: 62px; }
+.din-recent .row-title { color: var(--din-text); }
+.din-recent .transaction-row > strong.expense { color: var(--din-danger); }
+.din-recent .transaction-row > strong.income { color: var(--din-primary); }
+.din-month {
+  padding: 14px 0 0;
+  border-top: 1px solid var(--din-outline);
+}
+.din-month-metrics strong { font-size: clamp(14px, 4vw, 18px); }
+
+/* Secondary screens — lighter containers, more natural scan order. */
+.din-v2-shell .din-subpage-title h1 {
+  font-size: clamp(25px, 6.8vw, 30px);
+  font-weight: 800;
+}
+.din-v2-shell .din-search-field {
+  border-radius: 15px;
+  background: #f5f8f6;
+  border-color: #e5eee8;
+}
+.din-v2-shell .din-filter-chips button.active,
+.din-v2-shell .report-tabs button.active {
+  background: var(--din-forest);
+  border-color: var(--din-forest);
+}
+.din-v2-shell .din-transaction-overview {
+  border-color: #e9efe9;
+  background: #f7faf8;
+  padding: 14px;
+}
+.din-v2-shell .din-timeline-list .timeline-card {
+  background: transparent;
+}
+.din-v2-shell .report-summary-item {
+  background: #fff;
+  border-color: #e7eee9;
+  box-shadow: none;
+}
+.din-v2-shell .report-comparison {
+  background: #eef9f0;
+  border-color: #e0efe4;
+}
+.din-v2-shell .report-insight {
+  background: linear-gradient(112deg,#f1f9ee,#e5f6e5);
+  box-shadow: none;
+}
+.din-finance-page { gap: 17px; }
+.din-finance-intro {
+  font-size: 13px;
+  color: var(--din-muted, #53685b);
+}
+.din-finance-overview {
+  background: #f7faf8;
+  border-color: #e7efe8;
+  border-radius: var(--din-radius);
+  padding: 16px;
+}
+.din-finance-overview strong { color: var(--din-text, #10251a); }
+.din-card-item {
+  border-radius: 22px;
+  background: linear-gradient(130deg,#075b37,#087a48 64%,#1a985c);
+  border-color: transparent;
+  box-shadow: 0 10px 22px rgba(7,91,55,.13);
+}
+.din-card-item h3,
+.din-card-item .din-card-top,
+.din-card-item .din-card-values small,
+.din-card-item .din-card-values strong,
+.din-card-item .din-finance-note {
+  color: #fff;
+}
+.din-card-chip { background: rgba(255,255,255,.2); color: #fff; }
+.din-card-item .din-track { background: rgba(255,255,255,.25); }
+.din-card-item .din-track > span { background: #ddf5e3; }
+.din-goal-item {
+  border-color: #e7eee9;
+  background: #fff;
+  border-radius: 18px;
+  padding: 17px;
+}
+.din-goal-list .din-goal-item:nth-child(3n + 2) .din-track > span {
+  background: linear-gradient(90deg,#8a67d8,#6c4bc1);
+}
+.din-goal-list .din-goal-item:nth-child(3n) .din-track > span {
+  background: linear-gradient(90deg,#f5b14c,#e79022);
+}
+.din-finance-form {
+  border-radius: 20px;
+  border-color: var(--din-outline, #dfe9e2);
+}
+.din-finance-form .button,
+.din-planning-options button.active {
+  background: var(--din-forest, #075b37);
+  border-color: var(--din-forest, #075b37);
+}
+.din-planning-result {
+  border-radius: 20px;
+  background: linear-gradient(112deg,#f1f9ef,#e8f7e8);
+  border-color: #e0efe5;
+}
+.din-planning-result > strong { color: var(--din-forest, #075b37); }
+
+/* Shared navigation and accessible interaction. */
+.din-home-shell .tabs,
+.din-v2-shell .tabs {
+  background: rgba(255,255,255,.97);
+  border-top: 1px solid #e6eee8;
+  box-shadow: 0 -5px 20px rgba(14,54,29,.06);
+}
+.din-home-shell .tabs button.active,
+.din-v2-shell .tabs button.active { color: var(--din-primary); }
+.din-home-shell .tabs button.nav-fab,
+.din-v2-shell .tabs button.nav-fab {
+  background: var(--din-forest);
+  color: white;
+  box-shadow: 0 6px 17px rgba(7,91,55,.18);
+}
+.din-home-shell :is(button, input, select),
+.din-v2-shell :is(button, input, select) { min-height: 44px; }
+.din-home-shell :is(button, a, input, select):focus-visible,
+.din-v2-shell :is(button, a, input, select):focus-visible,
+.din-finance-page :is(button, a, input, select):focus-visible {
+  outline: 3px solid #59c88b;
+  outline-offset: 3px;
+}
+@media (max-width: 360px) {
+  .din-home { gap: 17px; }
+  .din-actions { gap: 3px; }
+  .din-quick { font-size: 9.5px; }
+  .din-quick > span { width: 40px; height: 40px; }
+  .din-hero { padding: 6px 0 0; }
+  .din-chart-svg { height: 112px; }
+  .din-tip { padding-right: 88px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .din-home-shell *,
+  .din-v2-shell *,
+  .din-finance-page * {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: .01ms !important;
+  }
+}
+
+/* Five primary destinations and an elevated inline action: it must never
+   obscure buttons in Cards, Goals, or Planning on narrow devices. */
+nav.tabs {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  z-index: 37;
+  gap: 2px;
+}
+nav.tabs button:not(.nav-fab) {
+  min-width: 0;
+  font-size: clamp(9px, 2.45vw, 10.5px);
+  letter-spacing: -.025em;
+  line-height: 1.15;
+}
+nav.tabs button.nav-fab {
+  position: relative;
+  grid-column: 3;
+  width: min(50px, 100%);
+  height: 50px;
+  min-height: 50px;
+  justify-self: center;
+  align-self: center;
+  right: auto;
+  bottom: auto;
+  transform: translateY(-7px);
+  background: var(--din-forest) !important;
+  box-shadow: 0 6px 17px rgba(7,91,55,.18);
+}
+nav.tabs button.nav-fab:active { transform: translateY(-7px) scale(.94); }
+nav.tabs button.nav-fab.open { background: #103622 !important; transform: translateY(-7px) rotate(45deg); }
+.fab-actions {
+  bottom: calc(var(--bottom-nav-height) + 20px + env(safe-area-inset-bottom));
+}
+@media (max-width: 360px) {
+  nav.tabs button:not(.nav-fab) { font-size: 9px; }
+  nav.tabs button.nav-fab { width: 46px; height: 46px; min-height: 46px; }
+}
+.din-header-bell {
+  border: 0;
+  cursor: pointer;
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
+  background: #eef6ef;
+  border-radius: 15px;
+}
+.din-header-bell svg path { fill: none; stroke: currentColor; }

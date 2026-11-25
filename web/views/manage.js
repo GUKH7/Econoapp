@@ -76,10 +76,12 @@ export function moreView() {
         <div class="panel-title"><h2>Gerenciar</h2></div>
         <div class="menu-list">
           <button class="menu-item" type="button" data-tab-jump="launch"><span class="tab-icon">+/-</span><span>Lançamentos</span><span>›</span></button>
-          <button class="menu-item" type="button" data-manage-section="accounts"><span class="tab-icon">${icon('wallet')}</span><span>Contas e cartões</span><span>›</span></button>
+          <button class="menu-item" type="button" data-tab-jump="cards"><span class="tab-icon">${icon('card')}</span><span>Cartões</span><span>›</span></button>
+          <button class="menu-item" type="button" data-manage-section="accounts"><span class="tab-icon">${icon('wallet')}</span><span>Contas e carteiras</span><span>›</span></button>
           <button class="menu-item" type="button" data-manage-section="business"><span class="tab-icon">${icon('shop')}</span><span>Contas a pagar e receber</span><span>›</span></button>
           <button class="menu-item" type="button" data-manage-section="categories"><span class="tab-icon">${icon('tag')}</span><span>Categorias e canais</span><span>›</span></button>
-          <button class="menu-item" type="button" data-tab-jump="budget"><span class="tab-icon">${icon('target')}</span><span>Limites e metas</span><span>›</span></button>
+          <button class="menu-item" type="button" data-tab-jump="budget"><span class="tab-icon">${icon('target')}</span><span>Metas e limites</span><span>›</span></button>
+          <button class="menu-item" type="button" data-tab-jump="planning"><span class="tab-icon">${icon('reports')}</span><span>Planejamento financeiro</span><span>›</span></button>
           <button class="menu-item" type="button" data-tab-jump="assistant"><span class="tab-icon">${icon('chat')}</span><span>Din / Assistente</span><span>›</span></button>
           ${
             state.user?.isWhatsappAdmin
