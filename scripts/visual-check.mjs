@@ -12,6 +12,11 @@ function currentMonthDate(day = 1) {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), day, 12)).toISOString();
 }
 
+function relativeMonthDate(monthOffset, day = 1) {
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + monthOffset, day, 12)).toISOString();
+}
+
 const categories = [
   { id: 'cat-food', name: 'Alimentacao', color: '#22C55E' },
   { id: 'cat-home', name: 'Moradia', color: '#3B82F6' },
@@ -74,6 +79,17 @@ const transactions = [
     creditCardId: 'card-main',
     date: currentMonthDate(6),
   },
+  // Historical synthetic entries are intentionally included to exercise the
+  // trend chart and planning simulation without touching real accounts.
+  ...[
+    { id: 'tx-prev-income', description: 'Salário anterior', amount: 4200, type: 'INCOME', categoryId: 'cat-salary', date: relativeMonthDate(-1, 3) },
+    { id: 'tx-prev-rent', description: 'Moradia anterior', amount: 1200, type: 'EXPENSE', categoryId: 'cat-home', date: relativeMonthDate(-1, 5) },
+    { id: 'tx-prev-food', description: 'Compras anteriores', amount: 250, type: 'EXPENSE', categoryId: 'cat-food', date: relativeMonthDate(-1, 7) },
+    { id: 'tx-two-income', description: 'Salário dois meses atrás', amount: 4100, type: 'INCOME', categoryId: 'cat-salary', date: relativeMonthDate(-2, 3) },
+    { id: 'tx-two-expense', description: 'Despesas dois meses atrás', amount: 1410, type: 'EXPENSE', categoryId: 'cat-home', date: relativeMonthDate(-2, 5) },
+    { id: 'tx-three-income', description: 'Salário três meses atrás', amount: 3980, type: 'INCOME', categoryId: 'cat-salary', date: relativeMonthDate(-3, 3) },
+    { id: 'tx-three-expense', description: 'Despesas três meses atrás', amount: 1500, type: 'EXPENSE', categoryId: 'cat-home', date: relativeMonthDate(-3, 5) },
+  ].map((tx) => ({ ...tx, netAmount: tx.amount, source: 'MANUAL', scope: 'PERSONAL', accountId: 'acc-main' })),
   {
     id: 'tx-5',
     description: 'Venda loja online',
@@ -104,7 +120,7 @@ const apiFixtures = {
   '/api/v1/dashboard/reports': {
     data: {
       period: { startDate: currentMonthDate(1).slice(0, 10), endDate: currentMonthDate(28).slice(0, 10) },
-      comparisonPeriod: { startDate: '2026-06-01', endDate: '2026-06-30' },
+      comparisonPeriod: { startDate: relativeMonthDate(-1, 1).slice(0, 10), endDate: relativeMonthDate(0, 0).slice(0, 10) },
       current: { income: 4500, expense: 1599.4, balance: 2900.6 },
       previous: { income: 4200, expense: 1450, balance: 2750 },
       categories: {
