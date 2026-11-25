@@ -36,7 +36,8 @@ jobs:
 
   visual:
     name: PWA browser, navigation and responsive visual tests (mocked)
-    runs-on: ubuntu-latest
+    # Playwright Chromium 1.60 does not support the ubuntu-26.04 runner selected by ubuntu-latest.
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
       NODE_ENV: test
