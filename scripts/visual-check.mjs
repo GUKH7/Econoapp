@@ -488,10 +488,13 @@ async function assertDinNavigationFits(page, name) {
       clipped,
       overlaps,
       floatingActionVisible: Boolean(fabRect && fabRect.width >= 44 && fabRect.left >= 0 && fabRect.right <= viewport + 1),
+      actionOverlapsTab: Boolean(fabRect && rects.some((rect) =>
+        rect.left < fabRect.right - 1 && rect.right > fabRect.left + 1 &&
+        rect.top < fabRect.bottom - 1 && rect.bottom > fabRect.top + 1)),
     };
   });
   const expected = 'dashboard,transactions,reports,cards,budget';
-  if (result.destinations.join(',') !== expected || result.clipped || result.overlaps || !result.floatingActionVisible) {
+  if (result.destinations.join(',') !== expected || result.clipped || result.overlaps || !result.floatingActionVisible || result.actionOverlapsTab) {
     throw new Error('Navegação mobile inconsistente em ' + name + ': ' + JSON.stringify(result));
   }
 }
@@ -552,6 +555,7 @@ async function runNarrowHome(browser, baseUrl) {
     await page.locator('.appbar [data-tab-jump="more"]').click();
     await page.locator('[data-tab-jump="planning"]').click();
     await assertVisible(page, '.din-planning-page', 'planejamento 320px');
+    await assertText(page, 'Resultado mensal simulado');
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     if (overflow > 1) throw new Error('Planejamento ultrapassa a largura em 320px');
     await screenshot(page, 'narrow-mobile-planning');
@@ -659,6 +663,8 @@ async function runViewport(browser, baseUrl, name, viewport) {
   await page.locator('.appbar [data-tab-jump="more"]').click();
   await page.locator('[data-tab-jump="planning"]').click();
   await assertVisible(page, '.din-planning-page', 'planejamento financeiro 2.0');
+  await assertText(page, 'Resultado mensal simulado');
+  await assertText(page, 'Próximos 3 meses');
   await page.locator('[data-planning-adjustment="20"]').click();
   if (await page.locator('[data-planning-adjustment="20"]').getAttribute('aria-pressed') !== 'true') {
     throw new Error('O cenário de despesas +20% não atualizou.');
