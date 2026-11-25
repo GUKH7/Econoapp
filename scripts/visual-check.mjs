@@ -383,6 +383,12 @@ async function selectChoice(page, selector) {
 }
 
 async function screenshot(page, name) {
+  // Full-page screenshots may paint focus-only fixed links at an old scroll
+  // offset. Reset the viewport and focus before recording the visual baseline.
+  await page.evaluate(() => {
+    document.activeElement?.blur?.();
+    window.scrollTo(0, 0);
+  });
   await page.waitForTimeout(350);
   await page.screenshot({ path: path.join(outputDir, `${name}.png`), fullPage: true });
 }
