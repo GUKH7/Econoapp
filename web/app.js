@@ -523,10 +523,10 @@ function renderApp() {
       <nav class="tabs" data-tabs>
         ${tabButton('dashboard', 'Início')}
         ${tabButton('transactions', 'Transações')}
+        <button class="fab nav-fab ${state.fabOpen ? 'open' : ''}" type="button" data-fab aria-label="Adicionar lançamento">+</button>
         ${tabButton('reports', 'Análise')}
         ${tabButton('cards', 'Cartões')}
         ${tabButton('budget', 'Metas')}
-        <button class="fab nav-fab ${state.fabOpen ? 'open' : ''}" type="button" data-fab aria-label="Adicionar lançamento">+</button>
       </nav>
       ${state.tab === 'assistant' ? assistantInputHtml() : ''}
       ${state.fabOpen ? fabMenu() : ''}
