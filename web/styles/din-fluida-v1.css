@@ -72,12 +72,6 @@ body:has(.din-home-shell), body:has(.din-v2-shell) {
   gap: 23px;
 }
 
-.din-home > .din-hero { order: 1; }
-.din-home > .din-chart-section { order: 2; }
-.din-home > .din-actions { order: 3; }
-.din-home > .din-secondary-grid { order: 4; }
-.din-home > .din-recent { order: 5; }
-.din-home > .din-month { order: 6; }
 
 .din-hero {
   min-height: 0;
@@ -173,7 +167,6 @@ body:has(.din-home-shell), body:has(.din-v2-shell) {
   color: var(--din-muted);
 }
 .din-tip {
-  order: -1;
   position: relative;
   background: linear-gradient(112deg, #f0fbed 0%, #e7f9e9 100%);
   border-color: #e2f2e6;
